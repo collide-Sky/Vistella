@@ -87,13 +87,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
-    // 注: 高 DPI 缩放策略已在 main.cpp QApplication 构造前设置,
-    //     QQuickView 内部访问 QGuiApplication 时机要求 setHighDpiScaleFactorRoundingPolicy
-    //     必须在 QApplication 构造前调用
 
-    // 关键: 无边框窗口, 自绘标题栏 (L2 方案)
-    //   setMenuWidget 替代 menubar 位置, 保持 QMainWindow 的菜单/工具栏/centralWidget 整体框架
-    //   不加 Qt::WindowSystemMenuHint / WindowMinMaxButtonsHint, 那些是给原生标题栏用的
     setWindowFlags(Qt::FramelessWindowHint);
 
     ui->setupUi(this);
@@ -109,7 +103,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     buildActions();
     buildTitleBar();        // 替代 buildMenuCorner: 自绘标题栏 (3 段 + 窗控)
-    //buildGlobalBar();       // (旧)顶部命令栏放主题 — 已合并到 buildRightArea
     buildInfoTree();
     // PS/WPS/VS 风格主页切换 (2026-09-10): HomePage 装到 mainStack page 0 (homePageContainer)
     installHomePage();
