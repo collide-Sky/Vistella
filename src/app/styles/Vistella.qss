@@ -1,0 +1,397 @@
+/* =============================================================
+ * MultiDoc 全局静态样式 (统一样式入口, 主题色占位符由 ThemeManager 替换)
+ *
+ * 占位符:
+ *   {{ACCENT}}        主色 (浅绿 #4caf80)
+ *   {{ACCENT_HOVER}}  hover (#3e9970 / #5dc295)
+ *   {{ACCENT_TEXT}}   主色上的文字
+ *   {{BG}}            窗口背景
+ *   {{BASE}}          widget 底色
+ *   {{ALTERNATE}}     斑马纹
+ *   {{TEXT}}          主文字
+ *   {{TEXT_SUBTLE}}   次级文字
+ *   {{BORDER}}        通用边框
+ *   {{TAB_BG}} / {{TAB_HOVER}} / {{TAB_SELECTED}}
+ *   {{TAB_TEXT}} / {{TAB_TEXT_SEL}} / {{TAB_DIRTY}}
+ *   {{MENU_BG}} / {{MENU_TEXT}} / {{MENU_HOVER}}
+ *   {{DOCK_HEADER}} / {{DOCK_BG}}
+ *   {{TOOLBAR_BG}} / {{STATUS_BG}}
+ *   {{PANEL_BG}} / {{PANEL_HEADER}} / {{PANEL_BORDER}}
+ * ============================================================= */
+
+/* ---------- 顶层 ---------- */
+QMainWindow, QWidget { background-color: {{BG}}; color: {{TEXT}}; }
+QMainWindow::separator { background: {{BORDER}}; width: 1px; height: 1px; }
+
+/* ---------- 顶部全局命令栏 (主题按钮) ---------- */
+QToolBar#globalBar {
+    background: transparent;
+    border: none;
+    spacing: 4px;
+    padding: 0;
+    max-height: 26px;
+}
+QToolBar#globalBar QToolButton#themeBtn {
+    background: transparent;
+    border: 1px solid {{BORDER}};
+    border-radius: 4px;
+    padding: 0 10px;
+    min-width: 32px;
+    min-height: 22px;
+    color: {{TEXT}};
+    font-size: 14px;
+}
+QToolBar#globalBar QToolButton#themeBtn:hover {
+    background: {{TAB_HOVER}};
+    border-color: {{ACCENT}};
+}
+QWidget#globalBarSpacer { background: transparent; }
+
+/* ---------- 菜单栏右上角模式按钮圆角框 (3D 模块移除, 2026-09-02: 整段删除) ---------- */
+
+/* ---------- 菜单栏 ---------- */
+QMenuBar {
+    background-color: {{MENU_BG}};
+    color: {{MENU_TEXT}};
+    padding: 2px 4px;
+    border-bottom: 1px solid {{BORDER}};
+}
+QMenuBar::item {
+    background: transparent;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+QMenuBar::item:selected { background: {{MENU_HOVER}}; }
+QMenu {
+    background-color: {{MENU_BG}};
+    color: {{MENU_TEXT}};
+    border: 1px solid {{BORDER}};
+    padding: 4px;
+}
+QMenu::item {
+    padding: 5px 18px;
+    border-radius: 3px;
+}
+QMenu::item:selected {
+    background-color: {{ACCENT}};
+    color: {{ACCENT_TEXT}};
+}
+QMenu::separator {
+    height: 1px;
+    background: {{BORDER}};
+    margin: 4px 8px;
+}
+
+/* ---------- 工具栏 ---------- */
+QToolBar {
+    background-color: {{TOOLBAR_BG}};
+    border: none;
+    spacing: 4px;
+    padding: 2px 6px;
+}
+QToolBar::separator {
+    background: {{BORDER}};
+    width: 1px;
+    margin: 4px 4px;
+}
+QToolButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px 6px;
+    color: {{TEXT}};
+}
+QToolButton:hover {
+    background: {{TAB_HOVER}};
+    border-color: {{BORDER}};
+}
+QToolButton:checked {
+    background: {{ACCENT}};
+    color: {{ACCENT_TEXT}};
+}
+QToolButton:pressed { background: {{ACCENT_HOVER}}; }
+QToolButton::menu-indicator { image: none; }
+
+/* ---------- Tab Widget (无边框, 仅选中 tab 底边有细线) ---------- */
+QTabWidget::pane { border: 0; background: {{BG}}; }
+QTabBar {
+    background: transparent;
+    qproperty-drawBase: 0;
+    border: 0;
+}
+QTabBar::tab {
+    background: transparent;
+    color: {{TAB_TEXT}};
+    padding: 8px 10px;
+    margin: 0;
+    border: 0;
+    border-bottom: 2px solid transparent;   /* 占位, 选中时变色 */
+    /* P0-3.2 后续 (2026-09-08) tabbar 太宽修复:
+       之前 min-width: 100px 让 5 tab 至少 500px, dock 280-380px 容不下 → 5 tab 折行
+       现在 60px, 5 tab = 300px, 塞进 280-380 dock
+       长 tab 名 (如 "色彩调整 (P0-3.2)") 还是塞的下, 短 tab (曲线/色阶/HSL) 留白减少 */
+    min-width: 60px;
+    max-width: 160px;
+}
+QTabBar::tab:hover { background: {{TAB_HOVER}}; }
+QTabBar::tab:selected {
+    background: transparent;
+    color: {{TAB_TEXT_SEL}};
+    border-bottom: 2px solid {{ACCENT}};   /* 只有选中 tab 显示细线 */
+    font-weight: 600;
+}
+QWidget#tabPin {
+    background: transparent;
+    border: 0;
+    padding: 0 4px;
+    margin: 0;
+    color: {{TEXT_SUBTLE}};
+    font-size: 14px;
+    font-weight: 600;
+    min-width: 18px;
+    min-height: 18px;
+}
+QWidget#tabPin:hover { color: {{ACCENT}}; }
+QWidget#tabPin:checked { color: {{ACCENT}}; }
+QTabBar::close-button {
+    background: transparent;
+    border: 0;
+    padding: 0 6px;
+    margin: 0 4px 0 2px;
+    image: none;
+    subcontrol-position: right;
+    color: {{TEXT_SUBTLE}};
+    min-width: 18px;
+    min-height: 18px;
+    font-size: 14px;
+    font-weight: 600;
+}
+QTabBar::close-button:hover {
+    color: {{ACCENT}};
+    background: {{TAB_HOVER}};
+    border-radius: 2px;
+}
+
+/* ---------- 状态栏 ---------- */
+QStatusBar {
+    background: {{STATUS_BG}};
+    color: {{TEXT}};
+    border-top: 1px solid {{BORDER}};
+}
+QStatusBar::item { border: none; }
+
+/* ---------- Dock ---------- */
+QDockWidget { color: {{TEXT}}; titlebar-close-icon: none; }
+QDockWidget::title {
+    background: {{DOCK_HEADER}};
+    padding: 4px 8px;
+    border-bottom: 1px solid {{BORDER}};
+    text-align: left;
+}
+
+/* ---------- Group box ---------- */
+QGroupBox {
+    border: 1px solid {{PANEL_BORDER}};
+    border-radius: 4px;
+    margin-top: 14px;
+    padding: 10px 6px 6px 6px;
+    color: {{PANEL_HEADER}};
+    font-weight: 600;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 8px;
+    padding: 0 4px;
+}
+
+/* ---------- Slider ---------- */
+QSlider::groove:horizontal {
+    background: {{BORDER}};
+    height: 4px;
+    border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    background: {{ACCENT}};
+    width: 12px;
+    margin: -5px 0;
+    border-radius: 6px;
+}
+QSlider::sub-page:horizontal {
+    background: {{ACCENT}};
+    border-radius: 2px;
+}
+
+/* ---------- Scroll ---------- */
+QScrollBar:vertical { background: {{MENU_BG}}; width: 10px; }
+QScrollBar::handle:vertical {
+    background: {{BORDER}};
+    min-height: 20px;
+    border-radius: 4px;
+}
+QScrollBar:horizontal { background: {{MENU_BG}}; height: 10px; }
+QScrollBar::handle:horizontal {
+    background: {{BORDER}};
+    min-width: 20px;
+    border-radius: 4px;
+}
+
+/* ---------- 列表 / 表格 / 树 (选中色 = 主色浅绿) ---------- */
+QListWidget, QTreeView, QTableView {
+    background: {{BASE}};
+    alternate-background-color: {{ALTERNATE}};
+    border: 1px solid {{BORDER}};
+}
+QTableView {
+    selection-background-color: {{ACCENT}};
+    selection-color: {{ACCENT_TEXT}};
+    gridline-color: {{BORDER}};
+}
+QTableView::item:selected {
+    background: {{ACCENT}};
+    color: {{ACCENT_TEXT}};
+}
+QTableView::item:hover:!selected {
+    background: {{TAB_HOVER}};
+}
+QHeaderView::section {
+    background: {{DOCK_HEADER}};
+    color: {{TEXT_SUBTLE}};
+    padding: 4px;
+    border: 0;
+    border-bottom: 1px solid {{BORDER}};
+}
+
+/* ---------- 按钮 ---------- */
+QPushButton {
+    background: {{TOOLBAR_BG}};
+    color: {{TEXT}};
+    border: 1px solid {{BORDER}};
+    border-radius: 4px;
+    padding: 4px 12px;
+}
+QPushButton:hover { background: {{TAB_HOVER}}; }
+QPushButton:pressed { background: {{ACCENT_HOVER}}; }
+
+/* ---------- QListWidget (nav 通用) ---------- */
+QListWidget {
+    background: transparent;
+    border: none;
+    outline: 0;
+    padding: 4px;
+}
+QListWidget::item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    color: {{TEXT}};
+}
+QListWidget::item:hover { background: {{TAB_HOVER}}; }
+QListWidget::item:selected {
+    background: {{ACCENT}};
+    color: {{ACCENT_TEXT}};
+    font-weight: 600;
+}
+
+/* =============================================================
+ * 自绘标题栏 (L2 方案: 无边框 + 3 段容器 + 窗控)
+ *   统一规范 (2026-09-02 修正):
+ *     - 高度 32px, 字号统一 10pt, 字体统一
+ *     - 各元素 padding/margin 统一 (跟 WPS/VS 主流风格一致)
+ *     - 窗控按钮 40x32 方形 (跟整体协调)
+ *     - logo 16x16 圆角小方块 (不要"贴一坨"大块)
+ *   复用现有主题色占位符
+ * ============================================================= */
+
+/* ===== 字体/字号全局统一 (用 descendant selector 作用于整个标题栏) ===== */
+#titleBar,
+#titleBar * {
+    font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10pt;
+    font-weight: 400;
+}
+
+#titleBar {
+    background: {{TOOLBAR_BG}};
+    border-bottom: 1px solid {{BORDER}};
+}
+/* 关键: 3 个 QFrame 容器 max-height=32px 强制不超出 dock 高度
+ *   否则 Preferred/Preferred 默认会让 frame 高度 = 内容 sizeHint > 32,
+ *   多出来的部分覆盖 dock 下边线 (border-bottom), 看着像白色矩形
+ */
+#titleLeft, #titleMid, #titleRight {
+    background: transparent;
+    max-height: 32px;
+}
+/* logo 块: 16x16 小方块, 字号小, 跟其他元素协调 */
+#titleLogo {
+    background: {{ACCENT}};
+    color: {{ACCENT_TEXT}};
+    font-weight: 700;
+    font-size: 9pt;
+    border-radius: 3px;
+    /* fixed 20x20 由 C++ 设; 这里只负责颜色 + 字体 */
+}
+/* app name + version: 跟菜单同字号, 不加粗, 跟其他元素视觉一致 */
+#titleAppName {
+    color: {{TEXT}};
+    font-weight: 400;
+    padding: 0;
+    margin: 0;
+    /* 关键: QLabel 垂直居中, 跟 logo / 菜单 同一基线 */
+    qproperty-alignment: 'AlignVCenter';
+}
+
+/* 标题栏内嵌的菜单条 (setObjectName=titleMenuBar) */
+QMenuBar#titleMenuBar {
+    background: transparent;
+    color: {{MENU_TEXT}};
+    border: none;
+    margin: 0;
+    /* 关键: dock 32px, item 文字 ~14px, 用 padding-top 让 item 整体下移 9px 居中 */
+    padding-top: 9px;
+    padding-bottom: 0;
+    padding-left: 0;
+    padding-right: 0;
+}
+QMenuBar#titleMenuBar::item {
+    background: transparent;
+    padding: 0 10px;
+    border-radius: 3px;
+    color: {{MENU_TEXT}};
+    font-weight: 400;
+}
+QMenuBar#titleMenuBar::item:selected {
+    background: {{MENU_HOVER}};
+}
+
+/* 标题栏右侧主题/用户按钮 (统一 padding 跟菜单项一致) */
+QToolButton#titleThemeBtn, QToolButton#titleUserBtn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 4px 10px;
+    color: {{TEXT}};
+    font-weight: 400;
+    qproperty-iconSize: 14px 14px;
+}
+QToolButton#titleThemeBtn:hover, QToolButton#titleUserBtn:hover {
+    background: {{TAB_HOVER}};
+    border-color: {{BORDER}};
+}
+
+/* 窗控按钮 — 40x32 方形, 字号跟全局统一, 字体用 Symbol 系列显示符号 */
+QPushButton#titleBtnMin, QPushButton#titleBtnMax, QPushButton#titleBtnClose {
+    background: transparent;
+    color: {{TEXT}};
+    border: none;
+    padding: 0;
+    margin: 0;
+    font-weight: 400;
+    font-family: "Segoe UI Symbol", "Microsoft YaHei UI", sans-serif;
+}
+QPushButton#titleBtnMin:hover, QPushButton#titleBtnMax:hover {
+    background: {{TAB_HOVER}};
+}
+QPushButton#titleBtnClose:hover {
+    background: #e81123;
+    color: white;
+}

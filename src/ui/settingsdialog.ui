@@ -1,0 +1,898 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsDialog</class>
+ <widget class="QDialog" name="SettingsDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>680</width>
+    <height>460</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>设置</string>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>560</width>
+    <height>380</height>
+   </size>
+  </property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="leftMargin">
+    <number>12</number>
+   </property>
+   <property name="topMargin">
+    <number>12</number>
+   </property>
+   <property name="rightMargin">
+    <number>12</number>
+   </property>
+   <property name="bottomMargin">
+    <number>12</number>
+   </property>
+   <property name="spacing">
+    <number>0</number>
+   </property>
+
+   <!-- 中部: 左侧 nav (120 固定宽) + 右侧 stack -->
+   <item>
+    <widget class="QWidget" name="body" native="true">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <layout class="QHBoxLayout" name="bodyLayout">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <property name="spacing">
+       <number>0</number>
+      </property>
+
+      <!-- 左侧导航: 固定 120 宽, 充满高度 -->
+      <item>
+       <widget class="QListWidget" name="nav">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>120</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>120</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="spacing">
+         <number>4</number>
+        </property>
+        <item>
+         <property name="text">
+          <string>全局设置</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>主题设置</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>语言切换</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>日志设置</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+
+      <!-- 右侧内容区: 弹性占满剩余空间 -->
+      <item>
+       <widget class="QStackedWidget" name="stack">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+          <horstretch>1</horstretch>
+          <verstretch>1</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="currentIndex">
+         <number>0</number>
+        </property>
+
+        <!-- ========== 全局设置页 ========== -->
+        <widget class="QWidget" name="generalPage">
+         <layout class="QVBoxLayout" name="generalRootLayout">
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>16</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>16</number>
+          </property>
+          <property name="spacing">
+           <number>12</number>
+          </property>
+
+          <item>
+           <widget class="QLabel" name="generalTitle">
+            <property name="text">
+             <string>全局设置</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font-size: 14pt; font-weight: 600; padding-bottom: 4px;</string>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QFrame" name="generalSep">
+            <property name="frameShape">
+             <enum>QFrame::HLine</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QWidget" name="generalFormContainer" native="true">
+            <layout class="QFormLayout" name="generalForm">
+             <property name="horizontalSpacing">
+              <number>12</number>
+             </property>
+             <property name="verticalSpacing">
+              <number>10</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="autoSaveLabel">
+               <property name="text">
+                <string>自动保存:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QCheckBox" name="autoSave">
+               <property name="text">
+                <string>启用自动保存</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="recentLabel">
+               <property name="text">
+                <string>最近文件上限:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="recentCount">
+               <property name="minimumSize">
+                <size>
+                 <width>100</width>
+                 <height>0</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <item>
+           <spacer name="generalSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+
+        <!-- ========== 主题设置页 ========== -->
+        <widget class="QWidget" name="themePage">
+         <layout class="QVBoxLayout" name="themeRootLayout">
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>16</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>16</number>
+          </property>
+          <property name="spacing">
+           <number>12</number>
+          </property>
+
+          <item>
+           <widget class="QLabel" name="themeTitle">
+            <property name="text">
+             <string>主题设置</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font-size: 14pt; font-weight: 600; padding-bottom: 4px;</string>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QFrame" name="themeSep">
+            <property name="frameShape">
+             <enum>QFrame::HLine</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QWidget" name="themeFormContainer" native="true">
+            <layout class="QFormLayout" name="themeForm">
+             <property name="horizontalSpacing">
+              <number>12</number>
+             </property>
+             <property name="verticalSpacing">
+              <number>10</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="themeLabel">
+               <property name="text">
+                <string>主题:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="themeCombo">
+               <property name="minimumSize">
+                <size>
+                 <width>180</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <item>
+                <property name="text">
+                 <string>使用系统默认</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>浅色</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>深色</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item row="1" column="0" colspan="2">
+              <widget class="QLabel" name="themeNote">
+               <property name="text">
+                <string>(主题设置需要重启生效)</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: gray; font-size: 9pt;</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <item>
+           <spacer name="themeSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+
+        <!-- ========== 语言切换页 ========== -->
+        <widget class="QWidget" name="languagePage">
+         <layout class="QVBoxLayout" name="languageRootLayout">
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>16</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>16</number>
+          </property>
+          <property name="spacing">
+           <number>12</number>
+          </property>
+
+          <item>
+           <widget class="QLabel" name="langTitle">
+            <property name="text">
+             <string>语言切换</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font-size: 14pt; font-weight: 600; padding-bottom: 4px;</string>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QFrame" name="langSep">
+            <property name="frameShape">
+             <enum>QFrame::HLine</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QWidget" name="langFormContainer" native="true">
+            <layout class="QFormLayout" name="languageForm">
+             <property name="horizontalSpacing">
+              <number>12</number>
+             </property>
+             <property name="verticalSpacing">
+              <number>10</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="langLabel">
+               <property name="text">
+                <string>语言:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="langCombo">
+               <property name="minimumSize">
+                <size>
+                 <width>180</width>
+                 <height>0</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0" colspan="2">
+              <widget class="QLabel" name="langNote">
+               <property name="text">
+                <string>(修改后立即生效, 下次启动会记住选择)</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: gray; font-size: 9pt;</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <item>
+           <spacer name="langSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+
+        <!-- ========== 日志设置页 ========== -->
+        <widget class="QWidget" name="logPage">
+         <layout class="QVBoxLayout" name="logRootLayout">
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>16</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>16</number>
+          </property>
+          <property name="spacing">
+           <number>12</number>
+          </property>
+
+          <item>
+           <widget class="QLabel" name="logTitle">
+            <property name="text">
+             <string>日志设置</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font-size: 14pt; font-weight: 600; padding-bottom: 4px;</string>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QFrame" name="logSep">
+            <property name="frameShape">
+             <enum>QFrame::HLine</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Sunken</enum>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QWidget" name="logFormContainer" native="true">
+            <layout class="QFormLayout" name="logForm">
+             <property name="horizontalSpacing">
+              <number>12</number>
+             </property>
+             <property name="verticalSpacing">
+              <number>10</number>
+             </property>
+
+             <item row="0" column="0">
+              <widget class="QLabel" name="logModuleLabel">
+               <property name="text">
+                <string>模块名:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLineEdit" name="logModuleName">
+               <property name="minimumSize">
+                <size>
+                 <width>240</width>
+                 <height>0</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+
+             <item row="1" column="0">
+              <widget class="QLabel" name="logDirLabel">
+               <property name="text">
+                <string>日志目录:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QWidget" name="logDirRow" native="true">
+               <layout class="QHBoxLayout" name="logDirLayout">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <property name="spacing">
+                 <number>6</number>
+                </property>
+                <item>
+                 <widget class="QLineEdit" name="logDir">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                    <horstretch>1</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="logBrowseBtn">
+                  <property name="minimumSize">
+                   <size>
+                    <width>80</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>浏览...</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+
+             <item row="2" column="0">
+              <widget class="QLabel" name="logLevelLabel">
+               <property name="text">
+                <string>日志级别:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QComboBox" name="logLevelCombo">
+               <property name="minimumSize">
+                <size>
+                 <width>180</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <item>
+                <property name="text">
+                 <string>Trace (最详细)</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Debug (调试)</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Info (常规)</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Warn (警告)</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Error (错误)</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Critical (严重)</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Off (关闭)</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+
+             <item row="3" column="0">
+              <widget class="QLabel" name="logSizeLabel">
+               <property name="text">
+                <string>单文件大小:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QWidget" name="logSizeRow" native="true">
+               <layout class="QHBoxLayout" name="logSizeLayout">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <property name="spacing">
+                 <number>6</number>
+                </property>
+                <item>
+                 <widget class="QSpinBox" name="logSizeMB">
+                  <property name="minimumSize">
+                   <size>
+                    <width>100</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="minimum">
+                   <number>1</number>
+                  </property>
+                  <property name="maximum">
+                   <number>1024</number>
+                  </property>
+                  <property name="singleStep">
+                   <number>1</number>
+                  </property>
+                  <property name="value">
+                   <number>4</number>
+                  </property>
+                  <property name="suffix">
+                   <string> MB</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="logSizeSpacer">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </widget>
+             </item>
+
+             <item row="4" column="0" colspan="2">
+              <widget class="QLabel" name="logStatusLabel">
+               <property name="text">
+                <string>当前状态: --</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: gray; font-size: 9pt;</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QWidget" name="logBtnRow" native="true">
+            <layout class="QHBoxLayout" name="logBtnLayout">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>4</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <property name="spacing">
+              <number>8</number>
+             </property>
+             <item>
+              <widget class="QPushButton" name="logApplyBtn">
+               <property name="minimumSize">
+                <size>
+                 <width>100</width>
+                 <height>30</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>应用设置</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="logListBtn">
+               <property name="minimumSize">
+                <size>
+                 <width>100</width>
+                 <height>30</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>查看今天的日志</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="logBtnSpacer">
+               <property name="orientation">
+                <enum>Qt::Orientation::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <item>
+           <spacer name="logSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- 底部分隔线 + 按钮栏 -->
+   <item>
+    <widget class="QFrame" name="rootSep">
+     <property name="frameShape">
+      <enum>QFrame::HLine</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Sunken</enum>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QWidget" name="btnBar" native="true">
+     <layout class="QHBoxLayout" name="btnBarLayout">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <item>
+       <spacer name="btnSpacer">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnOk">
+        <property name="minimumSize">
+         <size>
+          <width>80</width>
+          <height>30</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>确定</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnCancel">
+        <property name="minimumSize">
+         <size>
+          <width>80</width>
+          <height>30</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>取消</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>nav</sender>
+   <signal>currentRowChanged(int)</signal>
+   <receiver>stack</receiver>
+   <slot>setCurrentIndex(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>60</x>
+     <y>120</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>320</x>
+     <y>200</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>btnOk</sender>
+   <signal>clicked()</signal>
+   <receiver>SettingsDialog</receiver>
+   <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>520</x>
+     <y>390</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>320</x>
+     <y>210</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>btnCancel</sender>
+   <signal>clicked()</signal>
+   <receiver>SettingsDialog</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>580</x>
+     <y>390</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>320</x>
+     <y>210</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

@@ -1,0 +1,472 @@
+// =============================================================================
+//  tst_AdjustmentLut - PS 风格色彩调整 LUT 测试 (P0-3.1, 2026-09-08)
+//
+//  覆盖:
+//    1. 8 个 build* LUT 函数 — identity / neutral 测试
+//       - buildCurvesLUT_identity: (0,0)(255,255) → 恒等
+//       - buildCurvesLUT_boostMidtones: (0,0)(128,192)(255,255) → 提升中间调
+//       - buildLevelsLUT_identity: (0, 255, 1.0, 0, 255) → 恒等
+//       - buildLevelsLUT_highContrast: (64, 192, 1.0, 0, 255) → 高对比
+//       - buildHueSatLUT_identity: lightness=0 → 恒等
+//       - buildBlackWhiteLUT_default: 6 个 100.0 → 恒等
+//       - buildColorBalanceLUT_neutral: (0, 0, 0) → 恒等
+//       - buildVibranceLUT_neutral: (0.0, 0.0) → 恒等
+//       - buildPhotoFilterLUT_neutral: density=0 → 恒等
+//    2. applyLut 同步 — 8x8 RGB 图像 + 恒等 LUT → 输出 == 输入
+//    3. applyLutAsync — EngineContext::ImageEditor profile + future 拿结果
+//                       + 跟同步版一致
+//
+//  跟 P0-2.5 (2026-09-08) ImageProcessorAsync 测试对齐:
+//    - engine 模式 (ImageEditor profile, hw=2) 跟 tst_ImageProcessorAsync 一致
+//    - future.get() 拿结果, 跟同步 ImageProcessor 比对
+// =============================================================================
+
+#include <QTest>
+#include <QObject>
+#include <QColor>
+#include <QPolygonF>
+#include <QPointF>
+#include <QVector>
+#include <QPair>
+#include <QtGlobal>
+
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <cmath>
+#include <memory>
+
+#include "../src/media/imageprocessor.h"
+#include "../src/core/ThreadPool/engine_context.h"
+
+class tst_AdjustmentLut : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void initTestCase();
+    void cleanupTestCase();
+
+    // ---- 8 个 build* LUT 函数 ----
+    void buildCurvesLUT_identity();
+    void buildCurvesLUT_boostMidtones();
+    void buildLevelsLUT_identity();
+    void buildLevelsLUT_highContrast();
+    void buildHueSatLUT_identity();
+    void buildBlackWhiteLUT_default();
+    void buildColorBalanceLUT_neutral();
+    void buildVibranceLUT_neutral();
+    void buildPhotoFilterLUT_neutral();
+
+    // ---- 2 个 applyLut case ----
+    void applyLut_sync_runs();
+    void applyLut_async_returnsFuture();
+
+private:
+    // 工具: 创建恒等 Curves LUT (跟 buildCurvesLUT_identity 内部逻辑一致)
+    static cv::Mat makeIdentityCurvesLut();
+    // 工具: 创建一个 ImageEditor profile 的 EngineContext, hw=2 限线程
+    static std::unique_ptr<vistella::tp::EngineContext> makeImageEditorEngine();
+    // 工具: 创建测试用 8x8 RGB 图像 (每像素值不同, 验证 LUT 索引)
+    static cv::Mat makeTestRgbImage();
+};
+
+// =============================================================================
+//  工具实现
+// =============================================================================
+
+cv::Mat tst_AdjustmentLut::makeIdentityCurvesLut()
+{
+    return ImageProcessor::buildCurvesLUT(QPolygonF{QPointF(0, 0), QPointF(255, 255)});
+}
+
+std::unique_ptr<vistella::tp::EngineContext> tst_AdjustmentLut::makeImageEditorEngine()
+{
+    return std::make_unique<vistella::tp::EngineContext>(
+        vistella::tp::EngineContext::make_profile(
+            vistella::tp::EngineContext::Profile::ImageEditor, 2));
+}
+
+cv::Mat tst_AdjustmentLut::makeTestRgbImage()
+{
+    cv::Mat src(8, 8, CV_8UC3);
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            // 每像素 BGR 不同, 验证 LUT 索引
+            const uchar b = static_cast<uchar>((x * 32) % 256);
+            const uchar g = static_cast<uchar>((y * 32) % 256);
+            const uchar r = static_cast<uchar>(((x + y) * 16) % 256);
+            src.at<cv::Vec3b>(y, x) = cv::Vec3b(b, g, r);
+        }
+    }
+    return src;
+}
+
+void tst_AdjustmentLut::initTestCase()
+{
+    // QTEST_MAIN 默认 QCoreApplication, 够用
+}
+
+void tst_AdjustmentLut::cleanupTestCase()
+{
+    // 不 waitForDone — 跟 tst_ImageProcessorAsync 同样的原因
+}
+
+// =============================================================================
+//  8 个 build* LUT 函数测试
+// =============================================================================
+
+void tst_AdjustmentLut::buildCurvesLUT_identity()
+{
+    // (0, 0) (255, 255) → 恒等
+    cv::Mat lut = ImageProcessor::buildCurvesLUT(QPolygonF{QPointF(0, 0), QPointF(255, 255)});
+    QCOMPARE(lut.rows, 256);
+    QCOMPARE(lut.cols, 1);
+    QCOMPARE(lut.type(), CV_8U);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lut.at<uchar>(i)), i);
+    }
+}
+
+void tst_AdjustmentLut::buildCurvesLUT_boostMidtones()
+{
+    // (0, 0) (128, 192) (255, 255) → 提升中间调
+    cv::Mat lut = ImageProcessor::buildCurvesLUT(
+        QPolygonF{QPointF(0, 0), QPointF(128, 192), QPointF(255, 255)});
+    QCOMPARE(lut.rows, 256);
+    QCOMPARE(lut.cols, 1);
+    QCOMPARE(lut.type(), CV_8U);
+    // 锚点: 0→0, 128→192, 255→255
+    QCOMPARE(int(lut.at<uchar>(0)),   0);
+    QCOMPARE(int(lut.at<uchar>(128)), 192);
+    QCOMPARE(int(lut.at<uchar>(255)), 255);
+    // 64 (between 0 and 128): t=0.5, y = 0 + 0.5 * 192 = 96
+    QCOMPARE(int(lut.at<uchar>(64)), 96);
+    // 192 (between 128 and 255): t=(192-128)/(255-128)=64/127≈0.5039
+    //   y = 192 + 0.5039 * (255-192) = 192 + 31.75 = 223.75 → 224 (rounded)
+    QCOMPARE(int(lut.at<uchar>(192)), 224);
+    // 单调性: 中间段都比输入高 (boost)
+    QVERIFY(lut.at<uchar>(64) > 64);
+    QVERIFY(lut.at<uchar>(96) > 96);
+    QVERIFY(lut.at<uchar>(160) > 160);
+}
+
+void tst_AdjustmentLut::buildLevelsLUT_identity()
+{
+    cv::Mat lut = ImageProcessor::buildLevelsLUT(0, 255, 1.0, 0, 255);
+    QCOMPARE(lut.rows, 256);
+    QCOMPARE(lut.cols, 1);
+    QCOMPARE(lut.type(), CV_8U);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lut.at<uchar>(i)), i);
+    }
+}
+
+void tst_AdjustmentLut::buildLevelsLUT_highContrast()
+{
+    // (64, 192, 1.0, 0, 255) → 64 映射 0, 192 映射 255, 中间线性
+    cv::Mat lut = ImageProcessor::buildLevelsLUT(64, 192, 1.0, 0, 255);
+    QCOMPARE(lut.rows, 256);
+    QCOMPARE(lut.cols, 1);
+    QCOMPARE(lut.type(), CV_8U);
+    // 边界: < inLow → outLow = 0
+    QCOMPARE(int(lut.at<uchar>(0)),   0);
+    QCOMPARE(int(lut.at<uchar>(63)),  0);
+    QCOMPARE(int(lut.at<uchar>(64)),  0);
+    // 边界: > inHigh → outHigh = 255
+    QCOMPARE(int(lut.at<uchar>(192)), 255);
+    QCOMPARE(int(lut.at<uchar>(193)), 255);
+    QCOMPARE(int(lut.at<uchar>(255)), 255);
+    // 中间值 (128): (128-64)/(192-64) * 255 = 64/128 * 255 = 127.5 → 128 (四舍五入)
+    QVERIFY(std::abs(int(lut.at<uchar>(128)) - 128) <= 1);
+    // gamma > 1 提升暗部
+    cv::Mat lutGamma = ImageProcessor::buildLevelsLUT(0, 255, 2.0, 0, 255);
+    // i=128, gamma=2.0: pow(0.5, 1/2) = 0.707, * 255 = 180
+    QVERIFY(std::abs(int(lutGamma.at<uchar>(128)) - 180) <= 1);
+    // gamma < 1 提升亮部
+    cv::Mat lutGammaLow = ImageProcessor::buildLevelsLUT(0, 255, 0.5, 0, 255);
+    // i=128, gamma=0.5: pow(0.5, 2) = 0.25, * 255 = 64
+    QVERIFY(std::abs(int(lutGammaLow.at<uchar>(128)) - 64) <= 1);
+}
+
+void tst_AdjustmentLut::buildHueSatLUT_identity()
+{
+    // 8 个 (0, 0) pairs, lightness=0 → 恒等
+    QVector<QPair<int, int>> pairs;
+    pairs.reserve(8);
+    for (int i = 0; i < 8; ++i) {
+        pairs.append(qMakePair(0, 0));
+    }
+    cv::Mat lut = ImageProcessor::buildHueSatLUT(pairs, 0);
+    QCOMPARE(lut.rows, 256);
+    QCOMPARE(lut.cols, 1);
+    QCOMPARE(lut.type(), CV_8U);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lut.at<uchar>(i)), i);
+    }
+}
+
+void tst_AdjustmentLut::buildBlackWhiteLUT_default()
+{
+    // 6 个 100.0 → 平均 = 100, 中性 → 恒等
+    QVector<double> mixer(6, 100.0);
+    cv::Mat lut = ImageProcessor::buildBlackWhiteLUT(mixer);
+    QCOMPARE(lut.rows, 256);
+    QCOMPARE(lut.cols, 1);
+    QCOMPARE(lut.type(), CV_8U);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lut.at<uchar>(i)), i);
+    }
+
+    // 空 QVector → identity (兜底)
+    QVector<double> empty;
+    cv::Mat lutEmpty = ImageProcessor::buildBlackWhiteLUT(empty);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lutEmpty.at<uchar>(i)), i);
+    }
+
+    // 错误 size (3) → identity
+    QVector<double> wrong(3, 100.0);
+    cv::Mat lutWrong = ImageProcessor::buildBlackWhiteLUT(wrong);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lutWrong.at<uchar>(i)), i);
+    }
+
+    // 非中性 (avg < 100) → 变暗
+    QVector<double> dark(6, 50.0);
+    cv::Mat lutDark = ImageProcessor::buildBlackWhiteLUT(dark);
+    // avg=50, scale=0.5, LUT[100] = 50
+    QCOMPARE(int(lutDark.at<uchar>(100)), 50);
+    QVERIFY(lutDark.at<uchar>(128) < 128);
+
+    // 非中性 (avg > 100) → 变亮 (但 saturate_cast 不会超过 255)
+    QVector<double> bright(6, 200.0);
+    cv::Mat lutBright = ImageProcessor::buildBlackWhiteLUT(bright);
+    // avg=200, scale=2.0, LUT[100] = 200
+    QCOMPARE(int(lutBright.at<uchar>(100)), 200);
+    QVERIFY(lutBright.at<uchar>(128) > 128);
+}
+
+void tst_AdjustmentLut::buildColorBalanceLUT_neutral()
+{
+    // (0, 0, 0) → 恒等
+    cv::Mat lut = ImageProcessor::buildColorBalanceLUT(0, 0, 0);
+    QCOMPARE(lut.rows, 256);
+    QCOMPARE(lut.cols, 1);
+    QCOMPARE(lut.type(), CV_8U);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lut.at<uchar>(i)), i);
+    }
+
+    // +100 cyanRed → 加亮 (cyanLum 比 red 亮)
+    cv::Mat lutPos = ImageProcessor::buildColorBalanceLUT(100, 0, 0);
+    // shift = 100 * 255 / 300 = 85
+    // LUT[128] = 128 + 85 = 213
+    QCOMPARE(int(lutPos.at<uchar>(128)), 213);
+    // LUT[0] = 85
+    QCOMPARE(int(lutPos.at<uchar>(0)), 85);
+
+    // -100 cyanRed → 变暗
+    cv::Mat lutNeg = ImageProcessor::buildColorBalanceLUT(-100, 0, 0);
+    // shift = -85
+    // LUT[128] = 128 - 85 = 43
+    QCOMPARE(int(lutNeg.at<uchar>(128)), 43);
+    // saturate_cast: LUT[0] = max(0, -85) = 0
+    QCOMPARE(int(lutNeg.at<uchar>(0)), 0);
+}
+
+void tst_AdjustmentLut::buildVibranceLUT_neutral()
+{
+    // (0.0, 0.0) → 恒等
+    cv::Mat lut = ImageProcessor::buildVibranceLUT(0.0, 0.0);
+    QCOMPARE(lut.rows, 256);
+    QCOMPARE(lut.cols, 1);
+    QCOMPARE(lut.type(), CV_8U);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lut.at<uchar>(i)), i);
+    }
+
+    // 任意参数也返回 identity (P0-3.1 简化, 留 P0-3.x 实装完整算法)
+    cv::Mat lutAny = ImageProcessor::buildVibranceLUT(50.0, -30.0);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lutAny.at<uchar>(i)), i);
+    }
+}
+
+void tst_AdjustmentLut::buildPhotoFilterLUT_neutral()
+{
+    // density=0 → 恒等 (任何 tint)
+    cv::Mat lut1 = ImageProcessor::buildPhotoFilterLUT(QColor(255, 200, 100), 0);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lut1.at<uchar>(i)), i);
+    }
+
+    // density=0 + 黑色 tint → 恒等
+    cv::Mat lut2 = ImageProcessor::buildPhotoFilterLUT(QColor(0, 0, 0), 0);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lut2.at<uchar>(i)), i);
+    }
+
+    // density>0 + 灰色 tint (128) → 恒等 (lumShift=0)
+    cv::Mat lutGray = ImageProcessor::buildPhotoFilterLUT(QColor(128, 128, 128), 50);
+    for (int i = 0; i < 256; ++i) {
+        QCOMPARE(int(lutGray.at<uchar>(i)), i);
+    }
+
+    // density>0 + 暖色 (255, 200, 100) → 加亮
+    cv::Mat lutWarm = ImageProcessor::buildPhotoFilterLUT(QColor(255, 200, 100), 50);
+    // tintLum = (255*299 + 200*587 + 100*114) / 1000
+    //         = (76245 + 117400 + 11400) / 1000
+    //         = 205045 / 1000 = 205
+    // lumShift = 205 - 128 = 77
+    // effectiveShift = 77 * 50 / 100 = 38 (round via cast)
+    QVERIFY(lutWarm.at<uchar>(128) > 128);
+    // 至少 +30 (allowing rounding)
+    QVERIFY(int(lutWarm.at<uchar>(128)) >= 158);
+    QVERIFY(int(lutWarm.at<uchar>(128)) <= 168);
+
+    // density>0 + 冷色 (100, 150, 200) → 变暗
+    cv::Mat lutCool = ImageProcessor::buildPhotoFilterLUT(QColor(100, 150, 200), 50);
+    // tintLum = (100*299 + 150*587 + 200*114) / 1000
+    //         = (29900 + 88050 + 22800) / 1000
+    //         = 140750 / 1000 = 140
+    // lumShift = 140 - 128 = 12
+    // effectiveShift = 12 * 50 / 100 = 6
+    QVERIFY(lutCool.at<uchar>(128) > 128);   // still slightly brighter (cool tintLum > 128)
+}
+
+// =============================================================================
+//  applyLut 同步 + 异步测试
+// =============================================================================
+
+void tst_AdjustmentLut::applyLut_sync_runs()
+{
+    // 8x8 RGB 图像 + 恒等 LUT → 输出 == 输入
+    cv::Mat src = makeTestRgbImage();
+    cv::Mat lut = makeIdentityCurvesLut();
+    cv::Mat out;
+    ImageProcessor::applyLut(src, out, lut);
+    QCOMPARE(out.size(), src.size());
+    QCOMPARE(out.type(), src.type());
+    QCOMPARE(out.rows, 8);
+    QCOMPARE(out.cols, 8);
+    QCOMPARE(out.channels(), 3);
+    // 验证每个像素一致 (恒等 LUT → 输出 = 输入)
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            QCOMPARE(out.at<cv::Vec3b>(y, x), src.at<cv::Vec3b>(y, x));
+        }
+    }
+
+    // 验证 applyLut 用 boost curves → 像素变亮
+    cv::Mat lutBoost = ImageProcessor::buildCurvesLUT(
+        QPolygonF{QPointF(0, 0), QPointF(128, 192), QPointF(255, 255)});
+    cv::Mat outBoost;
+    ImageProcessor::applyLut(src, outBoost, lutBoost);
+    QCOMPARE(outBoost.size(), src.size());
+    QCOMPARE(outBoost.type(), src.type());
+    // 中间值 (128) 应该被 boost: 192
+    QCOMPARE(int(outBoost.at<cv::Vec3b>(4, 4)[0]), 192);
+    QCOMPARE(int(outBoost.at<cv::Vec3b>(4, 4)[1]), 192);
+    QCOMPARE(int(outBoost.at<cv::Vec3b>(4, 4)[2]), 192);
+    // 0 仍是 0
+    // 0 → 0 (input B=0 at some pixel)
+    bool foundZero = false;
+    for (int y = 0; y < 8 && !foundZero; ++y) {
+        for (int x = 0; x < 8 && !foundZero; ++x) {
+            const cv::Vec3b &px = src.at<cv::Vec3b>(y, x);
+            if (px[0] == 0 || px[1] == 0 || px[2] == 0) {
+                foundZero = true;
+            }
+        }
+    }
+    // 只要 src 里有 0 像素, applyLut 后还是 0
+    if (foundZero) {
+        QCOMPARE(int(outBoost.at<cv::Vec3b>(0, 0)[0]), 0);  // src[0,0] b=0
+    }
+
+    // 单通道图像 (CV_8UC1) 也支持
+    cv::Mat gray(8, 8, CV_8UC1, cv::Scalar(128));
+    cv::Mat grayOut;
+    ImageProcessor::applyLut(gray, grayOut, lut);
+    QCOMPARE(grayOut.size(), gray.size());
+    QCOMPARE(grayOut.type(), CV_8UC1);
+    QCOMPARE(int(grayOut.at<uchar>(4, 4)), 128);  // identity LUT
+    // 256 元素 LUT (1x256 shape) 也支持
+    cv::Mat lut1x256 = cv::Mat(1, 256, CV_8U);
+    for (int i = 0; i < 256; ++i) {
+        lut1x256.at<uchar>(i) = static_cast<uchar>(255 - i);  // invert
+    }
+    cv::Mat grayInv;
+    ImageProcessor::applyLut(gray, grayInv, lut1x256);
+    QCOMPARE(int(grayInv.at<uchar>(4, 4)), 127);  // 255 - 128 = 127
+}
+
+void tst_AdjustmentLut::applyLut_async_returnsFuture()
+{
+    // 1) engine == nullptr 兜底: 返 future 立即就绪
+    {
+        cv::Mat src = makeTestRgbImage();
+        cv::Mat lut = makeIdentityCurvesLut();
+        auto fut = ImageProcessor::applyLutAsync(src, lut, nullptr);
+        QVERIFY(fut.valid());
+        // wait_for(0s) 立即返 ready — 验证走 sync 路径
+        auto status = fut.wait_for(std::chrono::seconds(0));
+        QVERIFY(status == std::future_status::ready);
+        cv::Mat result = fut.get();
+        QVERIFY(!result.empty());
+        QCOMPARE(result.size(), src.size());
+        QCOMPARE(result.type(), src.type());
+        // 恒等 LUT → 输出 == 输入
+        for (int y = 0; y < 8; ++y) {
+            for (int x = 0; x < 8; ++x) {
+                QCOMPARE(result.at<cv::Vec3b>(y, x), src.at<cv::Vec3b>(y, x));
+            }
+        }
+    }
+
+    // 2) engine 非空: 走 background pool, 返 future 异步完成
+    {
+        auto engine = makeImageEditorEngine();
+        QVERIFY(engine != nullptr);
+        cv::Mat src = makeTestRgbImage();
+        cv::Mat lut = makeIdentityCurvesLut();
+        auto fut = ImageProcessor::applyLutAsync(src, lut, engine.get());
+        QVERIFY(fut.valid());
+        cv::Mat result = fut.get();
+        QVERIFY(!result.empty());
+        QCOMPARE(result.size(), src.size());
+        QCOMPARE(result.type(), src.type());
+        // 跟同步版一致 (恒等 LUT)
+        for (int y = 0; y < 8; ++y) {
+            for (int x = 0; x < 8; ++x) {
+                QCOMPARE(result.at<cv::Vec3b>(y, x), src.at<cv::Vec3b>(y, x));
+            }
+        }
+
+        // 跟 ImageProcessor::applyLut 同步版 pixel-level 一致
+        cv::Mat syncOut;
+        ImageProcessor::applyLut(src, syncOut, lut);
+        QCOMPARE(cv::sum(result)[0], cv::sum(syncOut)[0]);
+        QCOMPARE(cv::sum(result)[1], cv::sum(syncOut)[1]);
+        QCOMPARE(cv::sum(result)[2], cv::sum(syncOut)[2]);
+    }
+
+    // 3) engine 非空 + boost LUT: future 拿 boost 后结果
+    {
+        auto engine = makeImageEditorEngine();
+        cv::Mat src = makeTestRgbImage();
+        cv::Mat lutBoost = ImageProcessor::buildCurvesLUT(
+            QPolygonF{QPointF(0, 0), QPointF(128, 192), QPointF(255, 255)});
+        auto fut = ImageProcessor::applyLutAsync(src, lutBoost, engine.get());
+        QVERIFY(fut.valid());
+        cv::Mat result = fut.get();
+        QVERIFY(!result.empty());
+        // 中间值 (128) → 192 (跟同步版一致)
+        QCOMPARE(int(result.at<cv::Vec3b>(4, 4)[0]), 192);
+        QCOMPARE(int(result.at<cv::Vec3b>(4, 4)[1]), 192);
+        QCOMPARE(int(result.at<cv::Vec3b>(4, 4)[2]), 192);
+    }
+}
+
+QTEST_MAIN(tst_AdjustmentLut)
+#include "tst_AdjustmentLut.moc"

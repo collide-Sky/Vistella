@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ColorDock</class>
+ <widget class="QWidget" name="ColorDock">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>280</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>240</width>
+    <height>0</height>
+   </size>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="leftMargin">4</property>
+   <property name="topMargin">4</property>
+   <property name="rightMargin">4</property>
+   <property name="bottomMargin">4</property>
+   <property name="spacing">6</property>
+
+   <!-- F-H: swatch row (bg 50x50 + fg 30x30 + swap hint) -->
+   <item>
+    <widget class="QWidget" name="swatchContainer">
+     <property name="minimumSize">
+      <size><width>0</width><height>54</height></size>
+     </property>
+     <layout class="QHBoxLayout" name="swatchLayout">
+      <property name="spacing">4</property>
+      <item>
+       <widget class="QFrame" name="bgSwatch">
+        <property name="minimumSize"><size><width>50</width><height>50</height></size></property>
+        <property name="maximumSize"><size><width>50</width><height>50</height></size></property>
+        <property name="frameShape">QFrame::Box</property>
+        <property name="autoFillBackground">true</property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="fgSwatch">
+        <property name="minimumSize"><size><width>30</width><height>30</height></size></property>
+        <property name="maximumSize"><size><width>30</width><height>30</height></size></property>
+        <property name="frameShape">QFrame::Box</property>
+        <property name="autoFillBackground">true</property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="swapHint">
+        <property name="text"><string>D 双击 swap</string></property>
+        <property name="styleSheet">color: gray; font-size: 10px;</property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="swatchSpacer">
+        <property name="orientation">Qt::Horizontal</property>
+        <property name="sizeHint" stdset="0">
+         <size><width>40</width><height>20</height></size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- F-H: pick button -->
+   <item>
+    <widget class="QPushButton" name="pickBtn">
+     <property name="text"><string>拾取颜色...</string></property>
+    </widget>
+   </item>
+
+   <!-- F-H: 12-color palette group -->
+   <item>
+    <widget class="QGroupBox" name="paletteGroup">
+     <property name="title"><string>色板</string></property>
+     <layout class="QVBoxLayout" name="paletteOuterLayout">
+      <property name="leftMargin">4</property>
+      <property name="topMargin">4</property>
+      <property name="rightMargin">4</property>
+      <property name="bottomMargin">4</property>
+      <item>
+       <widget class="QWidget" name="paletteContainer">
+        <layout class="QGridLayout" name="paletteGrid">
+         <property name="spacing">2</property>
+         <property name="leftMargin">0</property>
+         <property name="topMargin">0</property>
+         <property name="rightMargin">0</property>
+         <property name="bottomMargin">0</property>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- F-M.1: gradient group -->
+   <item>
+    <widget class="QGroupBox" name="gradientGroup">
+     <property name="title"><string>渐变</string></property>
+     <layout class="QVBoxLayout" name="gradientOuterLayout">
+      <property name="leftMargin">4</property>
+      <property name="topMargin">4</property>
+      <property name="rightMargin">4</property>
+      <property name="bottomMargin">4</property>
+      <item>
+       <widget class="QComboBox" name="gradientTypeCombo">
+        <item><property name="text"><string>线性</string></property></item>
+        <item><property name="text"><string>径向</string></property></item>
+        <item><property name="text"><string>角度</string></property></item>
+        <item><property name="text"><string>菱形</string></property></item>
+        <item><property name="text"><string>对称</string></property></item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="gradientPreview">
+        <property name="minimumSize"><size><width>200</width><height>24</height></size></property>
+        <property name="maximumSize"><size><width>200</width><height>24</height></size></property>
+        <property name="frameShape">QFrame::Box</property>
+        <property name="autoFillBackground">true</property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="gradientPresetsLabel">
+        <property name="text"><string>预设</string></property>
+        <property name="styleSheet">font-size: 10px;</property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="gradientPresetsContainer">
+        <layout class="QGridLayout" name="gradientPresetsGrid">
+         <property name="spacing">2</property>
+         <property name="leftMargin">0</property>
+         <property name="topMargin">0</property>
+         <property name="rightMargin">0</property>
+         <property name="bottomMargin">0</property>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- F-M.2: pattern group -->
+   <item>
+    <widget class="QGroupBox" name="patternGroup">
+     <property name="title"><string>图案</string></property>
+     <layout class="QVBoxLayout" name="patternOuterLayout">
+      <property name="leftMargin">4</property>
+      <property name="topMargin">4</property>
+      <property name="rightMargin">4</property>
+      <property name="bottomMargin">4</property>
+      <item>
+       <widget class="QLabel" name="patternPresetsLabel">
+        <property name="text"><string>预设</string></property>
+        <property name="styleSheet">font-size: 10px;</property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="patternPresetsContainer">
+        <layout class="QGridLayout" name="patternPresetsGrid">
+         <property name="spacing">2</property>
+         <property name="leftMargin">0</property>
+         <property name="topMargin">0</property>
+         <property name="rightMargin">0</property>
+         <property name="bottomMargin">0</property>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <spacer name="mainSpacer">
+     <property name="orientation">Qt::Vertical</property>
+     <property name="sizeHint" stdset="0">
+      <size><width>20</width><height>40</height></size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

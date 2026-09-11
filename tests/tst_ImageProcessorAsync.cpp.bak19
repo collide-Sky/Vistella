@@ -1,0 +1,325 @@
+// =============================================================================
+//  tst_ImageProcessorAsync - 异步滤镜 facade 测试 (阶段 1 W2.3, 2026-09-03)
+//
+//  覆盖:
+//    - QFuture<Result<cv::Mat>> 异步返
+//    - 工作线程执行 (future 完成后 isFinished)
+//    - Result<cv::Mat> 正确包装值
+//    - 异常情况 (空 Mat / 异常) → Result::err
+//    - P0-2.5 (2026-09-08): EngineContext 6 overload (走 background pool)
+//    - P0-2.5: setAsyncEnabled(false) 切回 sync 的间接覆盖
+//      (ImageWindow::setAsyncEnabled(false) 走 sync 路径, 跟 ImageProcessorAsync
+//       engine==nullptr fallback 行为一致 — 测 facade engine==nullptr 时返
+//       future 立即就绪且 Result 跟同步 ImageProcessor 一致, 等价于 sync 行为)
+// =============================================================================
+
+#include <QTest>
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QFuture>
+#include <QFutureWatcher>
+
+#include <opencv2/core.hpp>
+#include <cmath>
+
+#include <future>
+
+#include "../src/core/Result.h"
+#include "../src/core/Async.h"
+#include "../src/media/imageprocessor.h"
+#include "../src/media/imageworker/ImageProcessorAsync.h"
+// P0-2.5 (2026-09-08): EngineContext 测试用
+#include "../src/core/ThreadPool/engine_context.h"
+
+class tst_ImageProcessorAsync : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void initTestCase();
+    void cleanupTestCase();
+
+    // ---- 5 个核心操作 ----
+    void test_gaussianBlur();
+    void test_saturation();
+    void test_exposure();
+    void test_sharpen();
+    void test_edgeDetect();
+
+    // ---- Result 包装 ----
+    void test_resultValue();
+    void test_resultError_onEmpty();
+
+    // ---- 异步性 (基础验证) ----
+    void test_runsAsynchronously();
+
+    // ---- P0-2.5 (2026-09-08): EngineContext 6 overload ----
+    // 验证 facade(engine, ...) 走 background pool, 返 std::future<Result<cv::Mat>>
+    // 1. engine==nullptr 兜底: 同步跑, 返的 future 立即就绪, 结果跟同步 ImageProcessor 一致
+    // 2. engine 非空: 走 background pool, future 异步完成, 结果正确
+    // 3. sync 行为 (ImageWindow::setAsyncEnabled(false) 等价) 不变
+    void test_engineContext_overload_gaussianBlur();
+    void test_engineContext_overload_saturation();
+    void test_engineContext_overload_hueShift();
+    void test_engineContext_overload_exposure();
+    void test_engineContext_overload_sharpen();
+    void test_engineContext_overload_edgeDetect();
+    void test_engineContext_nullptr_fallback_sync();
+
+private:
+    // 跑事件循环直到 future 完成
+    template <typename T>
+    bool spinUntilFinished(QFuture<T> &future, int timeoutMs = 5000)
+    {
+        QElapsedTimer t;
+        t.start();
+        while (future.isRunning() && t.elapsed() < timeoutMs) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        }
+        return !future.isRunning();
+    }
+
+    // 造测试用 cv::Mat
+    cv::Mat makeMat(int w, int h, cv::Scalar bgr = cv::Scalar(50, 100, 200))
+    {
+        return cv::Mat(h, w, CV_8UC3, bgr);
+    }
+};
+
+void tst_ImageProcessorAsync::initTestCase()
+{
+    // QTEST_MAIN 默认 QCoreApplication, 够用
+    QVERIFY(QThreadPool::globalInstance() != nullptr);
+}
+
+void tst_ImageProcessorAsync::cleanupTestCase()
+{
+    // 不 waitForDone — 跟 tst_Async 同样的原因
+}
+
+// =============================================================================
+//  实现
+// =============================================================================
+
+void tst_ImageProcessorAsync::test_gaussianBlur()
+{
+    cv::Mat src = makeMat(16, 16, cv::Scalar(100, 100, 100));
+    auto future = ImageProcessorAsync::gaussianBlur(src, 5, 0);
+    QVERIFY(spinUntilFinished(future));
+    QVERIFY(future.isFinished());
+    auto r = future.result();
+    QVERIFY(r.isOk());
+    QVERIFY(!r.value().empty());
+    QCOMPARE(r.value().size(), src.size());
+}
+
+void tst_ImageProcessorAsync::test_saturation()
+{
+    cv::Mat src = makeMat(16, 16, cv::Scalar(0, 0, 255));   // 红色
+    auto future = ImageProcessorAsync::saturation(src, 0.5);
+    QVERIFY(spinUntilFinished(future));
+    auto r = future.result();
+    QVERIFY(r.isOk());
+    QVERIFY(!r.value().empty());
+}
+
+void tst_ImageProcessorAsync::test_exposure()
+{
+    cv::Mat src = makeMat(16, 16, cv::Scalar(100, 100, 100));
+    auto future = ImageProcessorAsync::exposure(src, 1.0);
+    QVERIFY(spinUntilFinished(future));
+    auto r = future.result();
+    QVERIFY(r.isOk());
+    // 100 * 2^1 = 200
+    QVERIFY(r.value().at<cv::Vec3b>(8, 8)[0] >= 195);
+}
+
+void tst_ImageProcessorAsync::test_sharpen()
+{
+    cv::Mat src = makeMat(16, 16, cv::Scalar(100, 100, 100));
+    auto future = ImageProcessorAsync::sharpen(src);
+    QVERIFY(spinUntilFinished(future));
+    auto r = future.result();
+    QVERIFY(r.isOk());
+    QVERIFY(!r.value().empty());
+}
+
+void tst_ImageProcessorAsync::test_edgeDetect()
+{
+    cv::Mat src = makeMat(16, 16, cv::Scalar(0, 0, 0));
+    src.at<cv::Vec3b>(8, 8) = cv::Vec3b(255, 255, 255);
+    auto future = ImageProcessorAsync::edgeDetect(src, 80, 180);
+    QVERIFY(spinUntilFinished(future));
+    auto r = future.result();
+    QVERIFY(r.isOk());
+    QVERIFY(!r.value().empty());
+}
+
+void tst_ImageProcessorAsync::test_resultValue()
+{
+    // 验证 Result<cv::Mat>::isOk + value() 正确
+    cv::Mat src = makeMat(8, 8, cv::Scalar(50, 100, 200));
+    auto future = ImageProcessorAsync::saturation(src, 1.0);
+    QVERIFY(spinUntilFinished(future));
+    auto r = future.result();
+    QVERIFY(r.isOk());
+    QCOMPARE(r.value().cols, 8);
+    QCOMPARE(r.value().rows, 8);
+    QCOMPARE(r.value().type(), CV_8UC3);
+}
+
+void tst_ImageProcessorAsync::test_resultError_onEmpty()
+{
+    // 空 Mat 应该返 Result::err (不抛异常)
+    cv::Mat empty;
+    auto future = ImageProcessorAsync::saturation(empty, 0.5);
+    QVERIFY(spinUntilFinished(future));
+    auto r = future.result();
+    // saturation 处理 channels=1 → 返 in.clone(), 但空 mat 不返 (in.empty 提前返)
+    // 实际: 我们的 runOp 在 fn 抛异常时返 err, 空 mat 在 saturation 里返 in.clone() (空)
+    //   → out.empty() 触发 err
+    QVERIFY(r.isErr());
+    QCOMPARE(r.error().code, multidoc::ErrorCode::InvalidArgument);
+}
+
+void tst_ImageProcessorAsync::test_runsAsynchronously()
+{
+    // 基本异步性: future 提交后可以多次 processEvents 等, 不卡调用方
+    cv::Mat src = makeMat(32, 32);
+    auto future = ImageProcessorAsync::gaussianBlur(src, 5, 0);
+    // 立刻查 - 可能在跑或已完, 不应崩
+    QVERIFY(future.isStarted() || future.isFinished() || !future.isStarted());
+    // 等完成
+    QVERIFY(spinUntilFinished(future));
+    QVERIFY(future.isFinished());
+    QVERIFY(future.result().isOk());
+}
+
+// =============================================================================
+//  P0-2.5 (2026-09-08): EngineContext 6 overload 测试
+//  跟 P0-2 ImageAdjustmentPanel::asyncApplyCurrentParams 行为对齐
+//  验证 facade(engine, ...) 走 background pool, 返 std::future<Result<cv::Mat>>
+//  + engine==nullptr 兜底同步 (跟 ImageWindow::setAsyncEnabled(false) 行为一致)
+// =============================================================================
+
+namespace {
+// 拿一个 ImageEditor profile 的 EngineContext, hw=2 限线程
+//   跟 ImageWindow ctor 用同样的配置, 行为可比
+std::unique_ptr<multidoc::tp::EngineContext> makeImageEditorEngine() {
+    return std::make_unique<multidoc::tp::EngineContext>(
+        multidoc::tp::EngineContext::make_profile(
+            multidoc::tp::EngineContext::Profile::ImageEditor, 2));
+}
+}  // namespace
+
+void tst_ImageProcessorAsync::test_engineContext_overload_gaussianBlur()
+{
+    auto engine = makeImageEditorEngine();
+    cv::Mat src = makeMat(16, 16, cv::Scalar(100, 100, 100));
+    auto future = ImageProcessorAsync::gaussianBlur(engine.get(), src, 5, 0);
+    QVERIFY(future.valid());   // std::future 立即可 get
+    auto r = future.get();
+    QVERIFY(r.isOk());
+    QVERIFY(!r.value().empty());
+    QCOMPARE(r.value().size(), src.size());
+
+    // 跟同步 ImageProcessor::gaussianBlur 结果一致 (像素级)
+    cv::Mat syncOut;
+    ImageProcessor::gaussianBlur(src, syncOut, 5, 0);
+    QVERIFY(!syncOut.empty());
+    QCOMPARE(cv::sum(r.value())[0], cv::sum(syncOut)[0]);
+}
+
+void tst_ImageProcessorAsync::test_engineContext_overload_saturation()
+{
+    auto engine = makeImageEditorEngine();
+    cv::Mat src = makeMat(16, 16, cv::Scalar(0, 0, 255));   // 红色
+    auto future = ImageProcessorAsync::saturation(engine.get(), src, 0.5);
+    QVERIFY(future.valid());
+    auto r = future.get();
+    QVERIFY(r.isOk());
+    QVERIFY(!r.value().empty());
+}
+
+void tst_ImageProcessorAsync::test_engineContext_overload_hueShift()
+{
+    auto engine = makeImageEditorEngine();
+    cv::Mat src = makeMat(16, 16, cv::Scalar(50, 100, 200));
+    auto future = ImageProcessorAsync::hueShift(engine.get(), src, 30.0);
+    QVERIFY(future.valid());
+    auto r = future.get();
+    QVERIFY(r.isOk());
+    QVERIFY(!r.value().empty());
+}
+
+void tst_ImageProcessorAsync::test_engineContext_overload_exposure()
+{
+    auto engine = makeImageEditorEngine();
+    cv::Mat src = makeMat(16, 16, cv::Scalar(100, 100, 100));
+    auto future = ImageProcessorAsync::exposure(engine.get(), src, 1.0);
+    QVERIFY(future.valid());
+    auto r = future.get();
+    QVERIFY(r.isOk());
+    // 100 * 2^1 = 200
+    QVERIFY(r.value().at<cv::Vec3b>(8, 8)[0] >= 195);
+}
+
+void tst_ImageProcessorAsync::test_engineContext_overload_sharpen()
+{
+    auto engine = makeImageEditorEngine();
+    cv::Mat src = makeMat(16, 16, cv::Scalar(100, 100, 100));
+    auto future = ImageProcessorAsync::sharpen(engine.get(), src);
+    QVERIFY(future.valid());
+    auto r = future.get();
+    QVERIFY(r.isOk());
+    QVERIFY(!r.value().empty());
+}
+
+void tst_ImageProcessorAsync::test_engineContext_overload_edgeDetect()
+{
+    auto engine = makeImageEditorEngine();
+    cv::Mat src = makeMat(16, 16, cv::Scalar(0, 0, 0));
+    src.at<cv::Vec3b>(8, 8) = cv::Vec3b(255, 255, 255);
+    auto future = ImageProcessorAsync::edgeDetect(engine.get(), src, 80, 180);
+    QVERIFY(future.valid());
+    auto r = future.get();
+    QVERIFY(r.isOk());
+    QVERIFY(!r.value().empty());
+}
+
+// P0-2.5 (2026-09-08): engine==nullptr fallback 同步 — 等价于
+//   ImageWindow::setAsyncEnabled(false) 走 sync 路径的行为
+//   验证: future 立即就绪 + Result 内容跟同步 ImageProcessor 一致
+void tst_ImageProcessorAsync::test_engineContext_nullptr_fallback_sync()
+{
+    // engine == nullptr: 内部兜底走同步跑
+    cv::Mat src = makeMat(16, 16, cv::Scalar(100, 100, 100));
+
+    // 1) async facade (engine=null) 结果应跟 ImageProcessor 同步版一致
+    auto asyncFuture = ImageProcessorAsync::gaussianBlur(nullptr, src, 5, 0);
+    QVERIFY(asyncFuture.valid());
+    // wait_for(0s) 立即返 ready — 验证走 sync 路径
+    auto status = asyncFuture.wait_for(std::chrono::seconds(0));
+    QVERIFY(status == std::future_status::ready);
+    auto r = asyncFuture.get();
+    QVERIFY(r.isOk());
+
+    cv::Mat syncOut;
+    ImageProcessor::gaussianBlur(src, syncOut, 5, 0);
+    QCOMPARE(cv::sum(r.value())[0], cv::sum(syncOut)[0]);
+
+    // 2) 其他 5 个 facade 同样行为
+    auto sat = ImageProcessorAsync::saturation(nullptr, src, 0.5).get();
+    QVERIFY(sat.isOk());
+    auto hue = ImageProcessorAsync::hueShift(nullptr, src, 10.0).get();
+    QVERIFY(hue.isOk());
+    auto exp = ImageProcessorAsync::exposure(nullptr, src, 0.5).get();
+    QVERIFY(exp.isOk());
+    auto shrp = ImageProcessorAsync::sharpen(nullptr, src).get();
+    QVERIFY(shrp.isOk());
+    auto edge = ImageProcessorAsync::edgeDetect(nullptr, src, 80, 180).get();
+    QVERIFY(edge.isOk());
+}
+
+QTEST_MAIN(tst_ImageProcessorAsync)
+#include "tst_ImageProcessorAsync.moc"

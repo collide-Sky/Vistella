@@ -1,0 +1,97 @@
+// SPDX-License-Identifier: MIT
+//
+// TextOverlayController - QObject, 接管文字 item 的增/删/改/扁平化
+// (P0-1.2 2026-09-07: 完整实现, 从 imagewindow.cpp 搬过来)
+//
+#pragma once
+
+#include <QObject>
+#include <QList>
+#include <QColor>
+#include <QPointF>
+#include <QString>
+
+class ImageWindow;
+class GraphicsTextItem;
+
+class TextOverlayController : public QObject {
+    Q_OBJECT
+public:
+    explicit TextOverlayController(QObject* parent = nullptr);
+    ~TextOverlayController() override;
+
+    void setHost(ImageWindow* w) { m_host = w; }
+
+    // Lifecycle of a text item. Commands call these to register / unregister
+    // so we can iterate them on flatten / undo / redo.
+    void registerTextItem(GraphicsTextItem* item);
+    void unregisterTextItem(GraphicsTextItem* item);
+    QList<GraphicsTextItem*> textItems() const { return m_items; }
+
+    // P0-1.2 (2026-09-07): 一次性清空 (给 ImageWindow 析构前调, 释放 scene 上的 item)
+    //   clearAll: 仅清 m_items + emit itemRemoved, 不动 scene
+    //   removeAllFromSceneAndDelete: 从 scene removeItem + delete + 清 m_items
+    void clearAll();
+    void removeAllFromSceneAndDelete();
+
+    // Currently focused text item (font/size/color changes apply to it).
+    void               setCurrent(GraphicsTextItem* item) { m_current = item; }
+    GraphicsTextItem*  current() const                     { return m_current; }
+
+    // Item being dragged via the handle hit-test (set by eventFilter).
+    void               setHandleDragItem(GraphicsTextItem* item) { m_handleDragItem = item; }
+    GraphicsTextItem*  handleDragItem() const { return m_handleDragItem; }
+
+    // Default style (drives newly created text items).
+    QColor  textColor() const        { return m_textColor; }
+    QString textFont()  const        { return m_textFont; }
+    int     textSize()  const        { return m_textSize; }
+    void    setTextColor(const QColor& c) { m_textColor = c; }
+    void    setTextFont(const QString& f)  { m_textFont  = f; }
+    void    setTextSize(int s)             { m_textSize  = s; }
+
+    // P0-1.2 (2026-09-07): 给 ImageWindow 转发用
+    //   进马赛克: 锁所有文字 item 的双击编辑 (setBlockDoubleClickEdit(true))
+    //   退马赛克: 解锁
+    void    setMosaicMode(bool on);
+
+    // P0-1.2 (2026-09-07): 给 ImageWindow 转发用 (UI 控件变化)
+    //   onFontChanged: 字体变化 -> 写 m_textFont, 应用到 m_current
+    //   onSizeChanged: 字号变化 -> 写 m_textSize, 应用到 m_current
+    //   onColorSelected: 颜色选择 (来自 QColorDialog) -> 写 m_textColor, 应用到 m_current
+    void    onFontChanged(const QString& family);
+    void    onSizeChanged(int size);
+    void    onColorSelected(const QColor& color);
+
+    // Create a new text item at scenePos. Host wires its editingFinished +
+    // transformFinished signals. Reads m_textFont / m_textSize / m_textColor
+    // from internal state (UI 控件变化时调 setTextFont / setTextSize / setTextColor
+    // 同步过来).
+    GraphicsTextItem* createTextItem(const QPointF& scenePos);
+
+    // Bake all current text items into the host's current image.
+    // After flatten the items list is cleared.
+    void flattenText();
+
+    // Apply the current style (font/size/color) to the focused item.
+    void applyStyleToCurrent();
+
+    // Connect signals on a freshly created (or redo-restored) text item.
+    // Mirrors the public ImageWindow::connectTextItemSignals entry point.
+    void connectItemSignals(GraphicsTextItem* item);
+
+signals:
+    void itemAdded(GraphicsTextItem* item);
+    void itemRemoved(GraphicsTextItem* item);
+    void currentChanged(GraphicsTextItem* item);
+
+private:
+    ImageWindow*           m_host = nullptr;
+    QList<GraphicsTextItem*> m_items;
+    GraphicsTextItem*      m_current = nullptr;
+    GraphicsTextItem*      m_handleDragItem = nullptr;
+
+    QColor  m_textColor = QColor(Qt::white);
+    QString m_textFont  = QStringLiteral("Microsoft YaHei UI");
+    int     m_textSize  = 24;
+};

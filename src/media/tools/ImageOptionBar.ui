@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ImageOptionBar</class>
+ <widget class="QWidget" name="ImageOptionBar">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>40</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>0</width>
+    <height>36</height>
+   </size>
+  </property>
+  <widget class="QStackedWidget" name="stackedWidget">
+   <widget class="QWidget" name="page0"/>
+   <widget class="QWidget" name="page1"/>
+   <widget class="QWidget" name="page2"/>
+   <widget class="QWidget" name="page3"/>
+   <widget class="QWidget" name="page4"/>
+   <widget class="QWidget" name="page5"/>
+   <widget class="QWidget" name="page6"/>
+   <widget class="QWidget" name="page7"/>
+   <widget class="QWidget" name="page8"/>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

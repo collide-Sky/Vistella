@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LoginDialog</class>
+ <widget class="QDialog" name="LoginDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>540</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>登录</string>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>360</width>
+    <height>480</height>
+   </size>
+  </property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="leftMargin"><number>24</number></property>
+   <property name="topMargin"><number>24</number></property>
+   <property name="rightMargin"><number>24</number></property>
+   <property name="bottomMargin"><number>16</number></property>
+   <property name="spacing"><number>12</number></property>
+
+   <!-- 顶部: Logo + 欢迎语 -->
+   <item>
+    <layout class="QVBoxLayout" name="headerLayout">
+     <property name="leftMargin"><number>0</number></property>
+     <property name="topMargin"><number>0</number></property>
+     <property name="rightMargin"><number>0</number></property>
+     <property name="bottomMargin"><number>0</number></property>
+     <property name="spacing"><number>8</number></property>
+
+     <item>
+      <widget class="QLabel" name="logoLabel">
+       <property name="text"><string>◉</string></property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="minimumSize">
+        <size><width>0</width><height>64</height></size>
+       </property>
+       <property name="styleSheet">
+        <string>font-size: 36pt; color: #4caf80;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="welcomeLabel">
+       <property name="text"><string>登录 Vistella</string></property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="styleSheet">
+        <string>font-size: 16pt; font-weight: 600; color: #333333;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="subLabel">
+       <property name="text"><string>选择一种登录方式继续</string></property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="styleSheet">
+        <string>color: #888888; font-size: 10pt;</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <spacer name="topSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size><width>20</width><height>16</height></size>
+     </property>
+    </spacer>
+   </item>
+
+   <!-- 中部: 5 个 provider 按钮 (包在 QFrame#providerBox 里, 跟 cpp 名字对应) -->
+   <item>
+    <widget class="QFrame" name="providerBox">
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="providerLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <property name="spacing"><number>10</number></property>
+
+      <item>
+       <widget class="QPushButton" name="githubBtn">
+        <property name="text"><string>使用 GitHub 登录</string></property>
+        <property name="minimumSize">
+         <size><width>0</width><height>44</height></size>
+        </property>
+        <property name="styleSheet">
+         <string>QPushButton { background-color: #24292e; color: #ffffff; border: none; border-radius: 4px; font-size: 11pt; }
+         QPushButton:hover { background-color: #2f363d; }
+         QPushButton:pressed { background-color: #1b1f23; }</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="qqBtn">
+        <property name="text"><string>使用 QQ 登录</string></property>
+        <property name="minimumSize">
+         <size><width>0</width><height>44</height></size>
+        </property>
+        <property name="styleSheet">
+         <string>QPushButton { background-color: #12b7f5; color: #ffffff; border: none; border-radius: 4px; font-size: 11pt; }
+         QPushButton:hover { background-color: #2cc4f7; }
+         QPushButton:pressed { background-color: #0e9fd1; }</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="wechatBtn">
+        <property name="text"><string>使用 微信 登录</string></property>
+        <property name="minimumSize">
+         <size><width>0</width><height>44</height></size>
+        </property>
+        <property name="styleSheet">
+         <string>QPushButton { background-color: #07c160; color: #ffffff; border: none; border-radius: 4px; font-size: 11pt; }
+         QPushButton:hover { background-color: #1ad176; }
+         QPushButton:pressed { background-color: #05a550; }</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="phoneBtn">
+        <property name="text"><string>使用 手机号 登录</string></property>
+        <property name="minimumSize">
+         <size><width>0</width><height>44</height></size>
+        </property>
+        <property name="styleSheet">
+         <string>QPushButton { background-color: #ffffff; color: #333333; border: 1px solid #d0d0d0; border-radius: 4px; font-size: 11pt; }
+         QPushButton:hover { background-color: #f6f6f6; border: 1px solid #4caf80; }
+         QPushButton:pressed { background-color: #ececec; }</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <spacer name="midSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size><width>20</width><height>24</height></size>
+     </property>
+    </spacer>
+   </item>
+
+   <!-- 底部: 游客模式 -->
+   <item>
+    <widget class="QPushButton" name="guestBtn">
+     <property name="text"><string>继续以游客身份</string></property>
+     <property name="minimumSize">
+      <size><width>0</width><height>36</height></size>
+     </property>
+     <property name="styleSheet">
+      <string>QPushButton { background-color: transparent; color: #888888; border: none; font-size: 10pt; }
+      QPushButton:hover { color: #4caf80; }
+      QPushButton:pressed { color: #3a8a66; }</string>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QLabel" name="hintLabel">
+     <property name="text"><string>阶段 0 提示: 登录按钮仅占位, 阶段 5+ 真正接入 OAuth</string></property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+     <property name="styleSheet">
+      <string>color: #aaaaaa; font-size: 8pt;</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

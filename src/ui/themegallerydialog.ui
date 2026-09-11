@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ThemeGalleryDialog</class>
+ <widget class="QDialog" name="ThemeGalleryDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>520</width>
+    <height>420</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>主题画廊</string>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>480</width>
+    <height>380</height>
+   </size>
+  </property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="leftMargin">
+    <number>16</number>
+   </property>
+   <property name="topMargin">
+    <number>16</number>
+   </property>
+   <property name="rightMargin">
+    <number>16</number>
+   </property>
+   <property name="bottomMargin">
+    <number>12</number>
+   </property>
+   <property name="spacing">
+    <number>10</number>
+   </property>
+
+   <!-- 顶部: 标题 + 模式 (light/dark) -->
+   <item>
+    <widget class="QWidget" name="headerRow" native="true">
+     <layout class="QHBoxLayout" name="headerLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <property name="spacing"><number>8</number></property>
+
+      <item>
+       <widget class="QLabel" name="titleLabel">
+        <property name="text"><string>选择 accent 颜色</string></property>
+        <property name="styleSheet">
+         <string>font-size: 13pt; font-weight: 600; color: #333333;</string>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <spacer name="headerSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+
+      <item>
+       <widget class="QWidget" name="modeBox" native="true">
+        <layout class="QHBoxLayout" name="modeLayout">
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <property name="spacing"><number>8</number></property>
+         <item>
+          <widget class="QRadioButton" name="lightRadio">
+           <property name="text"><string>亮色</string></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="darkRadio">
+           <property name="text"><string>暗色</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- 中部: 左侧色卡 4x2 网格 + 右侧预览 -->
+   <item>
+    <widget class="QWidget" name="bodyRow" native="true">
+     <layout class="QHBoxLayout" name="bodyLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <property name="spacing"><number>12</number></property>
+
+      <!-- 色卡 grid 4 列 x 2 行 -->
+      <item>
+       <widget class="QFrame" name="accentGrid">
+        <property name="minimumSize">
+         <size><width>240</width><height>160</height></size>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+        <layout class="QGridLayout" name="accentGridLayout">
+         <property name="leftMargin"><number>12</number></property>
+         <property name="topMargin"><number>12</number></property>
+         <property name="rightMargin"><number>12</number></property>
+         <property name="bottomMargin"><number>12</number></property>
+         <property name="horizontalSpacing"><number>8</number></property>
+         <property name="verticalSpacing"><number>8</number></property>
+
+         <item row="0" column="0"><widget class="QToolButton" name="accent01"><property name="text"><string/></property><property name="minimumSize"><size><width>48</width><height>48</height></size></property></widget></item>
+         <item row="0" column="1"><widget class="QToolButton" name="accent02"><property name="text"><string/></property><property name="minimumSize"><size><width>48</width><height>48</height></size></property></widget></item>
+         <item row="0" column="2"><widget class="QToolButton" name="accent03"><property name="text"><string/></property><property name="minimumSize"><size><width>48</width><height>48</height></size></property></widget></item>
+         <item row="0" column="3"><widget class="QToolButton" name="accent04"><property name="text"><string/></property><property name="minimumSize"><size><width>48</width><height>48</height></size></property></widget></item>
+         <item row="1" column="0"><widget class="QToolButton" name="accent05"><property name="text"><string/></property><property name="minimumSize"><size><width>48</width><height>48</height></size></property></widget></item>
+         <item row="1" column="1"><widget class="QToolButton" name="accent06"><property name="text"><string/></property><property name="minimumSize"><size><width>48</width><height>48</height></size></property></widget></item>
+         <item row="1" column="2"><widget class="QToolButton" name="accent07"><property name="text"><string/></property><property name="minimumSize"><size><width>48</width><height>48</height></size></property></widget></item>
+         <item row="1" column="3"><widget class="QToolButton" name="accent08"><property name="text"><string/></property><property name="minimumSize"><size><width>48</width><height>48</height></size></property></widget></item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 预览区 -->
+      <item>
+       <widget class="QFrame" name="previewFrame">
+        <property name="minimumSize">
+         <size><width>200</width><height>160</height></size>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <layout class="QVBoxLayout" name="previewLayout">
+         <property name="leftMargin"><number>12</number></property>
+         <property name="topMargin"><number>12</number></property>
+         <property name="rightMargin"><number>12</number></property>
+         <property name="bottomMargin"><number>12</number></property>
+         <property name="spacing"><number>6</number></property>
+
+         <item>
+          <widget class="QFrame" name="accentBar">
+           <property name="minimumSize">
+            <size><width>0</width><height>6</height></size>
+           </property>
+           <property name="frameShape">
+            <enum>QFrame::NoFrame</enum>
+           </property>
+          </widget>
+         </item>
+
+         <item>
+          <widget class="QLabel" name="previewHead">
+           <property name="text"><string>预览标题</string></property>
+           <property name="styleSheet">
+            <string>font-size: 12pt; font-weight: 600;</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="previewBody">
+           <property name="text"><string>这是一段示例正文, 用来预览所选主题的实际效果.</string></property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="previewSpacer">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size><width>20</width><height>20</height></size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="accentLabel">
+           <property name="text"><string>Accent: #4caf80</string></property>
+           <property name="styleSheet">
+            <string>color: #888888; font-size: 9pt;</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- 底部: 按钮 -->
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::NoButton</set>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="btnRow">
+     <property name="leftMargin"><number>0</number></property>
+     <property name="topMargin"><number>0</number></property>
+     <property name="rightMargin"><number>0</number></property>
+     <property name="bottomMargin"><number>0</number></property>
+     <property name="spacing"><number>8</number></property>
+     <item>
+      <spacer name="btnSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size><width>40</width><height>20</height></size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="applyBtn">
+       <property name="text"><string>应用</string></property>
+       <property name="minimumSize">
+        <size><width>88</width><height>32</height></size>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="closeBtn">
+       <property name="text"><string>关闭</string></property>
+       <property name="minimumSize">
+        <size><width>88</width><height>32</height></size>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
