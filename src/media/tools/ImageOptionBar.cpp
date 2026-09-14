@@ -5,7 +5,13 @@
 #include "ImageOptionBar.h"
 #include "ui_ImageOptionBar.h"
 #include "ToolContext.h"
+#include "TransformTool.h"
 #include "logger.h"
+
+#include <QComboBox>
+#include <QCheckBox>
+#include <QHBoxLayout>
+#include <QSignalBlocker>
 
 namespace tools {
 
@@ -46,7 +52,26 @@ void ImageOptionBar::onToolChanged(mediators::ToolId id)
 {
     const int idx = static_cast<int>(id);
     if (idx < 0 || idx >= ui->stackedWidget->count()) {
-        LOG_WARN("[OptionBar] toolChanged id={} out of range (count={})", idx, ui->stackedWidget->count());
+        // P0-6.11 (2026-09-14): Transform tool (idx=9) 动态加 page + 4 mode combo
+        if (id == mediators::ToolId::Transform) {
+            // 检查是否已经 addPage
+            const int transformIdx = static_cast<int>(mediators::ToolId::Transform);
+            if (transformIdx >= ui->stackedWidget->count()) {
+                // 找当前 TransformTool (m_ctx->currentState())
+                if (m_ctx) {
+                    if (auto* tool = dynamic_cast<TransformTool*>(m_ctx->currentState())) {
+                        if (QWidget* page = tool->optionPage(this)) {
+                            page->setObjectName("pageTransform");
+                            ui->stackedWidget->addWidget(page);
+                            LOG_INFO("[OptionBar] added Transform page (4 mode combo + Shift toggle)");
+                        }
+                    }
+                }
+            }
+            ui->stackedWidget->setCurrentIndex(static_cast<int>(mediators::ToolId::Transform));
+        } else {
+            LOG_WARN("[OptionBar] toolChanged id={} out of range (count={})", idx, ui->stackedWidget->count());
+        }
         return;
     }
     LOG_DEBUG("[OptionBar] onToolChanged: id={} idx={}", idx, idx);

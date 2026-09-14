@@ -46,6 +46,15 @@ public:
     static void resize(const cv::Mat &in, cv::Mat &out, double scale);
     static void rotate90(const cv::Mat &in, cv::Mat &out, int direction);  // 0/1/2 = 0/90/180/270 CW
 
+    // P0-6.6 (2026-09-14): 几何变换
+    //   flipCode: 0=around x (垂直翻转), 1=around y (水平翻转), -1=both
+    static void flip(const cv::Mat &in, cv::Mat &out, int flipCode);
+    //   仿射变换 (旋转 + 缩放 + 斜切, 2x3 矩阵)
+    //   M 是 2x3 cv::Mat (CV_32F 或 CV_64F)
+    static void warpAffine(const cv::Mat &in, cv::Mat &out, const cv::Mat &M, cv::Size dsize);
+    //   QTransform → 2x3 cv::Mat 转换 (PS 风格: 4 mode 矩阵入口)
+    static cv::Mat qTransformToAffine(const QTransform &t);
+
     // ===== 颜色调整 =====
     // saturation: scale=1.0 原图, >1.0 更饱和, 0 灰度
     static void saturation(const cv::Mat &in, cv::Mat &out, double scale);

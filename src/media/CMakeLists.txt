@@ -69,6 +69,9 @@ add_library(vistella_media STATIC
     tools/Text.cpp
     tools/Brush.h
     tools/Brush.cpp
+    # P0-6.9 (2026-09-14): TransformTool (Ctrl+T 自由变换)
+    tools/TransformTool.h
+    tools/TransformTool.cpp
 
     # F-D (2026-09-09): LeftToolBar PS 风格 2 列图标 (2 工具)
     tools/LeftToolBar.h
@@ -127,6 +130,14 @@ add_library(vistella_media STATIC
     filters/FilterCommand.cpp
     filters/FilterDialog.h
     filters/FilterDialog.cpp
+
+    # P0-6 (2026-09-14): 变换系统 (PS 风格 8 handle 自由变换: TransformBox + TransformMath + TransformCommand)
+    transform/TransformBox.h
+    transform/TransformBox.cpp
+    transform/TransformMath.h
+    transform/TransformMath.cpp
+    transform/TransformCommand.h
+    transform/TransformCommand.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

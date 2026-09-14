@@ -26,6 +26,7 @@ class QPainter;
 class ImageWindow;
 
 namespace selection { class SelectionModel; class MarchingAnts; }
+namespace transform { class TransformBox; }
 
 class ImageCanvas : public QGraphicsView {
     Q_OBJECT
@@ -54,6 +55,12 @@ public:
 
     // P0-4.3: selection rendering
     void setSelectionModel(selection::SelectionModel* sel);
+
+    // P0-6.10 (2026-09-14): 自由变换 box (10 handle 渲染)
+    //   m_box 是 weak ref, ImageWindow 持有所有权
+    //   当 m_box != nullptr 时, drawForeground 画 8 handle + 1 center + 1 rotation handle
+    void setTransformBox(transform::TransformBox* box);
+    transform::TransformBox* transformBox() const { return m_box; }
     selection::SelectionModel* selectionModel() const { return m_sel; }
     selection::MarchingAnts*   marchingAnts()   const { return m_ants; }
 
@@ -100,4 +107,6 @@ private:
     // P0-4.3: selection rendering
     selection::SelectionModel* m_sel  = nullptr;     // weak ref
     selection::MarchingAnts*   m_ants = nullptr;     // owned
+    // P0-6.10: 自由变换 box (weak ref, ImageWindow::m_box 持所有权)
+    transform::TransformBox*   m_box  = nullptr;
 };

@@ -25,6 +25,7 @@
 
 #include "../selection/SelectionModel.h"
 #include "../selection/MarchingAnts.h"
+#include "../transform/TransformBox.h"
 #include "logger.h"
 
 ImageCanvas::ImageCanvas(QWidget* parent) : QGraphicsView(parent) {
@@ -172,6 +173,16 @@ void ImageCanvas::setSelectionModel(selection::SelectionModel* sel)
               sel ? "yes" : "null");
 }
 
+// P0-6.10 (2026-09-14): 自由变换 box weak ref + viewport update
+void ImageCanvas::setTransformBox(transform::TransformBox* box)
+{
+    m_box = box;
+    if (m_box) {
+        m_box->setRect(m_box->rect());   // 同步 4 角
+    }
+    viewport()->update();
+}
+
 void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
 {
     if (!m_sel || m_sel->isEmpty()) return;
@@ -198,4 +209,41 @@ void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
     p->drawRect(QRectF(origin + QPointF(bbox.x(), bbox.y()),
                        QSizeF(bbox.width(), bbox.height())));
     p->restore();
+
+    // P0-6.10 (2026-09-14): 自由变换 box 渲染 — 10 handle + 1 rotation line
+    //   m_box != nullptr 时画 (m_box 由 ImageWindow 持有, m_canvas 仅 weak ref)
+    if (m_box) {
+        p->save();
+        p->setRenderHint(QPainter::Antialiasing, true);
+        p->setRenderHint(QPainter::TextAntialiasing, true);
+        p->setPen(QPen(Qt::white, 1.0));
+        p->setBrush(Qt::white);
+
+        // 8 handle + 1 center: 10x10 白色实心方块, 1px 黑色边框 (cosmetic)
+        const QPointF itemOrigin = m_item ? m_item->scenePos() : QPointF(0, 0);
+        const QRectF box = m_box->rect();
+        // 8 handle 位置 (scene 坐标)
+        using Handle = transform::TransformBox::Handle;
+        const Handle cornersAndEdges[] = {
+            Handle::TopLeft, Handle::Top, Handle::TopRight,
+            Handle::Right, Handle::BottomRight, Handle::Bottom,
+            Handle::BottomLeft, Handle::Left, Handle::Center
+        };
+        for (Handle h : cornersAndEdges) {
+            QPointF hp = m_box->handlePos(h);
+            QRectF r(hp.x() - 5, hp.y() - 5, 10, 10);
+            p->drawRect(r);
+        }
+        // Rotation handle: 1px 白色线从 Top 中点到 Rotation 手柄 (cos 描)
+        const QPointF topMid = m_box->handlePos(Handle::Top);
+        const QPointF rotPos = m_box->handlePos(Handle::Rotation);
+        p->setPen(QPen(Qt::white, 1.0));
+        p->drawLine(topMid, rotPos);
+        // Rotation handle: 白色圆 + 1px 黑色边框
+        p->setBrush(Qt::white);
+        p->setPen(QPen(Qt::black, 1.0));
+        p->drawEllipse(QRectF(rotPos.x() - 5, rotPos.y() - 5, 10, 10));
+
+        p->restore();
+    }
 }

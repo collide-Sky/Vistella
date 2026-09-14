@@ -33,6 +33,11 @@
 #include "filters/FilterCommand.h"
 // F-N (2026-09-10): ToolContext (state machine) for 8 tools event forwarding
 #include "tools/ToolContext.h"
+// P0-6.9 (2026-09-14): TransformTool 接入 (Ctrl+T 自由变换)
+#include "tools/TransformTool.h"
+// P0-6.6 (2026-09-14): transform system (6 menu action + 8 handle 自由变换)
+#include "transform/TransformBox.h"
+#include "transform/TransformCommand.h"
 
 // P0-1.4 (2026-09-07): QFileDialog / QDir / QMessageBox 移到 ImageIOController.cpp
 //   (open / save / saveAs 段搬走, imagewindow.cpp 不再用)
@@ -1210,6 +1215,155 @@ void ImageWindow::attachWorkspaceMed(mediators::WorkspaceMediator* wsMed)
 {
     if (m_rightDock) {
         m_rightDock->attach(wsMed);
+    }
+}
+
+// ============================================================================
+// P0-6.6 (2026-09-14): 图像变换 6 槽 + applyTransformImage
+//   6 menu action (MainWindow::onXxx) 通过 ImageWindow::onXxx 调到下面
+//   实现: cv::flip / cv::rotate / cv::warpAffine + 推 TransformCommand 到 m_undoStack
+// ============================================================================
+
+void ImageWindow::applyTransformImage(const cv::Mat& img, const transform::TransformBox* newBox)
+{
+    // P0-6.6: TransformCommand::redo/undo 入口 — 接受变换后 cv::Mat + 可选 box 状态
+    if (img.empty()) {
+        LOG_WARN("[ImageWindow] applyTransformImage: empty image");
+        return;
+    }
+    setCurrentImage(img);
+    // 同步 m_original (applyTransformImage 通常产生 new original — 翻转/旋转后)
+    // P0-6.6 简化: 不改 m_original, 由 P0-6.7+ 实装完整 original 同步
+    //   if (m_original.empty() == false) m_original = img.clone();  // 简化
+    if (m_canvas) m_canvas->update();
+}
+
+// P0-6.6 (2026-09-14): 应用 QTransform 矩阵入口 (4 mode 自由变换主路径)
+//   内部: cv::warpAffine 应用变换 + 推 TransformCommand 推 undoStack
+void ImageWindow::applyImageTransform(const QTransform& t, const QString& text)
+{
+    if (m_current.empty()) {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+        return;
+    }
+    if (!t.isAffine()) {
+        LOG_WARN("[ImageWindow] applyImageTransform: QTransform not affine (perspective not supported in P0-6.6)");
+        return;
+    }
+    cv::Mat before = m_current.clone();
+    cv::Mat M = ImageProcessor::qTransformToAffine(t);
+    cv::Mat after;
+    // 输出 size = 输入 size (PS 风格: 自由变换不裁切, 仅变换)
+    ImageProcessor::warpAffine(before, after, M, before.size());
+    if (m_undoStack) {
+        m_undoStack->push(new transform::TransformCommand(this, before, after, text));
+    } else {
+        setCurrentImage(after);
+    }
+}
+
+void ImageWindow::onFreeTransform()
+{
+    // P0-6.9 (2026-09-14): 切到 TransformTool (Ctrl+T), ToolContext 接管鼠标事件转发
+    if (!m_ctx) {
+        statusBar()->showMessage(tr("ToolContext 未初始化"), 2000);
+        return;
+    }
+    m_ctx->setState(std::make_unique<tools::TransformTool>());
+    // P0-6.10: 把 TransformTool 的 box weak ref 给 ImageCanvas, drawForeground 画 10 handle
+    if (auto* tool = dynamic_cast<tools::TransformTool*>(m_ctx->currentState())) {
+        if (m_canvas) m_canvas->setTransformBox(tool->box());
+        // P0-6.12: 注入 rotation 同步 callback → PropertiesDock.setRotation
+        if (m_rightDock) {
+            if (auto* props = m_rightDock->findChild<docks::PropertiesDock*>()) {
+                tool->setRotationCallback([props](qreal deg) {
+                    props->setRotation(deg);
+                });
+                // 初始 clear (无 transform)
+                props->clearRotation();
+            }
+        }
+    }
+    statusBar()->showMessage(tr("自由变换 — 拖动 8 handle 或中心点 (Esc 退出)"), 3000);
+}
+
+void ImageWindow::onImageFlipH()
+{
+    if (m_current.empty()) {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+        return;
+    }
+    cv::Mat before = m_current.clone();
+    cv::Mat after;
+    ImageProcessor::flip(before, after, /*around y*/ 1);
+    if (m_undoStack) {
+        m_undoStack->push(new transform::TransformCommand(this, before, after, tr("水平翻转")));
+    } else {
+        setCurrentImage(after);
+    }
+}
+
+void ImageWindow::onImageFlipV()
+{
+    if (m_current.empty()) {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+        return;
+    }
+    cv::Mat before = m_current.clone();
+    cv::Mat after;
+    ImageProcessor::flip(before, after, /*around x*/ 0);
+    if (m_undoStack) {
+        m_undoStack->push(new transform::TransformCommand(this, before, after, tr("垂直翻转")));
+    } else {
+        setCurrentImage(after);
+    }
+}
+
+void ImageWindow::onImageRotate90CW()
+{
+    if (m_current.empty()) {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+        return;
+    }
+    cv::Mat before = m_current.clone();
+    cv::Mat after;
+    ImageProcessor::rotate90(before, after, /*90 CW*/ 1);
+    if (m_undoStack) {
+        m_undoStack->push(new transform::TransformCommand(this, before, after, tr("旋转 90° 顺时针")));
+    } else {
+        setCurrentImage(after);
+    }
+}
+
+void ImageWindow::onImageRotate90CCW()
+{
+    if (m_current.empty()) {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+        return;
+    }
+    cv::Mat before = m_current.clone();
+    cv::Mat after;
+    ImageProcessor::rotate90(before, after, /*270 CW = 90 CCW*/ 3);
+    if (m_undoStack) {
+        m_undoStack->push(new transform::TransformCommand(this, before, after, tr("旋转 90° 逆时针")));
+    } else {
+        setCurrentImage(after);
+    }
+}
+
+void ImageWindow::onImageRotate180()
+{
+    if (m_current.empty()) {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+        return;
+    }
+    cv::Mat before = m_current.clone();
+    cv::Mat after;
+    ImageProcessor::rotate90(before, after, /*180*/ 2);
+    if (m_undoStack) {
+        m_undoStack->push(new transform::TransformCommand(this, before, after, tr("旋转 180°")));
+    } else {
+        setCurrentImage(after);
     }
 }
 // P0-1.4 (2026-09-07): onOpen / onSave / onSaveAs / onClose 4 个 IO slot 已搬到

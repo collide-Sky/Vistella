@@ -292,6 +292,41 @@ void ImageProcessor::rotate90(const cv::Mat &in, cv::Mat &out, int direction)
     cv::rotate(in, out, cv::ROTATE_90_COUNTERCLOCKWISE);
 }
 
+// P0-6.6 (2026-09-14): 几何变换
+void ImageProcessor::flip(const cv::Mat &in, cv::Mat &out, int flipCode)
+{
+    if (in.empty()) { out = in; return; }
+    int code = 0;
+    if (flipCode == 0)       code = 0;  // around x (vertical flip)
+    else if (flipCode == 1)  code = 1;  // around y (horizontal flip)
+    else if (flipCode == -1) code = -1; // both
+    else                     code = 0;
+    cv::flip(in, out, code);
+}
+
+void ImageProcessor::warpAffine(const cv::Mat &in, cv::Mat &out, const cv::Mat &M, cv::Size dsize)
+{
+    if (in.empty()) { out = in; return; }
+    // 2x3 矩阵: 旋转 + 缩放 + 斜切 + 平移
+    //   dsize: 输出图像大小 (PS 风格: 输出 = 输入的 same size 或 跟随 box)
+    cv::warpAffine(in, out, M, dsize, cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0, 0));
+}
+
+cv::Mat ImageProcessor::qTransformToAffine(const QTransform &t)
+{
+    // QTransform 3x3 → cv::Mat 2x3 (CV_64F)
+    //   QTransform isAffine() 验证 (PS transform 永远 affine, 不该是 perspective)
+    Q_ASSERT(t.isAffine());
+    cv::Mat M(2, 3, CV_64F);
+    M.at<double>(0, 0) = t.m11();
+    M.at<double>(0, 1) = t.m12();
+    M.at<double>(0, 2) = t.dx();
+    M.at<double>(1, 0) = t.m21();
+    M.at<double>(1, 1) = t.m22();
+    M.at<double>(1, 2) = t.dy();
+    return M;
+}
+
 // ----- 颜色调整 -----
 
 void ImageProcessor::saturation(const cv::Mat &in, cv::Mat &out, double scale)

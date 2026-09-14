@@ -42,6 +42,8 @@ enum class ToolId {
     Text        = 6,   // 文字 (T)
     Brush       = 7,   // 画笔 (B)
     Eyedropper  = 8,   // 吸管 (I)
+    // P0-6.9 (2026-09-14): 自由变换 (Ctrl+T, 不在 LeftToolBar, 由 onFreeTransform 触发)
+    Transform   = 9,
 };
 
 class ToolMediator : public QObject

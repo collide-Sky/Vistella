@@ -49,6 +49,11 @@ public:
     void setSelectionBbox(const QRect& bbox);
     void clearSelectionBbox();
 
+    // P0-6.12 (2026-09-14): 自由变换 box 旋转角度 (TransformTool 在 drag 时调)
+    //   qreal deg 任意值 (负数也支持); qQNaN() 表示"无 transform"
+    void setRotation(qreal deg);
+    void clearRotation();
+
     // F-O (2026-09-10) test accessors (read-only snapshot for QSignalSpy-style
     // verification in tst_F_O_Throttle). Cheap, no side effects. Defined in
     // .cpp so we don't drag <QLabel> into every PropertiesDock.h consumer.
@@ -78,6 +83,8 @@ private:
     QLabel*      m_selYLabel   = nullptr;
     QLabel*      m_selWLabel   = nullptr;
     QLabel*      m_selHLabel   = nullptr;
+    // P0-6.12 (2026-09-14): transform rotation label (1 行, 在 X/Y/W/H 之后)
+    QLabel*      m_rotLabel    = nullptr;
 
     // F-O (2026-09-10): throttle state
     core::Throttle*        m_setInfoThrottle = nullptr;   // owned, parent=this

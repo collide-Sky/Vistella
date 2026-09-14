@@ -98,6 +98,14 @@ private slots:
     void onZoomOut();
     void onSettings();
 
+    // P0-6.5 (2026-09-14): 图像变换 6 槽
+    void onFreeTransform();
+    void onImageFlipH();
+    void onImageFlipV();
+    void onImageRotate90CW();
+    void onImageRotate90CCW();
+    void onImageRotate180();
+
     // 阶段 0 第 10 步: 主题画廊 + 登录对话框入口
     void onShowThemeGallery();
     void onShowLogin();
@@ -232,6 +240,14 @@ private:
     QAction *m_actZoomOut  = nullptr;
     QAction *m_actResetLayout = nullptr;
     QAction *m_actToggleTheme = nullptr;
+
+    // P0-6.5 (2026-09-14): 6 图像变换 action
+    QAction *m_actFreeTransform  = nullptr;   // 编辑 → 自由变换 (Ctrl+T)
+    QAction *m_actImageFlipH     = nullptr;   // 图像 → 水平翻转
+    QAction *m_actImageFlipV     = nullptr;   // 图像 → 垂直翻转
+    QAction *m_actImageRotate90CW  = nullptr; // 图像 → 旋转 90° 顺时针 (Ctrl+])
+    QAction *m_actImageRotate90CCW = nullptr; // 图像 → 旋转 90° 逆时针 (Ctrl+[)
+    QAction *m_actImageRotate180  = nullptr; // 图像 → 旋转 180°
 
     // 模式 action 已删除 (3D 模块移除, 2026-09-02)
     // 后续如果需要多模态切分 (图片/视频/音频), 在这里加回 QActionGroup + actions

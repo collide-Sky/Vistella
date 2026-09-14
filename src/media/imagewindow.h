@@ -64,6 +64,8 @@ namespace tools { class ToolContext; }
 namespace selection { class SelectionModel; }
 // P0-5 (2026-09-10): FilterKind forward decl (20 滤镜 PS 同款)
 namespace filter { enum class FilterKind : int; }
+// P0-6.6 (2026-09-14): TransformBox forward decl (8 handle 自由变换)
+namespace transform { class TransformBox; }
 
 // =============================================================
 // TextItemCommand — 文字 item 的增/删/改/移动 撤销命令
@@ -206,6 +208,10 @@ public:
     // P0-1.2 (2026-09-07): 内部委托给 m_textCtrl
     void flattenText();
 
+    // P0-6.6 (2026-09-14): TransformCommand::redo/undo 调用
+    //   接受变换后 cv::Mat, 同步 m_current + 可选 box 状态 (4 mode 切换时)
+    void applyTransformImage(const cv::Mat& img, const transform::TransformBox* newBox = nullptr);
+
     // P0-1.2 (2026-09-07): 给 TextOverlayController / MosaicTool 用
     //  返回/接收 cv::Mat& (mutable 引用, 涂抹场景下 in-place 修改)
     cv::Mat&       currentImage()       { return m_current; }
@@ -283,6 +289,19 @@ protected:
     void keyPressEvent(QKeyEvent *e) override;
     void keyReleaseEvent(QKeyEvent *e) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
+
+public slots:
+    // P0-6.6 (2026-09-14): 图像变换 6 槽 (MainWindow 6 menu action 调用)
+    void onFreeTransform();
+    void onImageFlipH();
+    void onImageFlipV();
+    void onImageRotate90CW();
+    void onImageRotate90CCW();
+    void onImageRotate180();
+
+    // P0-6.6: 应用 QTransform 矩阵到当前 image, 生成 TransformCommand 推 undoStack
+    //   (PS 风格通用入口, 4 mode + 翻转 + 旋转都走这个)
+    void applyImageTransform(const QTransform& t, const QString& text);
 
 private slots:
     // 工具栏 actions

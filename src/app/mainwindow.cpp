@@ -292,7 +292,16 @@ void MainWindow::buildActions()
     m_actReplace->setShortcut(QKeySequence::Replace);
     m_actZoomIn->setShortcut(QKeySequence::ZoomIn);
     m_actZoomOut->setShortcut(QKeySequence::ZoomOut);
-    m_actToggleTheme->setShortcut(QKeySequence("Ctrl+T"));
+    m_actToggleTheme->setShortcut(QKeySequence("Ctrl+Shift+T"));  // P0-6.5: 释放 Ctrl+T 给 Free Transform (PS 风格)
+    m_actFreeTransform = new QAction(tr("自由变换"), this);
+    m_actFreeTransform->setShortcut(QKeySequence("Ctrl+T"));
+    m_actImageFlipH = new QAction(tr("水平翻转"), this);
+    m_actImageFlipV = new QAction(tr("垂直翻转"), this);
+    m_actImageRotate90CW = new QAction(tr("旋转 90° 顺时针"), this);
+    m_actImageRotate90CW->setShortcut(QKeySequence("Ctrl+]"));
+    m_actImageRotate90CCW = new QAction(tr("旋转 90° 逆时针"), this);
+    m_actImageRotate90CCW->setShortcut(QKeySequence("Ctrl+["));
+    m_actImageRotate180 = new QAction(tr("旋转 180°"), this);
 
     // ----- connect -----
     connect(m_actNew,      &QAction::triggered, this, &MainWindow::onNewFile);
@@ -315,6 +324,13 @@ void MainWindow::buildActions()
     connect(m_actZoomOut,  &QAction::triggered, this, &MainWindow::onZoomOut);
     connect(m_actResetLayout, &QAction::triggered, this, [this](){ /* TBD */ });
     connect(m_actToggleTheme, &QAction::triggered, this, &MainWindow::onToggleTheme);
+    // P0-6.5: 6 图像变换 action
+    connect(m_actFreeTransform,    &QAction::triggered, this, &MainWindow::onFreeTransform);
+    connect(m_actImageFlipH,       &QAction::triggered, this, &MainWindow::onImageFlipH);
+    connect(m_actImageFlipV,       &QAction::triggered, this, &MainWindow::onImageFlipV);
+    connect(m_actImageRotate90CW,  &QAction::triggered, this, &MainWindow::onImageRotate90CW);
+    connect(m_actImageRotate90CCW, &QAction::triggered, this, &MainWindow::onImageRotate90CCW);
+    connect(m_actImageRotate180,   &QAction::triggered, this, &MainWindow::onImageRotate180);
     // (3D 模块已移除, 模式 action connect 删除)
 
     // ----- 菜单栏 (第二行) -----
@@ -336,6 +352,9 @@ void MainWindow::buildActions()
     QMenu *mEdit = mb->addMenu(tr("编辑"));
     mEdit->addAction(m_actUndo);
     mEdit->addAction(m_actRedo);
+    mEdit->addSeparator();
+    // P0-6.5: 自由变换 (Ctrl+T, PS 风格)
+    mEdit->addAction(m_actFreeTransform);
     mEdit->addSeparator();
     mEdit->addAction(m_actCut);
     mEdit->addAction(m_actCopy);
@@ -433,13 +452,12 @@ void MainWindow::buildActions()
     aImgCrop->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+C")));
     connect(aImgCrop, &QAction::triggered, this, notImpl(tr("图像"), tr("裁剪")));
     mImage->addSeparator();
-    QAction *aImgFlipH = mImage->addAction(tr("水平翻转"));
-    connect(aImgFlipH, &QAction::triggered, this, notImpl(tr("图像"), tr("水平翻转")));
-    QAction *aImgFlipV = mImage->addAction(tr("垂直翻转"));
-    connect(aImgFlipV, &QAction::triggered, this, notImpl(tr("图像"), tr("垂直翻转")));
-    QAction *aImgRotate = mImage->addAction(tr("旋转 90°"));
-    aImgRotate->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
-    connect(aImgRotate, &QAction::triggered, this, notImpl(tr("图像"), tr("旋转 90°")));
+    // P0-6.5: 5 翻转/旋转 action (接 m_actImageXxx, 不再用 placeholder)
+    mImage->addAction(m_actImageFlipH);
+    mImage->addAction(m_actImageFlipV);
+    mImage->addAction(m_actImageRotate90CW);
+    mImage->addAction(m_actImageRotate90CCW);
+    mImage->addAction(m_actImageRotate180);
 
     // ---- 图层 (Layer) ----
     QMenu *mLayer = mb->addMenu(tr("图层"));
@@ -1396,6 +1414,62 @@ void MainWindow::onReplace() { statusBar()->showMessage(tr("替换 (未实现)")
 void MainWindow::onZoomIn()  { statusBar()->showMessage(tr("放大"), 2000); }
 void MainWindow::onZoomOut() { statusBar()->showMessage(tr("缩小"), 2000); }
 void MainWindow::onResetLayout() { statusBar()->showMessage(tr("重置布局"), 2000); }
+
+// P0-6.5 (2026-09-14): 图像变换 6 槽 — 调当前 ImageWindow 接口
+//   P0-6.6 ImageWindow::onImageTransform 完整实装, 槽留 forward + statusBar 提示
+void MainWindow::onFreeTransform()
+{
+    if (auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()))) {
+        img->onFreeTransform();
+    } else {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+    }
+}
+
+void MainWindow::onImageFlipH()
+{
+    if (auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()))) {
+        img->onImageFlipH();
+    } else {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+    }
+}
+
+void MainWindow::onImageFlipV()
+{
+    if (auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()))) {
+        img->onImageFlipV();
+    } else {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+    }
+}
+
+void MainWindow::onImageRotate90CW()
+{
+    if (auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()))) {
+        img->onImageRotate90CW();
+    } else {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+    }
+}
+
+void MainWindow::onImageRotate90CCW()
+{
+    if (auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()))) {
+        img->onImageRotate90CCW();
+    } else {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+    }
+}
+
+void MainWindow::onImageRotate180()
+{
+    if (auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()))) {
+        img->onImageRotate180();
+    } else {
+        statusBar()->showMessage(tr("当前页面没有图像"), 2000);
+    }
+}
 
 void MainWindow::onSettings()
 {

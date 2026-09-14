@@ -61,6 +61,11 @@ PropertiesDock::PropertiesDock(QWidget* parent) : QWidget(parent)
     m_formLayout->addRow(tr("宽度:"),    m_selWLabel);
     m_formLayout->addRow(tr("高度:"),    m_selHLabel);
 
+    // P0-6.12 (2026-09-14): transform rotation 1 行 (在选区 X/Y/W/H 之后)
+    m_rotLabel = new QLabel(tr("(无)"), m_formWidget);
+    m_rotLabel->setStyleSheet("color: gray;");
+    m_formLayout->addRow(tr("旋转:"),    m_rotLabel);
+
     m_scroll->setWidget(m_formWidget);
     outer->addWidget(m_scroll);
 
@@ -136,6 +141,24 @@ void PropertiesDock::clearSelectionBbox()
     if (m_selYLabel) m_selYLabel->setText(tr("(无)"));
     if (m_selWLabel) m_selWLabel->setText(tr("(无)"));
     if (m_selHLabel) m_selHLabel->setText(tr("(无)"));
+}
+
+// P0-6.12 (2026-09-14): transform rotation setter
+//   deg = 任意实数 (负数支持); clearRotation 把 label 重置为 "(无)"
+void PropertiesDock::setRotation(qreal deg)
+{
+    if (m_rotLabel) {
+        m_rotLabel->setText(QString::number(deg, 'f', 2) + QStringLiteral("°"));
+        m_rotLabel->setStyleSheet("color: black;");  // 高亮表示激活
+    }
+}
+
+void PropertiesDock::clearRotation()
+{
+    if (m_rotLabel) {
+        m_rotLabel->setText(tr("(无)"));
+        m_rotLabel->setStyleSheet("color: gray;");
+    }
 }
 
 // ---- F-O (2026-09-10) test accessors (read-only) ----
