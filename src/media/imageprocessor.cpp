@@ -5,6 +5,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QImage>
+#include <QImageWriter>
 #include <QPainter>
 
 #include <opencv2/imgcodecs.hpp>
@@ -23,6 +24,13 @@
 // --------- I/O ---------
 
 bool ImageProcessor::saveImage(const cv::Mat &img, const QString &path, QString *err)
+{
+    // 兼容旧 API: 默认 options (quality=-1, format=空, pngCompression=-1)
+    return saveImage(img, path, SaveOptions{}, err);
+}
+
+bool ImageProcessor::saveImage(const cv::Mat &img, const QString &path,
+                                const SaveOptions& opts, QString *err)
 {
     if (img.empty()) {
         if (err) *err = QStringLiteral("image is empty");
@@ -61,8 +69,41 @@ bool ImageProcessor::saveImage(const cv::Mat &img, const QString &path, QString 
         return false;
     }
 
+    // P0-8.2 (2026-09-15): 多格式 + quality 路径
+    //   QImage::save(path, format, quality) 接受 0-100 quality (JPEG/WebP 有效)
+    //   PNG 走 compression (QImage::save 不支持, 但 Qt 6.5+ 用 QImageWriter 走 png compression)
+    //   TIFF compression 同样不支持直接走, 用 QImageWriter
+    const QString fmt = opts.format.isEmpty()
+                          ? QString()
+                          : opts.format.toUpper();
+
+    if (opts.quality >= 0 || !fmt.isEmpty()) {
+        // 走 QImageWriter 拿完整 format/compression 支持
+        QImageWriter writer(path, fmt.toLatin1());
+        if (opts.quality >= 0) writer.setQuality(opts.quality);
+        // TIFF compression 走 QImageWriter::Compression 枚举 (Qt TIFF driver 支持 1=None / 5=LZW)
+        //   "None" / "LZW" / "Deflate" 字符串名映射到 driver enum
+        if (!opts.tiffCompression.isEmpty()
+            && (fmt == QStringLiteral("TIFF"))) {
+            if (opts.tiffCompression == QStringLiteral("None")) {
+                writer.setCompression(1);
+            } else {
+                writer.setCompression(99);  // LZW / Deflate 默认走 driver max compression
+            }
+        }
+        // PNG compression 走 QImageWriter::Compression (Qt 6.5+)
+        if (opts.pngCompression >= 0 && (fmt == QStringLiteral("PNG") || fmt.isEmpty())) {
+            writer.setCompression(opts.pngCompression);
+        }
+        if (!writer.write(qimg)) {
+            if (err) *err = QString("QImageWriter::write failed: %1").arg(writer.errorString());
+            return false;
+        }
+        return true;
+    }
+
     if (!qimg.save(path)) {
-        if (err) *err = QStringLiteral("QImage::save failed for: %1").arg(path);
+        if (err) *err = QString("QImage::save failed for: %1").arg(path);
         return false;
     }
     return true;

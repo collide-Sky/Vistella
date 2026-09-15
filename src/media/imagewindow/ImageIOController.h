@@ -22,6 +22,8 @@ public:
     void onOpen();
     void onSave();
     void onSaveAs();
+    // P0-8.2 (2026-09-15): 多格式导出 (走 ExportDialog)
+    void onExport();
     void onClose();
 
     // Read/write current image.  saveAs returns the path written or "" on

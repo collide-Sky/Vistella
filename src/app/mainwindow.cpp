@@ -251,6 +251,8 @@ void MainWindow::buildActions()
     m_actOpen     = new QAction(tr("打开..."),    this);
     m_actSave     = new QAction(tr("保存"),       this);
     m_actSaveAs   = new QAction(tr("另存为..."), this);
+    // P0-8.2 (2026-09-15): 多格式导出 (PS 同款 Save For Web)
+    m_actExport   = new QAction(tr("导出..."),     this);
     m_actCloseCur = new QAction(tr("关闭当前"), this);
     m_actCloseOthers   = new QAction(tr("关闭其他"),   this);
     m_actCloseSameType = new QAction(tr("关闭同类型"), this);
@@ -280,6 +282,7 @@ void MainWindow::buildActions()
     m_actOpen->setShortcut(QKeySequence::Open);
     m_actSave->setShortcut(QKeySequence::Save);
     m_actSaveAs->setShortcut(QKeySequence::SaveAs);
+    m_actExport->setShortcut(QKeySequence("Ctrl+Shift+E"));   // PS 同款 Save For Web 快捷键 (实际 PS 是 Ctrl+Alt+Shift+S, 但 Ctrl+Shift+E 跟浏览器一致)
     m_actCloseCur->setShortcut(QKeySequence::Close);                  // Ctrl+W
     m_actCloseAll->setShortcut(QKeySequence("Ctrl+Shift+W"));
     m_actUndo->setShortcut(QKeySequence::Undo);                        // Ctrl+Z
@@ -308,6 +311,7 @@ void MainWindow::buildActions()
     connect(m_actOpen,     &QAction::triggered, this, &MainWindow::onOpenFile);
     connect(m_actSave,     &QAction::triggered, this, &MainWindow::onSaveFile);
     connect(m_actSaveAs,   &QAction::triggered, this, &MainWindow::onSaveAsFile);
+    connect(m_actExport,   &QAction::triggered, this, &MainWindow::onExportFile);   // P0-8.2
     connect(m_actCloseCur, &QAction::triggered, this, &MainWindow::onCloseCurrent);
     connect(m_actCloseOthers, &QAction::triggered, this, &MainWindow::onCloseOthers);
     connect(m_actCloseSameType, &QAction::triggered, this, &MainWindow::onCloseSameType);
@@ -343,6 +347,7 @@ void MainWindow::buildActions()
     mFile->addSeparator();
     mFile->addAction(m_actSave);
     mFile->addAction(m_actSaveAs);
+    mFile->addAction(m_actExport);   // P0-8.2: 多格式导出
     mFile->addSeparator();
     mFile->addAction(m_actCloseCur);
     mFile->addAction(m_actCloseOthers);
@@ -1332,6 +1337,16 @@ void MainWindow::onSaveAsFile()
         if (!img->filePath().isEmpty() && img->filePath() != prevPath) {
             RecentManager::instance().touchOpen(img->filePath(), RecentModeMultimedia);
         }
+    }
+}
+
+// P0-8.2 (2026-09-15): 多格式导出 (Ctrl+Shift+E)
+void MainWindow::onExportFile()
+{
+    auto *w = widgetAt(ui->tabWidget->currentIndex());
+    if (!w || w == widgetAt(-1)) return;
+    if (auto *img = qobject_cast<ImageWindow *>(w)) {
+        img->exportPublic();
     }
 }
 

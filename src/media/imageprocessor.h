@@ -20,7 +20,20 @@ class ImageProcessor
 {
 public:
     // 把 OpenCV cv::Mat 写到 PNG/JPG/BMP 文件
+    // P0-8.2 (2026-09-15): 加 quality + format 参数 (PS 同款多格式导出)
+    //   quality:  -1 = 默认 (不传 quality); 0-100 (JPEG/WebP 有效)
+    //   format:   "PNG" / "JPEG" / "TIFF" / "WEBP" / "BMP" / "GIF"
+    //             空 = 走 path 后缀自动推断
+    //   pngCompression: 0-9 (PNG 有效), -1 = 默认
+    //   tiffCompression: "None" / "LZW" / "Deflate" (TIFF 有效), 空 = 默认
+    struct SaveOptions {
+        int     quality         = -1;
+        QString format;                 // "PNG"/"JPEG"/"TIFF"/"WEBP"/"BMP"/"GIF"
+        int     pngCompression  = -1;
+        QString tiffCompression;
+    };
     static bool saveImage(const cv::Mat &img, const QString &path, QString *err = nullptr);
+    static bool saveImage(const cv::Mat &img, const QString &path, const SaveOptions& opts, QString *err = nullptr);
 
     // 把 cv::Mat 转成 QImage 便于 QGraphicsView 显示
     static QImage matToQImage(const cv::Mat &mat);

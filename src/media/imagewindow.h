@@ -180,6 +180,8 @@ public:
     //   (这 4 个 IO slot 已搬到 ImageIOController 实现)
     void saveAsPublic() { if (m_io) m_io->onSaveAs(); }
     void savePublic()   { if (m_io) m_io->onSave(); }
+    // P0-8.2 (2026-09-15): 多格式导出 (走 ExportDialog)
+    void exportPublic() { if (m_io) m_io->onExport(); }
 
     // 公开 undo/redo: 给 MainWindow 的菜单栏 / 快捷键 (Ctrl+Z / Ctrl+Y) 转发
     void undoPublic() { onUndo(); }

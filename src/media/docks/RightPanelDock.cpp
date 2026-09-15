@@ -7,6 +7,7 @@
 #include "PropertiesDock.h"
 #include "LayersDock.h"
 #include "ChannelPathPanel.h"
+#include "HistoryDock.h"
 #include "../imagewindow/AdjustmentPanel.h"
 #include "../mediators/WorkspaceMediator.h"
 #include "logger.h"
@@ -43,7 +44,11 @@ RightPanelDock::RightPanelDock(QWidget* parent) : QWidget(parent)
     m_chanPathPanel = new ChannelPathPanel(this);
     m_tabs->addTab(m_chanPathPanel, tr("选区"));
 
-    LOG_INFO("[RightPanelDock] created with 4 dock tabs (color/props/layers/sel)");
+    // P0-8.1 (2026-09-15): 历史 dock (PS 同款 history panel)
+    m_historyDock = new HistoryDock(this);
+    m_tabs->addTab(m_historyDock, tr("历史"));
+
+    LOG_INFO("[RightPanelDock] created with 5 dock tabs (color/props/layers/sel/history)");
 }
 
 RightPanelDock::~RightPanelDock() = default;

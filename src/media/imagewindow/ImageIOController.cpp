@@ -20,12 +20,20 @@
 #include "../imagewindow.h"
 #include "TextOverlayController.h"
 #include "../imageprocessor.h"
+#include "../dialogs/ExportDialog.h"
+#include "../icc/IccProfile.h"
+#include "../icc/IccPngEmbed.h"
+#include "../icc/IccJpegEmbed.h"
 #include "../../core/RecentManager.h"
+#include "logger.h"
 
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDir>
 #include <QMessageBox>
+#include <QSharedPointer>
+
+#include <opencv2/imgproc.hpp>   // P0-8.2 cv::resize + cv::INTER_AREA
 
 ImageIOController::ImageIOController(QObject* parent) : QObject(parent) {}
 ImageIOController::~ImageIOController() = default;
@@ -103,6 +111,105 @@ void ImageIOController::onClose()
 {
     if (!m_host) return;
     m_host->emitCloseRequested();
+}
+
+// P0-8.2 (2026-09-15): 多格式导出 (PS 同款 Save For Web 风格)
+//   ExportDialog 让 user 选 format + quality + resize + ICC
+//   ImageProcessor::saveImage 走 QImageWriter 支持完整 quality/compression
+void ImageIOController::onExport()
+{
+    if (!m_host) return;
+    // 主流做法: 保存前先扁平化所有文字图层
+    if (m_host->textOverlay()) m_host->textOverlay()->flattenText();
+
+    const QString fp = QString(m_host->filePath());
+    const QString suggest = fp.isEmpty()
+        ? (QDir::homePath() + QStringLiteral("/untitled.png"))
+        : fp;
+
+    dialogs::ExportDialog dlg(m_host);
+    dlg.setSourceSize(m_host->currentImage().cols, m_host->currentImage().rows);
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    const auto opts = dlg.options();
+    // 推断默认扩展名
+    QString path = QFileDialog::getSaveFileName(
+        m_host, tr("导出为..."), suggest,
+        tr("PNG (*.png);; JPEG (*.jpg *.jpeg);; TIFF (*.tif *.tiff);; WebP (*.webp);; BMP (*.bmp);; GIF (*.gif);; 全部文件 (*)"));
+    if (path.isEmpty()) return;
+
+    // P0-8.2: resize (按 percent)
+    cv::Mat img = m_host->currentImage();
+    if (opts.resizePercent > 0 && opts.resizePercent < 100) {
+        const double scale = opts.resizePercent / 100.0;
+        cv::Mat resized;
+        cv::resize(img, resized, cv::Size(), scale, scale, cv::INTER_AREA);
+        img = resized;
+    }
+
+    QString err;
+    ImageProcessor::SaveOptions saveOpts;
+    saveOpts.quality         = opts.jpegQuality;   // JPEG 跟 WebP 都用 quality
+    saveOpts.format          = opts.format == dialogs::ExportDialog::Format::JPEG ? QStringLiteral("JPEG")
+                              : opts.format == dialogs::ExportDialog::Format::TIFF ? QStringLiteral("TIFF")
+                              : opts.format == dialogs::ExportDialog::Format::WebP ? QStringLiteral("WEBP")
+                              : opts.format == dialogs::ExportDialog::Format::BMP  ? QStringLiteral("BMP")
+                              : opts.format == dialogs::ExportDialog::Format::GIF  ? QStringLiteral("GIF")
+                              : QStringLiteral("PNG");
+    saveOpts.pngCompression  = opts.pngCompression;
+    saveOpts.tiffCompression = opts.tiffCompression;
+    // JPEG/WebP 用 quality, PNG/BMP/GIF 用 pngCompression (BMP/GIF 通常忽略)
+    if (opts.format == dialogs::ExportDialog::Format::JPEG
+        || opts.format == dialogs::ExportDialog::Format::WebP) {
+        saveOpts.quality = opts.format == dialogs::ExportDialog::Format::WebP
+                              ? opts.webpQuality : opts.jpegQuality;
+    }
+    if (!ImageProcessor::saveImage(img, path, saveOpts, &err)) {
+        QMessageBox::warning(m_host, tr("导出失败"), err);
+        return;
+    }
+
+    // P0-8.3 (2026-09-15): 嵌入 ICC profile (PS 同款 Save For Web)
+    //   - opts.embedIcc + iccProfilePath 有效
+    //   - format 是 PNG -> embedIccToPng (iCCP chunk)
+    //   - format 是 JPEG -> embedIccToJpeg (APP2 marker)
+    //   - TIFF embed 是 TODO (P0-8.4 follow-up)
+    if (opts.embedIcc && !opts.iccProfilePath.isEmpty()) {
+        QSharedPointer<media::icc::Profile> profile;
+        if (opts.iccProfilePath.compare(QStringLiteral("sRGB"), Qt::CaseInsensitive) == 0
+            || opts.iccProfilePath.compare(QStringLiteral("builtin-srgb"), Qt::CaseInsensitive) == 0) {
+            profile = media::icc::Profile::createSRgb();
+        } else if (opts.iccProfilePath.compare(QStringLiteral("AdobeRGB"), Qt::CaseInsensitive) == 0
+                   || opts.iccProfilePath.compare(QStringLiteral("builtin-adobergb"), Qt::CaseInsensitive) == 0) {
+            profile = media::icc::Profile::createAdobeRgb();
+        } else {
+            profile = media::icc::Profile::load(opts.iccProfilePath, &err);
+        }
+        if (!profile) {
+            LOG_WARN("[ImageIO] ICC profile load failed: {}", err.toStdString());
+        } else {
+            const QByteArray iccData = profile->toByteArray();
+            if (iccData.isEmpty()) {
+                LOG_WARN("[ImageIO] ICC profile toByteArray empty");
+            } else if (opts.format == dialogs::ExportDialog::Format::PNG) {
+                QString iccName = QFileInfo(opts.iccProfilePath).baseName();
+                if (iccName.isEmpty()) iccName = QStringLiteral("ICC Profile");
+                if (!media::icc::embedIccToPng(path, iccData, iccName, &err)) {
+                    LOG_WARN("[ImageIO] embedIccToPng failed: {}", err.toStdString());
+                }
+            } else if (opts.format == dialogs::ExportDialog::Format::JPEG) {
+                if (!media::icc::embedIccToJpeg(path, iccData, &err)) {
+                    LOG_WARN("[ImageIO] embedIccToJpeg failed: {}", err.toStdString());
+                }
+            } else if (opts.format == dialogs::ExportDialog::Format::TIFF) {
+                LOG_WARN("[ImageIO] TIFF ICC embed is TODO (P0-8.4 follow-up)");
+            }
+        }
+    }
+
+    // P0-8.2: 导出 = 新路径 (跟 saveAs 一样), 但不 markSaved (导出不影响源文件 save 状态)
+    //   user 可以选 "导出后更新源路径" (PS 默认不改)
+    LOG_INFO("[ImageIO] export OK: {}", path.toStdString());
 }
 
 // 薄包装: 实际逻辑在 ImageWindow::loadFile (P0-1.0 已实装, 不搬)

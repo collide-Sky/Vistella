@@ -22,6 +22,7 @@
 #include "docks/LayersDock.h"
 #include "docks/ChannelPathPanel.h"
 #include "docks/PropertiesDock.h"
+#include "docks/HistoryDock.h"
 #include "../media/mediators/WorkspaceMediator.h"
 // P0-4 (2026-09-10): selection system
 #include "selection/SelectionModel.h"
@@ -390,6 +391,14 @@ ImageWindow::ImageWindow(QWidget *parent)
     connect(m_undoStack, &QUndoStack::indexChanged, this, &ImageWindow::onStackChanged);
     // 同步主窗口的 撤销/重做 action: 用 undoStack 的 canUndo/canRedo 状态
     // 主窗口在 onUndo/onRedo 里直接调 m_undoStack->undo/redo
+
+    // P0-8.1 (2026-09-15): 绑定 HistoryDock -> undoStack
+    //   m_rightDock 已经创建, historyDock() 现在非 null
+    if (m_rightDock) {
+        if (auto* histDock = m_rightDock->historyDock()) {
+            histDock->setUndoStack(m_undoStack);
+        }
+    }
 
     // 主题变化
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,

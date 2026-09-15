@@ -33,6 +33,7 @@ class ColorDock;
 class PropertiesDock;
 class LayersDock;
 class ChannelPathPanel;
+class HistoryDock;
 
 class RightPanelDock : public QWidget
 {
@@ -47,6 +48,9 @@ public:
     // P0-3.2: 调整 panel 集成 (外部已创建, 装到 tab)
     void setAdjustmentPanel(AdjustmentPanel* adj);
 
+    // P0-8.1 (2026-09-15): 历史 dock 暴露 (ImageWindow::ctor setUndoStack 注入)
+    HistoryDock* historyDock() const { return m_historyDock; }
+
     // 浮动位置 (imagewindow 右上角, 跟 m_rightPanel 同样模式)
     QSize sizeHint() const override { return QSize(340, 600); }
 
@@ -56,6 +60,7 @@ private:
     PropertiesDock  *m_propsDock   = nullptr;
     LayersDock      *m_layersDock  = nullptr;
     ChannelPathPanel*m_chanPathPanel = nullptr;
+    HistoryDock     *m_historyDock = nullptr;
 };
 
 } // namespace docks

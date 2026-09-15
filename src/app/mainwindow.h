@@ -71,6 +71,8 @@ private slots:
     void onOpenFile();
     void onSaveFile();
     void onSaveAsFile();
+    // P0-8.2 (2026-09-15): 多格式导出 (调 ImageIOController::onExport)
+    void onExportFile();
     void onCloseCurrent();
     void onCloseAll();
     void onCloseOthers();
@@ -222,6 +224,8 @@ private:
     QAction *m_actOpen     = nullptr;
     QAction *m_actSave     = nullptr;
     QAction *m_actSaveAs   = nullptr;
+    // P0-8.2 (2026-09-15): 多格式导出 action (Ctrl+Shift+E)
+    QAction *m_actExport   = nullptr;
     QAction *m_actCloseCur = nullptr;
     QAction *m_actCloseAll = nullptr;
     QAction *m_actCloseOthers   = nullptr;

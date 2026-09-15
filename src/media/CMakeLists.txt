@@ -30,6 +30,15 @@ add_library(vistella_media STATIC
     graphicstextitem.h
     graphicstextitem.cpp   # 主流做法的可编辑文字对象 (QGraphicsTextItem 派生)
 
+    # P0-8.3 (2026-09-15): ICC profile (LCMS2 wrapper)
+    icc/IccProfile.h
+    icc/IccProfile.cpp
+    # P0-8.3 (2026-09-15): ICC profile embed to PNG (iCCP chunk) + JPEG (APP2 marker)
+    icc/IccPngEmbed.h
+    icc/IccPngEmbed.cpp
+    icc/IccJpegEmbed.h
+    icc/IccJpegEmbed.cpp
+
     imageinfopanel.h
     imageinfopanel.cpp
     imageinfopanel.ui
@@ -102,6 +111,9 @@ add_library(vistella_media STATIC
     docks/ChannelPathPanel.h
     docks/ChannelPathPanel.cpp
     docks/ChannelPathPanel.ui
+    # P0-8.1 (2026-09-15): HistoryDock (PS 同款 history panel, RightPanelDock 第 6 tab)
+    docks/HistoryDock.h
+    docks/HistoryDock.cpp
 
     # F-K (2026-09-09): AdjustDialogBase + DialogFactory + 5 dialog (1 实装 + 4 stub)
     dialogs/AdjustDialogBase.h
@@ -110,6 +122,9 @@ add_library(vistella_media STATIC
     dialogs/DialogFactory.cpp
     dialogs/HslAdjustDialog.h
     dialogs/HslAdjustDialog.cpp
+    # P0-8.2 (2026-09-15): 多格式导出对话框 (PS 同款 Save For Web 风格)
+    dialogs/ExportDialog.h
+    dialogs/ExportDialog.cpp
 
     # P0-4 (2026-09-10): 选区系统 (SelectionModel + 4 Strategy + MarchingAnts + Command)
     selection/SelectionModel.h
@@ -147,6 +162,10 @@ target_link_libraries(vistella_media
         Qt6::Widgets
         # F-P.1 logger 统一: mediators/tools #include "logger.h" 走 PUBLIC include path
         vistella_logger
+        # P0-8.3 (2026-09-15): LCMS2 for ICC profile (EmbedProfileToPng/Jpeg/Tiff)
+        vistella_lcms2
+        # P0-8.3: zlib symbols are bundled in Qt6Core (no separate link needed)
+        #   #include <QtZlib/zlib.h> works as long as Qt6::Core is linked
     PRIVATE
         # imagewindow 用了 RecentManager::instance()
         vistella_core

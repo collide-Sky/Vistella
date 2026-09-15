@@ -88,6 +88,7 @@ include(CTest)
 
 # ---- 启用子目录 ----
 add_subdirectory(src/logger)    # 独立日志模块 (SHARED 库 vistella_logger.dll)
+add_subdirectory(third_party/lcms2-2.18)   # P0-8.3 (2026-09-15): LCMS2 color management
 add_subdirectory(src/core)
 add_subdirectory(src/models)
 add_subdirectory(src/ui)
