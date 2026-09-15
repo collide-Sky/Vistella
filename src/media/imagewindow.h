@@ -16,6 +16,7 @@
 #include <opencv2/core.hpp>
 
 #include <QMainWindow>
+#include <QDockWidget>
 #include <QUndoStack>
 #include <QGraphicsRectItem>
 #include <QGraphicsItem>
@@ -42,14 +43,12 @@ class QGraphicsSceneMouseEvent;
 class QFocusEvent;
 QT_END_NAMESPACE
 
-class ImageInfoPanel;
 class GraphicsTextItem;
 #include "imagewindow/ImageCanvas.h"
 // P0-1.4 (2026-09-07): ImageIOController full include (saveAsPublic / savePublic
 //   inline at line 145-146 调 m_io->onSaveAs / m_io->onSave, 需要完整定义)
 //   跟 ImageCanvas 同等地位, 组件全量 include
 #include "imagewindow/ImageIOController.h"
-class ImageAdjustmentPanel;
 // P0-3.2 (2026-09-08): AdjustmentPanel forward decl (新组件, 5 tab 色彩调整 UI)
 //   在 imagewindow.cpp 调 applyCurrentTab / pushUndoCommand, 用 forward decl 即可
 class AdjustmentPanel;
@@ -238,10 +237,8 @@ public:
     //   textOverlay(): 锁/解锁文字 item 双击编辑 (setMosaicMode)
     //   brushCursor(): brush cursor 控件 (P0-1.2 这一刻**不动**控件位置)
     //   renderToViewPublic(): 涂抹 in-place 修改后触发重绘
-    //   infoPanel(): push undo 后更新 info panel
     class TextOverlayController* textOverlay() { return m_textCtrl.get(); }
     QGraphicsEllipseItem* brushCursor() { return m_brushCursor; }
-    ImageInfoPanel*       infoPanel()   { return m_infoPanel; }
     void renderToViewPublic() { renderToView(); }
 
     // 阶段 1 W4.3 Phase 1 (2026-09-04): 给 LayerPanel 调 (MainWindow 通过这些访问 layerStack + undoStack)
@@ -250,6 +247,13 @@ public:
     // F-G.3 (2026-09-09): 注入 WorkspaceMediator (mainwindow 创建 imagewindow 后调一次)
     void attachWorkspaceMed(mediators::WorkspaceMediator* wsMed);
     QUndoStack*        undoStack() const { return m_undoStack; }
+
+    // Stage D (2026-09-15): 右侧 panel 显隐 + 状态查询 (mainwindow 视图菜单 toggle)
+    //   之前: setGeometry 浮动覆盖 + 没有 toggle 入口, 用户没法隐藏 dock
+    //   现在: QDockWidget 容器, MainWindow "视图 > 右侧面板" 调 setRightPanelVisible
+    //         关闭 dock 后 QAction 仍在菜单栏 (菜单不会随 dock 消失)
+    void setRightPanelVisible(bool visible);
+    bool isRightPanelVisible() const;
 
     // P0-5 (2026-09-10): 滤镜应用 (主菜单 4 action 接真)
     //   调 FilterFactory + strategy + push FilterCommand
@@ -337,7 +341,6 @@ private slots:
 
 private:
     void buildActions();
-    void buildInfoPanel();
     void applyPanelTheme();
 
     void renderToView();
@@ -356,7 +359,6 @@ private:
     // and migrates methods from this class. Each component holds a
     // QPointer<ImageWindow> m_host back to this object.
     std::unique_ptr<ImageCanvas>            m_canvas;        // P0-1.2
-    std::unique_ptr<ImageAdjustmentPanel>   m_adjustment;    // P0-1.2
     std::unique_ptr<MosaicTool>             m_mosaicTool;    // P0-1.2
     std::unique_ptr<TextOverlayController>  m_textCtrl;      // P0-1.2
     std::unique_ptr<ImageIOController>      m_io;            // P0-1.2
@@ -367,6 +369,10 @@ private:
     // F-G.3 Fix (2026-09-10): 右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
     //   替代原来 3 个分离 dock (RightPanelStack + adjDock + infoDock) + addDockWidget 抢画布位置
     std::unique_ptr<docks::RightPanelDock> m_rightDock;
+    // Stage C (2026-09-15): QDockWidget 容器 (走 Qt 原生 addDockWidget + resizeDocks)
+    //   之前 setGeometry 浮动覆盖 centralWidget, 跟 canvas 抢位置, resize 不联动
+    //   现在用 Qt 原生 dock 机制, resizeDocks 设初始宽度 340, 后续跟着 centralWidget 缩放
+    QDockWidget *m_rightDockContainer = nullptr;
 
     // F-N (2026-09-10): Tool state context — owns current ToolState, receives eventFilter forwards
     std::unique_ptr<tools::ToolContext>     m_ctx;
@@ -393,9 +399,6 @@ private:
 
     QUndoStack *m_undoStack = nullptr;
     int         m_savedIndex = 0;   // 上次保存时的栈 index, 用于 isDirty
-    bool        m_inUndoRedo = false;  // 防止 undo/redo 期间又触发 push
-
-    ImageInfoPanel *m_infoPanel = nullptr;
 
     // ===== P0-2 (2026-09-08): ThreadPool v2 异步化 =====
     //   m_engine 在 ctor 实例化, Profile::ImageEditor 限 2 线程 (避免系统调度问题)
@@ -413,12 +416,11 @@ private:
 
     friend class ImageEditCommand;
     friend class TextItemCommand;
-    // P0-1.2 (2026-09-07): 组件需要直接访问 m_undoStack / m_infoPanel
+    // P0-1.2 (2026-09-07): 组件需要直接访问 m_undoStack
     friend class TextOverlayController;
     friend class MosaicTool;
     // P0-1.3 (2026-09-07): 组件需要 m_original / m_current / m_inUndoRedo / ui
     friend class ImageCanvas;
-    friend class ImageAdjustmentPanel;
     // P0-1.4 (2026-09-07): ImageIOController 需要调 markSaved() (private)
     friend class ImageIOController;
 };

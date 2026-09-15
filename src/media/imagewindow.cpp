@@ -4,7 +4,6 @@
 #include "logger.h"
 
 #include "imageprocessor.h"
-#include "imageinfopanel.h"
 // P0-1.4 (2026-09-07): recentmanager.h 移到 ImageIOController.cpp (open/save 段搬走)
 #include "../core/ThemeManager.h"
 
@@ -13,7 +12,6 @@
 #include "imagewindow/MosaicTool.h"
 #include "imagewindow/ImageIOController.h"
 #include "imagewindow/ImageCanvas.h"
-#include "imagewindow/ImageAdjustmentPanel.h"
 // P0-3.2 (2026-09-08): 新组件 AdjustmentPanel (5 tab 色彩调整)
 #include "imagewindow/AdjustmentPanel.h"
 // F-G.3 (2026-09-09): RightPanelStack 3 dock (颜色/属性/图层) — 浮动在 imagewindow 右上角
@@ -252,11 +250,25 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_currentTaskId.store(0);
 
     // P0-1.3 (2026-09-07): 画布搬到 ImageCanvas 组件
-    //   .ui 保持 QGraphicsView, 仍叫 ui->graphicsView
-    //   m_canvas 是独立组件 (this 子对象, 不放进 ui->graphicsView 的 layout)
-    //   P0-1.3 后续轮次: m_canvas 替换 ui->graphicsView 的显示位置
+    //   Stage E (2026-09-15): m_canvas 替换 ui->graphicsView 实际进入 verticalLayout
+    //   之前: m_canvas 创建后 parent = this (顶层), 没进 layout, 跑到 (0,0) 显示成小方块
+    //         ui->graphicsView 是空 QGraphicsView 占位, 显示空白
+    //   现在: 拿掉 ui->graphicsView, 把 m_canvas 加进 verticalLayout, canvas 占满中央
     m_canvas = std::make_unique<ImageCanvas>(this);
     m_canvas->setHost(this);
+    // 用 m_canvas 替换 verticalLayout 里的 ui->graphicsView 占位 (Qt 转移所有权)
+    if (ui->graphicsView) {
+        // 1. 隐藏/脱离原 ui->graphicsView (空占位)
+        ui->graphicsView->setParent(nullptr);
+        ui->graphicsView->hide();
+        // 2. m_canvas 重新 parent 到 centralWidget (verticalLayout 跟 centralWidget 同 owner)
+        m_canvas->setParent(ui->centralWidget);
+        // 3. 用 size policy 跟 graphicsView 保持一致 (Expanding/Expanding)
+        m_canvas->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        // 4. verticalLayout 拿掉 graphicsView, 加 m_canvas (添加到 toolbar 后面)
+        ui->verticalLayout->removeWidget(ui->graphicsView);
+        ui->verticalLayout->addWidget(m_canvas.get());
+    }
     // 在 m_canvas 的 viewport 上装 eventFilter (原 ui->graphicsView->viewport())
     m_canvas->viewport()->installEventFilter(this);
     // 焦点策略 + ScrollHandDrag 等都在 ImageCanvas ctor 里设
@@ -276,17 +288,7 @@ ImageWindow::ImageWindow(QWidget *parent)
         m_brushCursor->setVisible(false);
     }
 
-    // P0-1.3 (2026-09-07): 调整面板搬到 ImageAdjustmentPanel 组件
-    //   m_adjustment 必须在 buildActions() 之前创建, 因为 buildActions 里
-    //   connect slider/button 到 m_adjustment 的 slot
-    m_adjustment = std::make_unique<ImageAdjustmentPanel>(this);
-    m_adjustment->setHost(this);
-    m_adjustment->setUi(ui);
-
     buildActions();
-    // F-G.3 Fix (2026-09-10): 撤销 buildInfoPanel (infoDock 跟 RightPanelDock 重叠)
-    //   infoDock 显示的内容 (基本/统计/直方图) 后续整合到 PropertiesDock
-    // buildInfoPanel();   // <-- 撤销 (2026-09-10)
     applyPanelTheme();
 
     // P0-1.2 (2026-09-07): 实例化 5 个组件
@@ -312,21 +314,33 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_io->setHost(this);
 
     // P0-3.2 (2026-09-08): PS 风格色彩调整 UI (5 tab Curves/Levels/HSL/B&W/ChannelMixer)
-    //   跟旧 m_adjustment (5 toggle + 10 slider) 共存
     m_adjustmentPanel = std::make_unique<AdjustmentPanel>(this);
     m_adjustmentPanel->setHost(this);
 
     // F-G.3 Fix (2026-09-10): PS 风格右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
     //   撤销原 3 个分离 dock (RightPanelStack + adjDock + infoDock) + addDockWidget 抢画布位置
-    m_rightDock = std::make_unique<docks::RightPanelDock>(this);
+    // Stage C (2026-09-15): 走 Qt 原生 addDockWidget + resizeDocks (替代 setGeometry 浮动)
+    //   之前: RightPanelDock 直接 setGeometry 浮动在右上角, 跟 centralWidget 抢画布位置,
+    //         resize 不联动 (imagewindow 缩小后 dock 还停在原位置)
+    //   现在: 包到 QDockWidget 走 RightDockWidgetArea, Qt 自动管理 dock 与 canvas 边界,
+    //         resizeDocks 设初始宽度 340, imagewindow resize 时 dock 跟着缩
+    m_rightDock = std::make_unique<docks::RightPanelDock>();
     // F-G.3: release() 转移所有权给 m_rightDock (QTabWidget::addTab reparent 后 Qt 析构会 delete 一次)
     m_rightDock->setAdjustmentPanel(m_adjustmentPanel.release());
-    m_rightDock->setFixedWidth(340);
-    m_rightDock->setMinimumHeight(500);
-    // 浮动位置: imagewindow 右上角 (跟原 m_rightPanel 同样模式)
-    m_rightDock->setGeometry(width() - 340, 0, 340, height());
-    m_rightDock->show();
-    m_rightDock->raise();
+
+    m_rightDockContainer = new QDockWidget(this);
+    m_rightDockContainer->setObjectName("rightDockContainer");
+    // NoDockWidgetFeatures: 隐藏关闭/浮动按钮 (Stage D 通过 workspace 按钮控制显隐)
+    m_rightDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    // 隐藏 title bar (PS 风格 panel 无标题栏)
+    auto* emptyTitle = new QWidget();
+    emptyTitle->setFixedHeight(0);
+    m_rightDockContainer->setTitleBarWidget(emptyTitle);
+    // 把 RightPanelDock 装到 QDockWidget 内部 (Qt 接管所有权, dock 销毁时 delete)
+    m_rightDockContainer->setWidget(m_rightDock.release());
+
+    addDockWidget(Qt::RightDockWidgetArea, m_rightDockContainer);
+    resizeDocks({m_rightDockContainer}, {340}, Qt::Horizontal);
 
     // F-N (2026-09-10): ToolContext 实例化 (state machine for 8 tools)
     //   m_ctx 在 ctor 创建, eventFilter 通过 m_ctx->onMouseXxx 转发给 current ToolState
@@ -468,7 +482,6 @@ void ImageWindow::replaceCurrentImage(const cv::Mat &img)
     invalidateCurrentCache();
     m_current = img.clone();   // 兼容: 旧引用直接 m_current
     renderToView();
-    if (m_infoPanel) m_infoPanel->updateInfo(m_current, m_filePath);
     // P0-4 (2026-09-10): sync selection mask size with image size
     if (m_selection) {
         m_selection->setSize(QSize(m_current.cols, m_current.rows));
@@ -495,11 +508,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     m_canvas->setZoom(1.0);
 
     // 默认参数 (clean 状态)
-    // P0-1.3 (2026-09-07): m_params 搬到 m_adjustment
-    m_adjustment->setParams(ImageEditCommand::ParamSet());
-    // 阶段 1 Step A Bug 3 (2026-09-04): 新文件 invalidate ParamSet hash 缓存
-    //   图像内容变了, 即便 params 相同, 结果像素也必须重算
-    m_adjustment->invalidateParamCache();
+    // Stage B (2026-09-15): 旧 m_adjustment 已删除, ParamSet 在 P1 阶段重新设计
 
     // 清空撤销栈
     m_undoStack->clear();
@@ -523,11 +532,12 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     invalidateCurrentCache();   // 强制重算 m_current
 
     emit filePathChanged(m_filePath);
-    // P0-1.3 (2026-09-07): applyCurrentParams 搬到 m_adjustment
-    // P0-2 (2026-09-08): loadFile 必须等图加载完才能继续 (后续逻辑依赖 m_current),
-    //   强制走 sync 版本. applyCurrentParams() 走 asyncEnabled 控制,
-    //   调 syncApplyCurrentParams 跳过 dispatch.
-    m_adjustment->syncApplyCurrentParams(/*repaint*/true);
+    // Stage F (2026-09-15): 补回 renderToView 触发
+    //   Stage B 删 m_adjustment->syncApplyCurrentParams(true) 时连带漏了渲染触发
+    //     旧: syncApplyCurrentParams -> setCurrentImage -> renderToView
+    //     新: 删了中间人, 直接调 renderToView
+    //   不调的后果: loadFile 返回 true 但 canvas pixmap 还是空 (用户看到空白)
+    renderToView();
     return true;
 }
 
@@ -584,7 +594,6 @@ void ImageWindow::setCurrentImage(const cv::Mat &img)
 void ImageWindow::refreshAll()
 {
     renderToView();
-    if (m_infoPanel) m_infoPanel->updateInfo(m_current, m_filePath);
 }
 
 void ImageWindow::renderToView()
@@ -613,15 +622,13 @@ void ImageWindow::renderToView()
 //   1. 小图同步: m_current = render(); m_currentDirty = false (跟原行为完全一致)
 //   2. 大图异步: 分配 myTaskId, m_currentDirty 暂留 true 防止重入
 //      → renderAsync 在 background pool 跑完, 切回主线程刷 m_current + 标 dirty=false + renderToView
-//      → callback 里再校验 m_currentTaskId, 不等于 myTaskId 直接 return (跟 P0-2
-//        ImageAdjustmentPanel::asyncApplyCurrentParams 同样取消语义)
+//      → callback 里再校验 m_currentTaskId, 不等于 myTaskId 直接 return
 //   3. m_currentDirty 状态机:
 //      - sync 路径: 先 render() 再 false (旧行为, 保证 renderToView 不会重入)
 //      - async 路径: 先 false (in-flight 期间), callback 完成时 renderToView()
 //        这里用 false 防止 renderToView 在 callback 回来之前被调 (那会调 rebuildCurrentCache 重入)
 //   4. m_layerStack == nullptr: 保持原行为, 啥也不做
-//   5. m_asyncEnabled == false: 走 sync (跟 ImageAdjustmentPanel 行为一致,
-//      用户 setAsyncEnabled(false) 时整体 fallback 同步)
+//   5. m_asyncEnabled == false: 走 sync (用户 setAsyncEnabled(false) 时整体 fallback 同步)
 void ImageWindow::rebuildCurrentCache()
 {
     if (!m_layerStack) {
@@ -715,16 +722,15 @@ void ImageWindow::onStackChanged()
     emit dirtyChanged(isDirty());
 }
 
-// P0-1.3 (2026-09-07): applyCurrentParams / setupSliderRanges / syncUiFromParams
-//   / onAnyParamChanged / onSatChanged / onHueChanged / onExposureChanged /
-//   updateLabel / paramsUnchanged 全部搬到 ImageAdjustmentPanel 组件
-//   这里只剩一个薄包装: applyParams 负责设置 m_inUndoRedo 标志, 然后委托给 m_adjustment
+// Stage B (2026-09-15): 撤销 P0-1.2 ImageAdjustmentPanel (5 toggle + 10 slider 旧 UI)
+//   UI 元素 (groupAdjust 块 + 5 toggle + 10 slider) 全部从 imagewindow.ui 删除
+//   UI 操作入口没了, ParamSet 路径变成 no-op. ImageEditCommand::undo/redo 的
+//   m_useImage=false 分支还会调到本方法, 保留 API (tests 用 ParamSet 类型) 但不做事.
+//   等 P1 阶段把旧 ParamSet 语义重新设计 (5 tab UI 用 curve / level / hsl 各自的 cmd)
 void ImageWindow::applyParams(const ImageEditCommand::ParamSet &p, bool repaint)
 {
-    m_inUndoRedo = true;
-    m_adjustment->setParams(p);
-    m_adjustment->applyCurrentParams(repaint);
-    m_inUndoRedo = false;
+    (void)p;
+    (void)repaint;
 }
 
 void ImageWindow::onUndo()
@@ -856,39 +862,7 @@ void ImageWindow::buildActions()
     connect(ui->actFit,       &QAction::triggered, this, &ImageWindow::onFitWindow);
     connect(ui->actResetZoom, &QAction::triggered, this, &ImageWindow::onResetZoom);
 
-    // 5 个 toggle 按钮 -> 触发 m_adjustment 的 onAnyParamChanged
-    // P0-1.3 (2026-09-07): 信号槽从 this->onAnyParamChanged 改到 m_adjustment->onAnyParamChanged
-    auto* adj = m_adjustment.get();
-    connect(ui->btnGray,    &QToolButton::toggled, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    connect(ui->btnInvert,  &QToolButton::toggled, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    connect(ui->btnBinary,  &QToolButton::toggled, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    connect(ui->btnSharpen, &QToolButton::toggled, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    connect(ui->btnEdge,    &QToolButton::toggled, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-
-    // 阶段 1 Step A Bug (2026-09-04) 关键: Qt 官方要求先初始化控件再连信号槽
-    //   之前: connect 在前, setupSliderRanges 在后 → setValue 触发 valueChanged 时 slot 还在监听
-    //   现在: setupSliderRanges 在前, 控件初始值设好 (无信号), 再连信号 (用户操作才触发)
-    // P0-1.3: 委托给 m_adjustment
-    m_adjustment->setupSliderRanges();
-
-    // 滑条
-    // 阶段 1 Step A Bug DEBUG (2026-09-04): 临时 log 验 connect 成功
-    // P0-1.3: 全部连到 m_adjustment
-    bool c1 = connect(ui->sliderAlpha,     &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    bool c2 = connect(ui->sliderBeta,      &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    bool c3 = connect(ui->sliderBinary,    &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    bool c4 = connect(ui->sliderBlur,      &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    bool c5 = connect(ui->sliderSharpen,   &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    bool c6 = connect(ui->sliderCannyLow,  &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    bool c7 = connect(ui->sliderCannyHigh, &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onAnyParamChanged);
-    qDebug() << "[connect] alpha=" << c1 << "beta=" << c2 << "binary=" << c3 << "blur=" << c4
-             << "sharpen=" << c5 << "cannyLow=" << c6 << "cannyHigh=" << c7;
-
-    // 3 个新滑条 (饱和度/色相/曝光) - label 实时更新, 然后触发 apply
-    // P0-1.3: 连到 m_adjustment 的 onSatChanged/...
-    connect(ui->sliderSat,      &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onSatChanged);
-    connect(ui->sliderHue,      &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onHueChanged);
-    connect(ui->sliderExposure, &QSlider::valueChanged, adj, &ImageAdjustmentPanel::onExposureChanged);
+    // Stage B (2026-09-15): 撤销 P0-1.2 5 toggle + 10 slider UI, ImageAdjustmentPanel 类已删
 
     // 离散操作按钮
     connect(ui->sliderMosaicSize, &QSlider::valueChanged, this, &ImageWindow::onMosaicSizeChanged);
@@ -912,12 +886,7 @@ void ImageWindow::buildActions()
     connect(ui->spinTextSize, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &ImageWindow::onTextSizeChanged);
 
-    // 阶段 1 Step A Bug (2026-09-04) 关键根因修复:
-    //   .ui 文件里 sliders 全部没设 range, QSlider 默认 0-99
-    //   代码 setValue(100) (alphaPct 默认 100) 被 clamp 到 99 → alpha=0.99 vs 1.00 用户完全看不出
-    //   亮度/二值化/模糊看起来"没反应" 的根因就是这
-    //   修法: 在代码里 setRange, 不动 .ui (避免重新生成 .ui 麻烦)
-    m_adjustment->setupSliderRanges();
+    // Stage B (2026-09-15): 撤销旧 5 toggle + 10 slider 滑条范围设置 (UI 已删)
 
     // 字体下拉默认填几个常用中文字体 (QFontComboBox 已经默认装了系统字体, 这里补充几个中文)
     if (ui->comboTextFont->findText(QStringLiteral("Microsoft YaHei UI")) < 0) {
@@ -928,31 +897,6 @@ void ImageWindow::buildActions()
     }
     if (ui->comboTextFont->findText(QStringLiteral("Microsoft YaHei")) < 0) {
         ui->comboTextFont->addItem(QStringLiteral("Microsoft YaHei"));
-    }
-
-    // 滑条范围
-    ui->sliderAlpha->setRange(0, 300);
-    ui->sliderBeta->setRange(-100, 100);
-    ui->sliderBinary->setRange(0, 255);
-    ui->sliderBlur->setRange(1, 31);
-    ui->sliderBlur->setSingleStep(2);
-    ui->sliderBlur->setPageStep(2);
-    ui->sliderSharpen->setRange(1, 5);
-    ui->sliderCannyLow->setRange(0, 200);
-    ui->sliderCannyHigh->setRange(0, 300);
-    // 颜色/曝光范围已在 .ui 里设过 (sat 0..200, hue -180..180, exposure -100..100)
-
-    // P0-1.3 (2026-09-07): 委托给 m_adjustment
-    m_adjustment->syncUiFromParams(m_adjustment->params());
-    m_adjustment->updateLabel();
-}
-
-void ImageWindow::buildInfoPanel()
-{
-    // F-G.3 Fix (2026-09-10): 撤销 infoDock (跟 RightPanelDock 重叠, 改用 hide)
-    //   infoDock 显示的图像信息 (基本/统计/直方图) 后续整合到 PropertiesDock
-    if (ui && ui->infoDock) {
-        ui->infoDock->hide();
     }
 }
 
@@ -1056,11 +1000,10 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
         // 滚轮缩放
         // P0-1.3 (2026-09-07): Ctrl+wheel 缩放逻辑搬到 m_canvas->wheelEvent
         //   这里不再处理 Wheel, 让事件自然传到 m_canvas::wheelEvent
-        // 鼠标移动 - 像素信息 + 笔刷光标位置 + 涂抹
+        // 鼠标移动 - 笔刷光标位置 + 涂抹
         if (event->type() == QEvent::MouseMove) {
             auto *me = static_cast<QMouseEvent *>(event);
             const QPointF sp = scenePt(me);
-            if (m_infoPanel) m_infoPanel->updatePixel(m_current, QPoint(int(sp.x()), int(sp.y())));
 
             // Plan B: handle 拖动中 -> 路由到 item (绕开 Qt itemAt)
             //   P0-1.2 (2026-09-07): m_handleDragItem 搬到 m_textCtrl
@@ -1247,6 +1190,19 @@ void ImageWindow::attachWorkspaceMed(mediators::WorkspaceMediator* wsMed)
     if (m_rightDock) {
         m_rightDock->attach(wsMed);
     }
+}
+
+// Stage D (2026-09-15): 右侧 panel 显隐 (给 mainwindow 视图菜单 toggle 用)
+void ImageWindow::setRightPanelVisible(bool visible)
+{
+    if (m_rightDockContainer) {
+        m_rightDockContainer->setVisible(visible);
+    }
+}
+
+bool ImageWindow::isRightPanelVisible() const
+{
+    return m_rightDockContainer && m_rightDockContainer->isVisible();
 }
 
 // ============================================================================

@@ -41,6 +41,12 @@ signals:
     void openPathRequested(const QString &path);   // 双击最近记录 / 信息树选中回车
     void moduleRequested(HomeModule mod);          // 点击 4 个模块按钮
 
+protected:
+    // Stage G (2026-09-15): 视图菜单切回主页后自动 focus tableView
+    //   之前: 切到主页时焦点还在 doc tab, 用户点击最近记录无响应
+    //   现在: showEvent 抢焦点到 tableView + 选第一行, 单击立即响应
+    void showEvent(QShowEvent *e) override;
+
 private slots:
     void onRowDoubleClicked(const QModelIndex &proxyIdx);
     void onPinClicked();

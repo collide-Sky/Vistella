@@ -13,8 +13,6 @@ add_library(vistella_media STATIC
     # at that stage); P0-1.2 instantiates them and migrates methods.
     imagewindow/ImageCanvas.h
     imagewindow/ImageCanvas.cpp
-    imagewindow/ImageAdjustmentPanel.h
-    imagewindow/ImageAdjustmentPanel.cpp
     imagewindow/MosaicTool.h
     imagewindow/MosaicTool.cpp
     imagewindow/TextOverlayController.h
@@ -41,10 +39,6 @@ add_library(vistella_media STATIC
     # P0-8.4 (2026-09-15): ICC profile embed to TIFF (ICCProfile tag in IFD)
     icc/IccTiffEmbed.h
     icc/IccTiffEmbed.cpp
-
-    imageinfopanel.h
-    imageinfopanel.cpp
-    imageinfopanel.ui
 
     # F-B1 (2026-09-08): Mediator 模式拆 3 个, ToolMediator 负责工具切换
     #   一个类一个方向, 避免 god class (user 拍板)

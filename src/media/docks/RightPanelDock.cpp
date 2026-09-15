@@ -55,21 +55,54 @@ RightPanelDock::~RightPanelDock() = default;
 
 void RightPanelDock::attach(mediators::WorkspaceMediator* wsMed)
 {
-    // WorkspaceMediator 走 RightPanelStack::attach 模式, 转发到 3 个 dock
-    // (颜色/属性/图层 是 workspace 切换的 dock)
-    if (m_colorDock)  m_colorDock->setVisible(wsMed ? wsMed->isDockVisible(0) : true);
-    if (m_propsDock)  m_propsDock->setVisible(wsMed ? wsMed->isDockVisible(1) : true);
-    if (m_layersDock) m_layersDock->setVisible(wsMed ? wsMed->isDockVisible(2) : true);
-    // ChannelPathPanel 不跟 workspace 切换 (永远显示)
+    m_wsMed = wsMed;
+    if (m_wsMed) {
+        // Stage D (2026-09-15): 订阅信号实时同步, 之前只 setVisible 一次
+        connect(m_wsMed, &mediators::WorkspaceMediator::workspaceChanged,
+                this, &RightPanelDock::onWorkspaceChanged);
+        connect(m_wsMed, &mediators::WorkspaceMediator::dockVisibilityChanged,
+                this, &RightPanelDock::onDockVisibilityChanged);
+        // 同步初始状态
+        onWorkspaceChanged(m_wsMed->currentWorkspace());
+    }
     LOG_DEBUG("[RightPanelDock] attach wsMed={}", wsMed ? "yes" : "null");
+}
+
+void RightPanelDock::onWorkspaceChanged(mediators::WorkspaceId id)
+{
+    if (!m_wsMed) return;
+    LOG_INFO("[RightPanelDock] workspaceChanged: id={}", static_cast<int>(id));
+    // WorkspaceMediator dockCount=3 (颜色/属性/图层), RightPanelDock 5 tab
+    //   dockIndex 0 -> 颜色 tab
+    //   dockIndex 1 -> 属性 tab
+    //   dockIndex 2 -> 图层 tab
+    //   选区/调整 永远显示 (跟 workspace 无关)
+    int idxColor  = m_tabs->indexOf(m_colorDock);
+    int idxProps  = m_tabs->indexOf(m_propsDock);
+    int idxLayers = m_tabs->indexOf(m_layersDock);
+    if (idxColor  >= 0) m_tabs->setTabVisible(idxColor,  m_wsMed->isDockVisible(0));
+    if (idxProps  >= 0) m_tabs->setTabVisible(idxProps,  m_wsMed->isDockVisible(1));
+    if (idxLayers >= 0) m_tabs->setTabVisible(idxLayers, m_wsMed->isDockVisible(2));
+}
+
+void RightPanelDock::onDockVisibilityChanged(int dockIndex, bool visible)
+{
+    if (!m_wsMed) return;
+    QWidget* target = nullptr;
+    if      (dockIndex == 0) target = m_colorDock;
+    else if (dockIndex == 1) target = m_propsDock;
+    else if (dockIndex == 2) target = m_layersDock;
+    if (!target) return;
+    int idx = m_tabs->indexOf(target);
+    if (idx >= 0) m_tabs->setTabVisible(idx, visible);
 }
 
 void RightPanelDock::setAdjustmentPanel(AdjustmentPanel* adj)
 {
     if (!adj) return;
     // 调整 tab 在 4 个 dock 之后 (5th tab)
-    m_tabs->addTab(adj, tr("调整"));
-    LOG_INFO("[RightPanelDock] adjustment panel attached as 5th tab");
+    m_adjTabIndex = m_tabs->addTab(adj, tr("调整"));
+    LOG_INFO("[RightPanelDock] adjustment panel attached as 5th tab (index={})", m_adjTabIndex);
 }
 
 } // namespace docks

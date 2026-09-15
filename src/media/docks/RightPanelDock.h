@@ -25,6 +25,10 @@
 class QTabWidget;
 class AdjustmentPanel;
 
+// Stage D (2026-09-15): include WorkspaceMediator.h (slot 用 WorkspaceId 枚举)
+//   之前只 forward decl, moc 生成 slot wrapper 时找不到 WorkspaceId
+#include "../mediators/WorkspaceMediator.h"
+
 namespace mediators { class WorkspaceMediator; }
 
 namespace docks {
@@ -54,6 +58,13 @@ public:
     // 浮动位置 (imagewindow 右上角, 跟 m_rightPanel 同样模式)
     QSize sizeHint() const override { return QSize(340, 600); }
 
+private slots:
+    // Stage D (2026-09-15): 订阅 WorkspaceMediator 信号, 同步 tab 显隐
+    //   之前 attach() 只 setVisible 一次, 切工作区后 tab 不更新
+    //   现在 connect workspaceChanged/dockVisibilityChanged 实时同步
+    void onWorkspaceChanged(mediators::WorkspaceId id);
+    void onDockVisibilityChanged(int dockIndex, bool visible);
+
 private:
     QTabWidget      *m_tabs        = nullptr;
     ColorDock       *m_colorDock   = nullptr;
@@ -61,6 +72,9 @@ private:
     LayersDock      *m_layersDock  = nullptr;
     ChannelPathPanel*m_chanPathPanel = nullptr;
     HistoryDock     *m_historyDock = nullptr;
+    // 调整 tab 的 index (m_tabs->removeTab/pop 时记录)
+    int              m_adjTabIndex = -1;
+    mediators::WorkspaceMediator* m_wsMed = nullptr;
 };
 
 } // namespace docks

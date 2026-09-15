@@ -14,7 +14,6 @@
 #include "../imagewindow.h"
 #include "../graphicstextitem.h"
 #include "../imageprocessor.h"
-#include "../imageinfopanel.h"
 
 #include <QGraphicsScene>
 #include <QGraphicsEllipseItem>
@@ -174,9 +173,6 @@ void MosaicTool::onSceneDragEnd() {
     if (auto* stack = m_host->undoStack()) {
         stack->push(new ImageEditCommand(m_host, m_backup, current,
                                          QObject::tr("马赛克涂抹")));
-    }
-    if (m_host->infoPanel()) {
-        m_host->infoPanel()->updateInfo(current, m_host->filePath());
     }
     m_backup.release();  // 释放 Mat, 避免内存累积
 }

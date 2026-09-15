@@ -19,6 +19,8 @@
 #include "../core/FileExtensionRegistry.h"
 #include "../core/ThemeManager.h"
 #include "../core/SessionManager.h"
+
+#include <QTimer>
 #include "../media/mediators/WorkspaceMediator.h"
 
 #include <QActionGroup>
@@ -382,6 +384,20 @@ void MainWindow::buildActions()
     connect(actInfoTree, &QAction::toggled, this, [this](bool on){
         if (m_infoDock) m_infoDock->setVisible(on);
     });
+    // Stage D (2026-09-15): 右侧 panel toggle (ImageWindow::setRightPanelVisible)
+    //   解决原 bug: setGeometry 浮动覆盖 + 没 toggle 入口
+    //   现在 QDockWidget 容器 + 菜单 toggle, dock 关闭后菜单项仍在
+    QAction *actRightPanel = mView->addAction(tr("右侧面板"));
+    actRightPanel->setCheckable(true);
+    actRightPanel->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+R")));
+    actRightPanel->setChecked(true);  // 默认显示
+    connect(actRightPanel, &QAction::toggled, this, [this](bool on){
+        if (auto* img = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()))) {
+            img->setRightPanelVisible(on);
+        }
+    });
+    // 切到 imagewindow 时同步菜单勾选状态 (dock 状态可能因其他操作变化)
+    //   Stage D 后续优化: emit visibilityChanged 信号接 menu state 同步
     mView->addAction(m_actZoomIn);
     mView->addAction(m_actZoomOut);
     mView->addAction(m_actResetLayout);
@@ -693,27 +709,34 @@ void MainWindow::setMode(WindowMode m)
              static_cast<int>(m), static_cast<int>(m_mode), m_normalSize.width(), m_normalSize.height());
     m_mode = m;
     if (m == WindowMode::Maximized) {
+        // 用 Qt 标准 showMaximized(). 不要在 Frameless window 上自己 setGeometry
+        //   (Frameless + WM 在切状态时偶尔把窗口拉到 (0,0))
         showMaximized();
     } else {
+        // Qt 标准 showNormal() 把窗口拉到 maximized 之前的 normal geometry
+        //   如果这是从初始 maximized 状态第一次切到 normal, Qt 不知道 saved geometry
+        //   退到 (0,0). 我们显式 setGeometry 居中当前屏幕
         showNormal();
-        // 居中当前屏幕 (用 m_normalSize 重设 size, 保证从 Maximized 切回来时大小一致)
-        QScreen *scr = windowHandle() ? windowHandle()->screen() : screen();
+        QScreen *scr = QGuiApplication::screenAt(frameGeometry().center());
+        if (!scr) scr = windowHandle() ? windowHandle()->screen() : screen();
         if (!scr) scr = QGuiApplication::primaryScreen();
         if (scr) {
             const QRect avail = scr->availableGeometry();
             const QPoint pos(avail.center().x() - m_normalSize.width() / 2,
                              avail.center().y() - m_normalSize.height() / 2);
             setGeometry(QRect(pos, m_normalSize));
-            LOG_INFO("[State] setMode(Normal) setGeometry pos=({},{}) size=({},{})",
-                     pos.x(), pos.y(), m_normalSize.width(), m_normalSize.height());
+            LOG_INFO("[State] setMode(Normal) setGeometry pos=({},{}) size=({},{}) on screen '{}'",
+                     pos.x(), pos.y(), m_normalSize.width(), m_normalSize.height(),
+                     scr->name().toLocal8Bit().constData());
         }
     }
     if (m_btnMax) {
         m_btnMax->setText(m == WindowMode::Maximized ? QStringLiteral("\u2750")
                                                     : QStringLiteral("\u25A1"));
     }
-    LOG_INFO("[State] setMode({}) exit, current m_mode={}", static_cast<int>(m), static_cast<int>(m_mode));
-    LOG_INFO("[State] curSize.Width={},curSize.Height={}",this->size().width(),this->size().height());
+    LOG_INFO("[State] setMode({}) exit, current m_mode={} isMaximized={} size={}x{}",
+             static_cast<int>(m), static_cast<int>(m_mode), isMaximized(),
+             size().width(), size().height());
 }
 
 void MainWindow::loadWindowState()
@@ -726,11 +749,18 @@ void MainWindow::loadWindowState()
     LOG_INFO("[State] loadWindowState read m_mode={} m_normalSize={}x{} (default, not persisted)",
              static_cast<int>(m_mode), m_normalSize.width(), m_normalSize.height());
 
-    // 应用 mode
+    // 应用 mode (Stage H 简化 2026-09-15: showMaximized / showNormal 标准用法)
     if (m_mode == WindowMode::Maximized) {
         showMaximized();
     } else {
-        setMode(WindowMode::Normal);
+        showNormal();
+        // Normal 路径额外居中 (saved geometry 不可靠)
+        if (QScreen *scr = screen()) {
+            const QRect avail = scr->availableGeometry();
+            setGeometry(QRect(avail.center().x() - m_normalSize.width() / 2,
+                              avail.center().y() - m_normalSize.height() / 2,
+                              m_normalSize.width(), m_normalSize.height()));
+        }
     }
 }
 
@@ -1652,7 +1682,12 @@ void MainWindow::onHomeOpenFolderRequested()
 
 void MainWindow::onHomeOpenPathRequested(const QString &path)
 {
-    if (path.isEmpty()) return;
+    LOG_INFO("[Home] onHomeOpenPathRequested path='{}'",
+             path.toLocal8Bit().constData());
+    if (path.isEmpty()) {
+        LOG_WARN("[Home] empty path, abort");
+        return;
+    }
     for (int i = 0; i < ui->tabWidget->count(); ++i) {
         QWidget *w = ui->tabWidget->widget(i);
         QString p;
@@ -1661,6 +1696,11 @@ void MainWindow::onHomeOpenPathRequested(const QString &path)
         // (3D 模块已移除, 2026-09-02: ModelWindow 检查删除)
         if (!p.isEmpty() && p == path) {
             ui->tabWidget->setCurrentIndex(i);
+            // Stage G v2 (2026-09-15): 文件已开时也要切到工作空间
+            //   之前只 setCurrentIndex, 没切 mainStack page, 用户视觉上"没反应"
+            //   现在跟新打开文件保持一致: 切到 workspace page 1 显示图片
+            switchToWorkspace();
+            LOG_INFO("[Home] file already open, switched to tab {}", i);
             return;
         }
     }
@@ -1678,8 +1718,10 @@ void MainWindow::onHomeOpenPathRequested(const QString &path)
             switchToWorkspace();
         }
         RecentManager::instance().touchOpen(path, RecentModeMultimedia);
+        LOG_INFO("[Home] opened '{}' in tab {}", path.toLocal8Bit().constData(), idx);
         return;
     }
+    LOG_WARN("[Home] loadFile failed for '{}': {}", path.toLocal8Bit().constData(), err.toLocal8Bit().constData());
     delete img;
     auto *doc = new DocWindow;
     if (!doc->loadFile(path, &err)) {
@@ -1806,6 +1848,7 @@ void MainWindow::mouseMoveEvent(QMouseEvent *e)
             const QPoint delta = e->globalPosition().toPoint() - m_titlePressGlobal;
             if (delta.manhattanLength() > 4) {
                 const qreal ratioX = (m_titleDragStartLocal.x() - 0.0) / qreal(width());
+                // 标题栏拖动还原 — showNormal 让窗口回到 saved geometry
                 showNormal();
                 const QPoint newPos = e->globalPosition().toPoint()
                                       - QPoint(int(width() * ratioX), m_titleDragStartLocal.y());

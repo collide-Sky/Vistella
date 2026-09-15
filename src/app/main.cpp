@@ -30,8 +30,26 @@
 
 #include <exception>
 
+#ifdef _WIN32
+// Stage H v4 (2026-09-15): filter Qt6/DWrite first-chance C++ exceptions
+//   Qt6 + DWrite 退出时主动抛 0xE06D7363 (C++ EH) 但被 Qt 内部 catch,
+//   在调试器 (cdb.exe) 下被当 first-chance 异常断在 main() 返回处
+//   注册 unhandled exception filter 让 0xE06D7363 跳过 (EXCEPTION_CONTINUE_EXECUTION)
+#include <windows.h>
+static LONG WINAPI DWriteExceptionFilter(EXCEPTION_POINTERS* ep) {
+    if (ep && ep->ExceptionRecord
+        && ep->ExceptionRecord->ExceptionCode == 0xE06D7363) {
+        return EXCEPTION_CONTINUE_EXECUTION;  // Qt 内部 try/catch 会处理, 不让调试器断
+    }
+    return EXCEPTION_UNWIND;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+    SetUnhandledExceptionFilter(DWriteExceptionFilter);
+#endif
     qputenv("QT_QUICK_BACKEND", "software");
     qputenv("QSG_RHI_BACKEND", "software");
 
