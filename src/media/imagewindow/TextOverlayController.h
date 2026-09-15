@@ -35,7 +35,8 @@ public:
     void removeAllFromSceneAndDelete();
 
     // Currently focused text item (font/size/color changes apply to it).
-    void               setCurrent(GraphicsTextItem* item) { m_current = item; }
+    //   P0-7.3 (2026-09-14): emit currentChanged (PropertiesDock 联动)
+    void               setCurrent(GraphicsTextItem* item);
     GraphicsTextItem*  current() const                     { return m_current; }
 
     // Item being dragged via the handle hit-test (set by eventFilter).
@@ -49,6 +50,28 @@ public:
     void    setTextColor(const QColor& c) { m_textColor = c; }
     void    setTextFont(const QString& f)  { m_textFont  = f; }
     void    setTextSize(int s)             { m_textSize  = s; }
+
+    // P0-7.2 (2026-09-14): PS 完整文字工具栏 Bold/Italic state
+    //   跟 m_textFont/m_textSize 一起存 default style
+    //   每次 onFontChanged/onSizeChanged/onColorSelected/applyStyleToCurrent
+    //   都会应用到 m_current
+    bool    textBold()   const            { return m_textBold; }
+    bool    textItalic() const            { return m_textItalic; }
+    void    setTextBold(bool on)          { m_textBold = on; }
+    void    setTextItalic(bool on)        { m_textItalic = on; }
+
+    // P0-7.3 (2026-09-14): 给 PropertiesDock 读当前 item 完整 style
+    //   m_current 为 null 时, 返回 default style
+    struct CurrentStyle {
+        QString  font;
+        int      size = 24;
+        QColor   color = QColor(Qt::white);
+        bool     bold  = false;
+        bool     italic = false;
+        QPointF  pos;
+        qreal    rotation = 0.0;
+    };
+    CurrentStyle getCurrentStyle() const;
 
     // P0-1.2 (2026-09-07): 给 ImageWindow 转发用
     //   进马赛克: 锁所有文字 item 的双击编辑 (setBlockDoubleClickEdit(true))
@@ -94,4 +117,7 @@ private:
     QColor  m_textColor = QColor(Qt::white);
     QString m_textFont  = QStringLiteral("Microsoft YaHei UI");
     int     m_textSize  = 24;
+    // P0-7.2 (2026-09-14): PS 完整 Bold/Italic state
+    bool    m_textBold   = false;
+    bool    m_textItalic = false;
 };

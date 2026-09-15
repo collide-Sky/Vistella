@@ -257,6 +257,10 @@ public:
     //   m_ctx is owned by ImageWindow (constructed in ctor, no need to inject from outside)
     tools::ToolContext* toolContext() const { return m_ctx.get(); }
 
+    // P0-7.1 (2026-09-14): ImageCanvas accessor (Text 工具 hitTest scenePos 用)
+    //   m_canvas 暴露给 tools::Text 走 QGraphicsScene::itemAt 找 GraphicsTextItem
+    ImageCanvas* imageCanvas() const { return m_canvas.get(); }
+
     // P0-4 (2026-09-10): Selection model accessor (for selection tools + main menu actions)
     selection::SelectionModel* selectionModel() const { return m_selection.get(); }
     // P0-4: Convert m_current (cv::Mat) to QImage for selection strategies (BGRA 8888)

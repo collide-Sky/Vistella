@@ -66,6 +66,30 @@ PropertiesDock::PropertiesDock(QWidget* parent) : QWidget(parent)
     m_rotLabel->setStyleSheet("color: gray;");
     m_formLayout->addRow(tr("旋转:"),    m_rotLabel);
 
+    // P0-7.4 (2026-09-14): text properties 6 行 (字体/字号/颜色/Bold/Italic/位置)
+    //   在 rotation 之后追加 (Transform tool + Text tool 切换时 PropertiesDock 共用同一处)
+    auto* textSep = new QLabel(tr("--- 文字 (Text) ---"), m_formWidget);
+    textSep->setStyleSheet("color: gray; font-weight: bold;");
+    m_formLayout->addRow(textSep);
+    m_textFontLabel = new QLabel(tr("(无)"), m_formWidget);
+    m_textSizeLabel = new QLabel(tr("(无)"), m_formWidget);
+    m_textColorLabel = new QLabel(tr("(无)"), m_formWidget);
+    m_textBoldLabel = new QLabel(tr("(无)"), m_formWidget);
+    m_textItalicLabel = new QLabel(tr("(无)"), m_formWidget);
+    m_textPosLabel = new QLabel(tr("(无)"), m_formWidget);
+    m_textFontLabel->setStyleSheet("color: gray;");
+    m_textSizeLabel->setStyleSheet("color: gray;");
+    m_textColorLabel->setStyleSheet("color: gray;");
+    m_textBoldLabel->setStyleSheet("color: gray;");
+    m_textItalicLabel->setStyleSheet("color: gray;");
+    m_textPosLabel->setStyleSheet("color: gray;");
+    m_formLayout->addRow(tr("字体:"), m_textFontLabel);
+    m_formLayout->addRow(tr("字号:"), m_textSizeLabel);
+    m_formLayout->addRow(tr("颜色:"), m_textColorLabel);
+    m_formLayout->addRow(tr("粗体:"), m_textBoldLabel);
+    m_formLayout->addRow(tr("斜体:"), m_textItalicLabel);
+    m_formLayout->addRow(tr("位置:"), m_textPosLabel);
+
     m_scroll->setWidget(m_formWidget);
     outer->addWidget(m_scroll);
 
@@ -161,6 +185,62 @@ void PropertiesDock::clearRotation()
     }
 }
 
+// P0-7.4 (2026-09-14): text properties 6 行 setter/clear
+//   高亮 (color: black) 表示有选中 text item, 灰色 (color: gray) 表示无
+void PropertiesDock::setTextProperties(const TextProperties& props)
+{
+    if (m_textFontLabel) {
+        m_textFontLabel->setText(props.font.isEmpty() ? tr("(无)") : props.font);
+        m_textFontLabel->setStyleSheet(QStringLiteral("color: black;"));
+    }
+    if (m_textSizeLabel) {
+        m_textSizeLabel->setText(props.size > 0 ? QString::number(props.size) : tr("(无)"));
+        m_textSizeLabel->setStyleSheet(QStringLiteral("color: black;"));
+    }
+    if (m_textColorLabel) {
+        if (props.color.isValid()) {
+            // 显示颜色名 + RGB
+            m_textColorLabel->setText(QString("%1 (%2,%3,%4)")
+                                           .arg(props.color.name())
+                                           .arg(props.color.red())
+                                           .arg(props.color.green())
+                                           .arg(props.color.blue()));
+            m_textColorLabel->setStyleSheet(QStringLiteral("color: black;"));
+        } else {
+            m_textColorLabel->setText(tr("(无)"));
+            m_textColorLabel->setStyleSheet(QStringLiteral("color: gray;"));
+        }
+    }
+    if (m_textBoldLabel) {
+        m_textBoldLabel->setText(props.bold ? tr("是") : tr("否"));
+        m_textBoldLabel->setStyleSheet(QStringLiteral("color: black;"));
+    }
+    if (m_textItalicLabel) {
+        m_textItalicLabel->setText(props.italic ? tr("是") : tr("否"));
+        m_textItalicLabel->setStyleSheet(QStringLiteral("color: black;"));
+    }
+    if (m_textPosLabel) {
+        m_textPosLabel->setText(QString("(%1, %2)")
+                                    .arg(int(props.pos.x()))
+                                    .arg(int(props.pos.y())));
+        m_textPosLabel->setStyleSheet(QStringLiteral("color: black;"));
+    }
+    LOG_DEBUG("[PropertiesDock] setTextProperties: font={} size={} pos=({}, {})",
+              props.font.toStdString(), props.size,
+              int(props.pos.x()), int(props.pos.y()));
+}
+
+void PropertiesDock::clearTextProperties()
+{
+    const QString gray = QStringLiteral("color: gray;");
+    if (m_textFontLabel)   { m_textFontLabel->setText(tr("(无)"));   m_textFontLabel->setStyleSheet(gray); }
+    if (m_textSizeLabel)   { m_textSizeLabel->setText(tr("(无)"));   m_textSizeLabel->setStyleSheet(gray); }
+    if (m_textColorLabel)  { m_textColorLabel->setText(tr("(无)"));  m_textColorLabel->setStyleSheet(gray); }
+    if (m_textBoldLabel)   { m_textBoldLabel->setText(tr("(无)"));   m_textBoldLabel->setStyleSheet(gray); }
+    if (m_textItalicLabel) { m_textItalicLabel->setText(tr("(无)")); m_textItalicLabel->setStyleSheet(gray); }
+    if (m_textPosLabel)    { m_textPosLabel->setText(tr("(无)"));    m_textPosLabel->setStyleSheet(gray); }
+}
+
 // ---- F-O (2026-09-10) test accessors (read-only) ----
 int PropertiesDock::appliedCount() const
 {
@@ -185,6 +265,37 @@ QString PropertiesDock::formatLabelText() const
 QString PropertiesDock::dpiLabelText() const
 {
     return m_dpiLabel ? m_dpiLabel->text() : QString();
+}
+
+// ---- P0-7.5 (2026-09-14) text properties accessors ----
+QString PropertiesDock::textFontLabel() const
+{
+    return m_textFontLabel ? m_textFontLabel->text() : QString();
+}
+
+QString PropertiesDock::textSizeLabel() const
+{
+    return m_textSizeLabel ? m_textSizeLabel->text() : QString();
+}
+
+QString PropertiesDock::textColorLabel() const
+{
+    return m_textColorLabel ? m_textColorLabel->text() : QString();
+}
+
+QString PropertiesDock::textBoldLabel() const
+{
+    return m_textBoldLabel ? m_textBoldLabel->text() : QString();
+}
+
+QString PropertiesDock::textItalicLabel() const
+{
+    return m_textItalicLabel ? m_textItalicLabel->text() : QString();
+}
+
+QString PropertiesDock::textPosLabel() const
+{
+    return m_textPosLabel ? m_textPosLabel->text() : QString();
 }
 
 } // namespace docks

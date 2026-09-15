@@ -132,8 +132,9 @@ void tst_RightPanelStack::propertiesDock_haveScrollArea()
     // 必有 QFormLayout 装 4+1+4 行 (路径/尺寸/格式/DPI + separator + 选区 x/y/w/h)
     QFormLayout* form = props.findChild<QFormLayout*>();
     QVERIFY(form != nullptr);
-    QCOMPARE(form->rowCount(), 10);  // P0-4.9 (2026-09-10): +1 separator + 4 selection bbox
+    QCOMPARE(form->rowCount(), 17);  // P0-4.9 (2026-09-10): +1 separator + 4 selection bbox
                                   //   P0-6.12 (2026-09-14): +1 transform rotation row
+                                  //   P0-7.4 (2026-09-14): +1 separator + 6 text properties rows (字体/字号/颜色/Bold/Italic/位置)
 }
 
 void tst_RightPanelStack::propertiesDock_setImageInfo()

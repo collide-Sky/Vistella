@@ -347,6 +347,28 @@ ImageWindow::ImageWindow(QWidget *parent)
                     [this, props]() {
                 if (m_selection) props->setSelectionBbox(m_selection->boundingRect());
             });
+            // P0-7.4 (2026-09-14): PropertiesDock 同步 text item 选中状态
+            //   TextOverlayController::currentChanged -> setTextProperties / clearTextProperties
+            //   走 QPointer 防 item delete 后 dangling
+            if (m_textCtrl) {
+                connect(m_textCtrl.get(), &TextOverlayController::currentChanged,
+                        this, [this, props](GraphicsTextItem* item) {
+                    if (!item) {
+                        props->clearTextProperties();
+                        return;
+                    }
+                    QPointer<GraphicsTextItem> weakItem(item);
+                    const auto style = m_textCtrl->getCurrentStyle();
+                    docks::PropertiesDock::TextProperties p;
+                    p.font = style.font;
+                    p.size = style.size;
+                    p.color = style.color;
+                    p.bold = style.bold;
+                    p.italic = style.italic;
+                    if (!weakItem.isNull()) p.pos = weakItem.data()->position();
+                    props->setTextProperties(p);
+                });
+            }
         }
     }
 

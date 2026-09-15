@@ -84,9 +84,13 @@ void GraphicsTextItem::setPosition(const QPointF &scenePos)
 
 void GraphicsTextItem::setRotationDeg(qreal deg)
 {
-    // 归一化到 [-180, 180]
+    // 归一化到 (-180, 180]
+    //   180 跟 -180 是同一个方向, 归一化到 -180 (PS 风格约定)
+    //   > 180 减去 360 wrap 到负数; < -180 加 360 wrap 到正数
     while (deg >  180.0) deg -= 360.0;
     while (deg < -180.0) deg += 360.0;
+    // 边界: 180.0 也归一化到 -180.0 (避免 qFuzzyCompare(180) != qFuzzyCompare(-180))
+    if (deg >= 180.0) deg -= 360.0;
     if (qFuzzyCompare(1.0 + m_rotation, 1.0 + deg)) return;
     m_rotation = deg;
     applyTransform();

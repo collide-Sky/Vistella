@@ -26,6 +26,13 @@
 TextOverlayController::TextOverlayController(QObject* parent) : QObject(parent) {}
 TextOverlayController::~TextOverlayController() = default;
 
+// P0-7.3 (2026-09-14): emit currentChanged 让 PropertiesDock 同步当前选中 item 的属性
+void TextOverlayController::setCurrent(GraphicsTextItem* item) {
+    if (m_current == item) return;
+    m_current = item;
+    emit currentChanged(item);
+}
+
 void TextOverlayController::registerTextItem(GraphicsTextItem* item) {
     if (!item) return;
     if (m_items.contains(item)) return;
@@ -87,9 +94,12 @@ GraphicsTextItem* TextOverlayController::createTextItem(const QPointF& scenePos)
         setCurrent(nullptr);
     }
     auto* item = new GraphicsTextItem();
-    // 同步左面板的字体/字号/颜色 (从组件自己 m_textFont / m_textSize / m_textColor 读)
+    // 同步左面板的字体/字号/颜色/Bold/Italic
+    //   (从组件自己 m_textFont / m_textSize / m_textColor / m_textBold / m_textItalic 读)
     QFont f(m_textFont);
     f.setPointSize(m_textSize);
+    f.setBold(m_textBold);
+    f.setItalic(m_textItalic);
     item->setFont(f);
     item->setDefaultTextColor(m_textColor);
     item->setPosition(scenePos);
@@ -204,6 +214,8 @@ void TextOverlayController::onFontChanged(const QString& family) {
         QFont f = m_current->font();
         f.setFamily(m_textFont);
         f.setPointSize(m_textSize);
+        f.setBold(m_textBold);
+        f.setItalic(m_textItalic);
         m_current->setFont(f);
     }
 }
@@ -214,6 +226,8 @@ void TextOverlayController::onSizeChanged(int size) {
     if (m_current) {
         QFont f = m_current->font();
         f.setPointSize(size);
+        f.setBold(m_textBold);
+        f.setItalic(m_textItalic);
         m_current->setFont(f);
     }
 }
@@ -232,6 +246,31 @@ void TextOverlayController::applyStyleToCurrent() {
     if (!m_current) return;
     QFont f(m_textFont);
     f.setPointSize(m_textSize);
+    f.setBold(m_textBold);
+    f.setItalic(m_textItalic);
     m_current->setFont(f);
     m_current->setDefaultTextColor(m_textColor);
+}
+
+// P0-7.3 (2026-09-14): 给 PropertiesDock 读当前 item 完整 style
+//   m_current 为 null 时返回 default style (font/size/color/bold/italic)
+//   有 m_current 时读 item 的实际 state (font/color) + 几何 (pos/rotation)
+TextOverlayController::CurrentStyle TextOverlayController::getCurrentStyle() const {
+    CurrentStyle s;
+    s.font     = m_textFont;
+    s.size     = m_textSize;
+    s.color    = m_textColor;
+    s.bold     = m_textBold;
+    s.italic   = m_textItalic;
+    if (m_current) {
+        const QFont f = m_current->font();
+        s.font   = f.family();
+        s.size   = f.pointSize() > 0 ? f.pointSize() : m_textSize;
+        s.bold   = f.bold();
+        s.italic = f.italic();
+        s.color  = m_current->defaultTextColor();
+        s.pos    = m_current->position();
+        s.rotation = m_current->rotationDeg();
+    }
+    return s;
 }

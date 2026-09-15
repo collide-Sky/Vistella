@@ -693,7 +693,7 @@
     </message>
     <message>
         <location filename="../src/media/imagewindow.ui" line="696"/>
-        <location filename="../src/media/imagewindow.cpp" line="733"/>
+        <location filename="../src/media/imagewindow.cpp" line="755"/>
         <source>●  进入涂抹模式 (再点退出)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -753,67 +753,67 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="527"/>
+        <location filename="../src/media/imagewindow.cpp" line="549"/>
         <source>未命名图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="731"/>
+        <location filename="../src/media/imagewindow.cpp" line="753"/>
         <source>✓  涂抹中 (再点退出)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="807"/>
+        <location filename="../src/media/imagewindow.cpp" line="829"/>
         <source>选择文字颜色</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="811"/>
+        <location filename="../src/media/imagewindow.cpp" line="833"/>
         <source>文字颜色: RGB(%1,%2,%3)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1246"/>
-        <location filename="../src/media/imagewindow.cpp" line="1293"/>
-        <location filename="../src/media/imagewindow.cpp" line="1309"/>
-        <location filename="../src/media/imagewindow.cpp" line="1325"/>
-        <location filename="../src/media/imagewindow.cpp" line="1341"/>
-        <location filename="../src/media/imagewindow.cpp" line="1357"/>
+        <location filename="../src/media/imagewindow.cpp" line="1268"/>
+        <location filename="../src/media/imagewindow.cpp" line="1315"/>
+        <location filename="../src/media/imagewindow.cpp" line="1331"/>
+        <location filename="../src/media/imagewindow.cpp" line="1347"/>
+        <location filename="../src/media/imagewindow.cpp" line="1363"/>
+        <location filename="../src/media/imagewindow.cpp" line="1379"/>
         <source>当前页面没有图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1269"/>
+        <location filename="../src/media/imagewindow.cpp" line="1291"/>
         <source>ToolContext 未初始化</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1287"/>
+        <location filename="../src/media/imagewindow.cpp" line="1309"/>
         <source>自由变换 — 拖动 8 handle 或中心点 (Esc 退出)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1300"/>
+        <location filename="../src/media/imagewindow.cpp" line="1322"/>
         <source>水平翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1316"/>
+        <location filename="../src/media/imagewindow.cpp" line="1338"/>
         <source>垂直翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1332"/>
+        <location filename="../src/media/imagewindow.cpp" line="1354"/>
         <source>旋转 90° 顺时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1348"/>
+        <location filename="../src/media/imagewindow.cpp" line="1370"/>
         <source>旋转 90° 逆时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1364"/>
+        <location filename="../src/media/imagewindow.cpp" line="1386"/>
         <source>旋转 180°</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2093,17 +2093,32 @@
         <location filename="../src/media/docks/PropertiesDock.cpp" line="53"/>
         <location filename="../src/media/docks/PropertiesDock.cpp" line="54"/>
         <location filename="../src/media/docks/PropertiesDock.cpp" line="65"/>
-        <location filename="../src/media/docks/PropertiesDock.cpp" line="99"/>
-        <location filename="../src/media/docks/PropertiesDock.cpp" line="101"/>
-        <location filename="../src/media/docks/PropertiesDock.cpp" line="115"/>
-        <location filename="../src/media/docks/PropertiesDock.cpp" line="116"/>
-        <location filename="../src/media/docks/PropertiesDock.cpp" line="117"/>
-        <location filename="../src/media/docks/PropertiesDock.cpp" line="118"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="74"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="75"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="76"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="77"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="78"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="79"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="123"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="125"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="139"/>
         <location filename="../src/media/docks/PropertiesDock.cpp" line="140"/>
         <location filename="../src/media/docks/PropertiesDock.cpp" line="141"/>
         <location filename="../src/media/docks/PropertiesDock.cpp" line="142"/>
-        <location filename="../src/media/docks/PropertiesDock.cpp" line="143"/>
-        <location filename="../src/media/docks/PropertiesDock.cpp" line="159"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="164"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="165"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="166"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="167"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="183"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="193"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="197"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="210"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="236"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="237"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="238"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="239"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="240"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="241"/>
         <source>(无)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2155,6 +2170,53 @@
     <message>
         <location filename="../src/media/docks/PropertiesDock.cpp" line="67"/>
         <source>旋转:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="71"/>
+        <source>--- 文字 (Text) ---</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="86"/>
+        <source>字体:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="87"/>
+        <source>字号:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="88"/>
+        <source>颜色:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="89"/>
+        <source>粗体:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="90"/>
+        <source>斜体:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="91"/>
+        <source>位置:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="215"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="219"/>
+        <source>是</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="215"/>
+        <location filename="../src/media/docks/PropertiesDock.cpp" line="219"/>
+        <source>否</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

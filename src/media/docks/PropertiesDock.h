@@ -54,6 +54,22 @@ public:
     void setRotation(qreal deg);
     void clearRotation();
 
+    // P0-7.4 (2026-09-14): 文字图层属性 (跟当前 GraphicsTextItem 联动)
+    //   ImageWindow::ctor 里 connect m_textCtrl->currentChanged -> setTextProperties(item)
+    //   text item 没选中或销毁时调 clearTextProperties()
+    //   text = font family (e.g. "Microsoft YaHei UI")
+    //   pos = item->position() (scene 坐标)
+    struct TextProperties {
+        QString font;
+        int     size  = 0;
+        QColor  color;
+        bool    bold  = false;
+        bool    italic = false;
+        QPointF pos;
+    };
+    void setTextProperties(const TextProperties& props);
+    void clearTextProperties();
+
     // F-O (2026-09-10) test accessors (read-only snapshot for QSignalSpy-style
     // verification in tst_F_O_Throttle). Cheap, no side effects. Defined in
     // .cpp so we don't drag <QLabel> into every PropertiesDock.h consumer.
@@ -62,6 +78,14 @@ public:
     QString sizeLabelText() const;
     QString formatLabelText() const;
     QString dpiLabelText() const;
+
+    // P0-7.5 (2026-09-14) text properties accessors (跟 F-O 同模式, 给 tst_P0_7_TextSystem 用)
+    QString textFontLabel() const;
+    QString textSizeLabel() const;
+    QString textColorLabel() const;
+    QString textBoldLabel() const;
+    QString textItalicLabel() const;
+    QString textPosLabel() const;
 
 private slots:
     // F-O (2026-09-10): throttled apply slot, fired by m_setInfoThrottle.
@@ -85,6 +109,14 @@ private:
     QLabel*      m_selHLabel   = nullptr;
     // P0-6.12 (2026-09-14): transform rotation label (1 行, 在 X/Y/W/H 之后)
     QLabel*      m_rotLabel    = nullptr;
+    // P0-7.4 (2026-09-14): text properties 6 行 (字体/字号/颜色/Bold/Italic/位置)
+    //   在 rotation 之后追加, 跟 P0-6 一样模式
+    QLabel*      m_textFontLabel  = nullptr;
+    QLabel*      m_textSizeLabel  = nullptr;
+    QLabel*      m_textColorLabel = nullptr;
+    QLabel*      m_textBoldLabel  = nullptr;
+    QLabel*      m_textItalicLabel = nullptr;
+    QLabel*      m_textPosLabel   = nullptr;
 
     // F-O (2026-09-10): throttle state
     core::Throttle*        m_setInfoThrottle = nullptr;   // owned, parent=this
