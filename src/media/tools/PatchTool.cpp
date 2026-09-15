@@ -15,6 +15,8 @@
 #include <QLabel>
 #include <QWidget>
 #include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>     // P0-9.4 cv::rectangle + cv::Point
+#include <opencv2/photo.hpp>      // P0-9.4 cv::seamlessClone
 
 namespace tools {
 
@@ -42,8 +44,6 @@ void PatchTool::applyPatch(ImageWindow* host, const QPointF& dstA, const QPointF
     if (!host || !m_hasSource) return;
     auto& img = host->currentImage();
     if (img.empty()) return;
-    QImage qimg = ImageProcessor::matToQImage(img);
-    if (qimg.isNull()) return;
 
     QPoint srcTl(static_cast<int>(m_sourceA.x()), static_cast<int>(m_sourceA.y()));
     QPoint srcBr(static_cast<int>(m_sourceB.x()), static_cast<int>(m_sourceB.y()));
@@ -53,28 +53,47 @@ void PatchTool::applyPatch(ImageWindow* host, const QPointF& dstA, const QPointF
     QPoint dstBr(static_cast<int>(dstB.x()), static_cast<int>(dstB.y()));
     QRect dstRect(dstTl, dstBr);
     dstRect = dstRect.normalized();
-    if (srcRect.width() != dstRect.width() || srcRect.height() != dstRect.height()) {
-        // P0-9.3 简化: 要求 src 和 dst 同尺寸
-        LOG_WARN("[PatchTool] src/dst size mismatch ({}x{} vs {}x{}), skipping",
-                 srcRect.width(), srcRect.height(),
-                 dstRect.width(), dstRect.height());
-        return;
-    }
-    const QRect imgRect(0, 0, qimg.width(), qimg.height());
+
+    const QRect imgRect(0, 0, img.cols, img.rows);
     const QRect srcClip = srcRect.intersected(imgRect);
     const QRect dstClip = dstRect.intersected(imgRect);
     if (srcClip.isEmpty() || dstClip.isEmpty()) return;
 
-    for (int y = 0; y < srcClip.height(); ++y) {
-        for (int x = 0; x < srcClip.width(); ++x) {
-            const QColor c = qimg.pixelColor(srcClip.x() + x, srcClip.y() + y);
-            qimg.setPixelColor(dstClip.x() + x, dstClip.y() + y, c);
-        }
+    if (srcClip.width() != dstClip.width() || srcClip.height() != dstClip.height()) {
+        // P0-9.4 简化: src/dst 不同尺寸不处理
+        LOG_WARN("[PatchTool] src/dst size mismatch ({}x{} vs {}x{}), skipping",
+                 srcClip.width(), srcClip.height(),
+                 dstClip.width(), dstClip.height());
+        return;
     }
 
-    cv::Mat newMat = ImageProcessor::qImageToMat(qimg);
-    host->setCurrentImage(newMat);
-    LOG_INFO("[PatchTool] applied patch ({}x{} region)",
+    // P0-9.4 (2026-09-15): 用 cv::seamlessClone 做 Content Aware Fill
+    //   cv::seamlessClone(src, dst, mask, result, centerPoint)
+    //   - src: source 矩形 (从 image 切片)
+    //   - dst: destination image
+    //   - mask: source 区域 mask (255 在 source 区域)
+    //   - centerPoint: destination 中心 (在 dst image 中)
+    const cv::Rect srcCv(srcClip.x(), srcClip.y(), srcClip.width(), srcClip.height());
+    cv::Mat sourceRoi = img(srcCv).clone();
+
+    cv::Mat mask = cv::Mat::zeros(sourceRoi.size(), CV_8UC1);
+    cv::rectangle(mask, cv::Rect(0, 0, sourceRoi.cols, sourceRoi.rows), cv::Scalar(255), cv::FILLED);
+
+    const cv::Point center(dstClip.x() + dstClip.width() / 2,
+                           dstClip.y() + dstClip.height() / 2);
+
+    cv::Mat result;
+    try {
+        // signature: seamlessClone(src, dst, mask, center, blend, flags)
+        cv::seamlessClone(sourceRoi, img, mask, center, result, cv::NORMAL_CLONE);
+    } catch (const cv::Exception& e) {
+        LOG_WARN("[PatchTool] cv::seamlessClone failed: {}, fallback to copy", e.what());
+        result = img.clone();
+        const cv::Rect dstCv(dstClip.x(), dstClip.y(), dstClip.width(), dstClip.height());
+        sourceRoi.copyTo(result(dstCv));
+    }
+    host->setCurrentImage(result);
+    LOG_INFO("[PatchTool] applied seamlessClone patch ({}x{} region)",
              dstClip.width(), dstClip.height());
 }
 

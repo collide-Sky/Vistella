@@ -60,6 +60,13 @@ private:
     static ToolState* createTextTool();
     static ToolState* createBrushTool();
     static ToolState* createEyedropperTool();
+    // P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 个 factory
+    static ToolState* createShapeTool();
+    static ToolState* createPenTool();
+    static ToolState* createCloneTool();
+    static ToolState* createHealTool();
+    static ToolState* createPatchTool();
+    static ToolState* createRedEyeTool();
 
     QHash<mediators::ToolId, QToolButton*> m_buttons;
 

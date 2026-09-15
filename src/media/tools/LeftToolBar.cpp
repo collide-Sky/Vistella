@@ -14,6 +14,13 @@
 #include "Text.h"
 #include "Brush.h"
 #include "EyedropperTool.h"
+// P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 个 button 集成
+#include "ShapeTool.h"
+#include "PenTool.h"
+#include "CloneTool.h"
+#include "HealTool.h"
+#include "PatchTool.h"
+#include "RedEyeTool.h"
 #include "logger.h"
 
 #include <QToolButton>
@@ -35,6 +42,13 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     m_buttons[mediators::ToolId::Text]       = ui->btnText;
     m_buttons[mediators::ToolId::Brush]      = ui->btnBrush;
     m_buttons[mediators::ToolId::Eyedropper] = ui->btnEyedropper;
+    // P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 按钮
+    m_buttons[mediators::ToolId::Shape]      = ui->btnShape;
+    m_buttons[mediators::ToolId::Pen]        = ui->btnPen;
+    m_buttons[mediators::ToolId::Clone]      = ui->btnClone;
+    m_buttons[mediators::ToolId::Heal]       = ui->btnHeal;
+    m_buttons[mediators::ToolId::Patch]      = ui->btnPatch;
+    m_buttons[mediators::ToolId::RedEye]     = ui->btnRedEye;
 }
 
 LeftToolBar::~LeftToolBar()
@@ -50,6 +64,13 @@ ToolState* LeftToolBar::createCropTool()       { return new Crop(); }
 ToolState* LeftToolBar::createTextTool()       { return new Text(); }
 ToolState* LeftToolBar::createBrushTool()      { return new Brush(); }
 ToolState* LeftToolBar::createEyedropperTool() { return new EyedropperTool(); }
+// P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 个 factory
+ToolState* LeftToolBar::createShapeTool()      { return new ShapeTool(); }
+ToolState* LeftToolBar::createPenTool()        { return new PenTool(); }
+ToolState* LeftToolBar::createCloneTool()      { return new CloneTool(); }
+ToolState* LeftToolBar::createHealTool()       { return new HealTool(); }
+ToolState* LeftToolBar::createPatchTool()      { return new PatchTool(); }
+ToolState* LeftToolBar::createRedEyeTool()     { return new RedEyeTool(); }
 
 void LeftToolBar::attach(mediators::ToolMediator* toolMed, ToolContext* ctx)
 {
@@ -121,6 +142,25 @@ void LeftToolBar::onToolMediatorSwitched(mediators::ToolId id)
             break;
         case mediators::ToolId::Eyedropper:
             m_ctx->setState(std::unique_ptr<ToolState>(createEyedropperTool()));
+            break;
+        // P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 个 case
+        case mediators::ToolId::Shape:
+            m_ctx->setState(std::unique_ptr<ToolState>(createShapeTool()));
+            break;
+        case mediators::ToolId::Pen:
+            m_ctx->setState(std::unique_ptr<ToolState>(createPenTool()));
+            break;
+        case mediators::ToolId::Clone:
+            m_ctx->setState(std::unique_ptr<ToolState>(createCloneTool()));
+            break;
+        case mediators::ToolId::Heal:
+            m_ctx->setState(std::unique_ptr<ToolState>(createHealTool()));
+            break;
+        case mediators::ToolId::Patch:
+            m_ctx->setState(std::unique_ptr<ToolState>(createPatchTool()));
+            break;
+        case mediators::ToolId::RedEye:
+            m_ctx->setState(std::unique_ptr<ToolState>(createRedEyeTool()));
             break;
         default:
             m_ctx->setState(nullptr);  // None / unknown -> 释放当前 tool

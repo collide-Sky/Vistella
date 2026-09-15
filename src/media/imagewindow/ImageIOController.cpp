@@ -24,6 +24,7 @@
 #include "../icc/IccProfile.h"
 #include "../icc/IccPngEmbed.h"
 #include "../icc/IccJpegEmbed.h"
+#include "../icc/IccTiffEmbed.h"
 #include "../../core/RecentManager.h"
 #include "logger.h"
 
@@ -202,7 +203,12 @@ void ImageIOController::onExport()
                     LOG_WARN("[ImageIO] embedIccToJpeg failed: {}", err.toStdString());
                 }
             } else if (opts.format == dialogs::ExportDialog::Format::TIFF) {
-                LOG_WARN("[ImageIO] TIFF ICC embed is TODO (P0-8.4 follow-up)");
+                // P0-8.4 (2026-09-15): TIFF ICCProfile tag embedder
+                if (!media::icc::embedIccToTiff(path, iccData, &err)) {
+                    LOG_WARN("[ImageIO] embedIccToTiff failed: {}", err.toStdString());
+                } else {
+                    LOG_INFO("[ImageIO] embedded ICC profile into TIFF");
+                }
             }
         }
     }

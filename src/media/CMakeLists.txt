@@ -38,6 +38,9 @@ add_library(vistella_media STATIC
     icc/IccPngEmbed.cpp
     icc/IccJpegEmbed.h
     icc/IccJpegEmbed.cpp
+    # P0-8.4 (2026-09-15): ICC profile embed to TIFF (ICCProfile tag in IFD)
+    icc/IccTiffEmbed.h
+    icc/IccTiffEmbed.cpp
 
     imageinfopanel.h
     imageinfopanel.cpp

@@ -105,6 +105,66 @@
      <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
     </widget>
    </item>
+   <item row="4" column="0">
+    <widget class="QToolButton" name="btnShape">
+     <property name="text"><string>Sh</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Shape (U)</string></property>
+     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
+     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
+    </widget>
+   </item>
+   <item row="4" column="1">
+    <widget class="QToolButton" name="btnPen">
+     <property name="text"><string>Pn</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Pen (P)</string></property>
+     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
+     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
+    </widget>
+   </item>
+   <item row="5" column="0">
+    <widget class="QToolButton" name="btnClone">
+     <property name="text"><string>Cl</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Clone (S)</string></property>
+     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
+     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
+    </widget>
+   </item>
+   <item row="5" column="1">
+    <widget class="QToolButton" name="btnHeal">
+     <property name="text"><string>Hl</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Heal (J)</string></property>
+     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
+     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
+    </widget>
+   </item>
+   <item row="6" column="0">
+    <widget class="QToolButton" name="btnPatch">
+     <property name="text"><string>Pt</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Patch</string></property>
+     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
+     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
+    </widget>
+   </item>
+   <item row="6" column="1">
+    <widget class="QToolButton" name="btnRedEye">
+     <property name="text"><string>RE</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>RedEye</string></property>
+     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
+     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <resources/>

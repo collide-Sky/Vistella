@@ -12,12 +12,12 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QColorDialog>
 #include <QDoubleSpinBox>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QToolButton>
-#include <QColorDialog>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QVBoxLayout>
@@ -140,9 +140,10 @@ void ShapeTool::onMouseRelease(QMouseEvent* /*e*/, ImageWindow* host, const QPoi
     vecLayer.kind = layers::Layer::Vector;
     vecLayer.name = QStringLiteral("形状 (vector)");
     vecLayer.vectorPaths.append(path);
-    // 默认 fill color = 当前前景色 (P0-9.1 简化: 固定半透明色)
-    vecLayer.vectorFillColors.append(QColor(0, 120, 215, 180));   // 蓝色半透明
-    vecLayer.vectorStrokeWidths.append(1.5);
+    // P0-9.4 (2026-09-15): fill / stroke 颜色 + stroke 宽度 走 m_fillColor/m_strokeColor/m_strokeWidth
+    vecLayer.vectorFillColors.append(m_fillColor);
+    vecLayer.vectorStrokeColors.append(m_strokeColor);
+    vecLayer.vectorStrokeWidths.append(m_strokeWidth);
 
     auto* stack = host->layerStack();
     if (stack) {
@@ -188,8 +189,10 @@ void ShapeTool::onKeyPress(QKeyEvent* e, ImageWindow* host)
         vecLayer.kind = layers::Layer::Vector;
         vecLayer.name = QStringLiteral("多边形 (vector)");
         vecLayer.vectorPaths.append(path);
-        vecLayer.vectorFillColors.append(QColor(0, 120, 215, 180));
-        vecLayer.vectorStrokeWidths.append(1.5);
+        // P0-9.4 (2026-09-15): fill / stroke 颜色 + stroke 宽度
+        vecLayer.vectorFillColors.append(m_fillColor);
+        vecLayer.vectorStrokeColors.append(m_strokeColor);
+        vecLayer.vectorStrokeWidths.append(m_strokeWidth);
 
         if (auto* stack = host->layerStack()) {
             stack->addLayer(vecLayer);
@@ -209,7 +212,7 @@ void ShapeTool::onKeyRelease(QKeyEvent* /*e*/, ImageWindow* /*host*/) {}
 
 QWidget* ShapeTool::optionPage(QWidget* parent)
 {
-    // PS 同款: 5 kind combo + Fill color + Stroke color + Stroke width
+    // P0-9.4 (2026-09-15): PS 同款 5 kind combo + Fill color + Stroke color + Stroke width
     auto* page = new QWidget(parent);
     auto* layout = new QHBoxLayout(page);
     layout->setContentsMargins(4, 2, 4, 2);
@@ -227,19 +230,76 @@ QWidget* ShapeTool::optionPage(QWidget* parent)
     kindCombo->setCurrentIndex(static_cast<int>(m_kind));
     layout->addWidget(kindCombo);
 
-    auto* hint = new QLabel(QStringLiteral("(双击/Enter 闭合 Polygon)"), page);
+    // Fill color 按钮
+    auto* fillBtn = new QToolButton(page);
+    fillBtn->setText(QStringLiteral("填充"));
+    fillBtn->setToolTip(QStringLiteral("Fill color"));
+    QString fillCss = QString("QToolButton { background: %1; color: %2; }")
+                          .arg(m_fillColor.name())
+                          .arg(m_fillColor.lightness() > 128 ? QStringLiteral("black") : QStringLiteral("white"));
+    fillBtn->setStyleSheet(fillCss);
+    Q_UNUSED(fillCss);
+    layout->addWidget(fillBtn);
+
+    // Stroke color 按钮
+    auto* strokeBtn = new QToolButton(page);
+    strokeBtn->setText(QStringLiteral("边框"));
+    strokeBtn->setToolTip(QStringLiteral("Stroke color"));
+    QString strokeCss = QString("QToolButton { background: %1; color: %2; }")
+                            .arg(m_strokeColor.name())
+                            .arg(m_strokeColor.lightness() > 128 ? QStringLiteral("black") : QStringLiteral("white"));
+    strokeBtn->setStyleSheet(strokeCss);
+    Q_UNUSED(strokeCss);
+    layout->addWidget(strokeBtn);
+
+    // Stroke width spinbox
+    auto* widthSpin = new QDoubleSpinBox(page);
+    widthSpin->setRange(0.5, 20.0);
+    widthSpin->setValue(m_strokeWidth);
+    widthSpin->setSingleStep(0.5);
+    widthSpin->setSuffix(QStringLiteral(" px"));
+    layout->addWidget(widthSpin);
+
+    auto* hint = new QLabel(QStringLiteral("(Enter 闭合 / Esc 取消)"), page);
     hint->setStyleSheet(QStringLiteral("color: gray; font-size: 9pt;"));
     layout->addWidget(hint);
 
     layout->addStretch(1);
 
+    // 联动 signals
     QObject::connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
                      page, [this, kindCombo](int idx) {
         m_kind = static_cast<ShapeKind>(kindCombo->itemData(idx).toInt());
         LOG_DEBUG("[ShapeTool] kind changed: {}", static_cast<int>(m_kind));
     });
+    QObject::connect(fillBtn, &QToolButton::clicked,
+                     page, [this, fillBtn]() {
+        QColor c = QColorDialog::getColor(m_fillColor, nullptr,
+                                          QStringLiteral("选择填充颜色"));
+        if (!c.isValid()) return;
+        m_fillColor = c;
+        QString css = QString("QToolButton { background: %1; color: %2; }")
+                          .arg(c.name())
+                          .arg(c.lightness() > 128 ? QStringLiteral("black") : QStringLiteral("white"));
+        fillBtn->setStyleSheet(css);
+        Q_UNUSED(css);
+    });
+    QObject::connect(strokeBtn, &QToolButton::clicked,
+                     page, [this, strokeBtn]() {
+        QColor c = QColorDialog::getColor(m_strokeColor, nullptr,
+                                          QStringLiteral("选择边框颜色"));
+        if (!c.isValid()) return;
+        m_strokeColor = c;
+        QString css = QString("QToolButton { background: %1; color: %2; }")
+                          .arg(c.name())
+                          .arg(c.lightness() > 128 ? QStringLiteral("black") : QStringLiteral("white"));
+        strokeBtn->setStyleSheet(css);
+        Q_UNUSED(css);
+    });
+    QObject::connect(widthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     page, [this](double v) { m_strokeWidth = v; });
 
-    LOG_DEBUG("[ShapeTool] optionPage created");
+    LOG_DEBUG("[ShapeTool] optionPage created (5 kind + fill + stroke + width)");
     return page;
 }
 

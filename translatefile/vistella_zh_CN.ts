@@ -324,48 +324,48 @@
 <context>
     <name>ImageIOController</name>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="50"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="51"/>
         <source>打开图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="51"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="52"/>
         <source>图像 (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff);; 全部文件 (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="55"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="56"/>
         <source>打开失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="73"/>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="99"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="74"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="100"/>
         <source>保存失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="92"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="93"/>
         <source>另存为</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="93"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="94"/>
         <source>图像 (*.png *.jpg *.bmp);; 全部文件 (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="137"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="138"/>
         <source>导出为...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="138"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="139"/>
         <source>PNG (*.png);; JPEG (*.jpg *.jpeg);; TIFF (*.tif *.tiff);; WebP (*.webp);; BMP (*.bmp);; GIF (*.gif);; 全部文件 (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="168"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="169"/>
         <source>导出失败</source>
         <translation type="unfinished"></translation>
     </message>
@@ -927,6 +927,66 @@
     <message>
         <location filename="../src/media/tools/LeftToolBar.ui" line="103"/>
         <source>Eyedropper (I)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="110"/>
+        <source>Sh</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="113"/>
+        <source>Shape (U)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="120"/>
+        <source>Pn</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="123"/>
+        <source>Pen (P)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="130"/>
+        <source>Cl</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="133"/>
+        <source>Clone (S)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="140"/>
+        <source>Hl</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="143"/>
+        <source>Heal (J)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="150"/>
+        <source>Pt</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="153"/>
+        <source>Patch</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="160"/>
+        <source>RE</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/LeftToolBar.ui" line="163"/>
+        <source>RedEye</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -2096,93 +2156,93 @@
 <context>
     <name>dialogs::ExportDialog</name>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="30"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="43"/>
         <source>导出为...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="44"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="84"/>
         <source>格式:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="67"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="107"/>
         <source>压缩级别:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="68"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="108"/>
         <source>(0 = 最快, 9 = 最小文件)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="89"/>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="121"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="129"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="161"/>
         <source>质量:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="90"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="130"/>
         <source>(92 = 推荐值, 平衡质量与文件大小)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="104"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="144"/>
         <source>压缩:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="122"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="162"/>
         <source>(90 = 推荐值)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="131"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="171"/>
         <source>(BMP 无压缩选项, 文件最大)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="138"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="178"/>
         <source>(GIF 仅支持 256 色索引)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="146"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="186"/>
         <source>缩放:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="165"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="205"/>
         <source>嵌入 ICC profile</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="170"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="210"/>
         <source>sRGB / AdobeRGB (内置) 或 .icc 文件路径</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="175"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="215"/>
         <source>浏览...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="185"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="225"/>
         <source>导出</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="187"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="227"/>
         <source>取消</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="275"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="315"/>
         <source>选择 ICC profile</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/dialogs/ExportDialog.cpp" line="276"/>
+        <location filename="../src/media/dialogs/ExportDialog.cpp" line="316"/>
         <source>ICC profile (*.icc *.icm);; 全部文件 (*)</source>
         <translation type="unfinished"></translation>
     </message>

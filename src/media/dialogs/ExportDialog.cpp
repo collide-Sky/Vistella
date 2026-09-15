@@ -16,6 +16,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSettings>     // P0-8.4: ExportDialog 持久化
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSlider>
@@ -26,9 +27,48 @@ namespace dialogs {
 
 ExportDialog::ExportDialog(QWidget* parent) : QDialog(parent)
 {
+    // P0-8.4 (2026-09-15): 从 QSettings 加载最近 settings (格式/jpeg quality/png/tiff/webp/resize/ICC)
+    QSettings settings;
+    m_opts.format          = static_cast<Format>(settings.value(QStringLiteral("ExportDialog/format"),
+                                                                  static_cast<int>(m_opts.format)).toInt());
+    m_opts.jpegQuality     = settings.value(QStringLiteral("ExportDialog/jpegQuality"), m_opts.jpegQuality).toInt();
+    m_opts.pngCompression  = settings.value(QStringLiteral("ExportDialog/pngCompression"), m_opts.pngCompression).toInt();
+    m_opts.tiffCompression = settings.value(QStringLiteral("ExportDialog/tiffCompression"), m_opts.tiffCompression).toString();
+    m_opts.webpQuality     = settings.value(QStringLiteral("ExportDialog/webpQuality"), m_opts.webpQuality).toInt();
+    m_opts.resizePercent   = settings.value(QStringLiteral("ExportDialog/resizePercent"), m_opts.resizePercent).toInt();
+    m_opts.embedIcc        = settings.value(QStringLiteral("ExportDialog/embedIcc"), m_opts.embedIcc).toBool();
+    m_opts.iccProfilePath  = settings.value(QStringLiteral("ExportDialog/iccProfilePath"), m_opts.iccProfilePath).toString();
+
     setupUI();
     setWindowTitle(tr("导出为..."));
     resize(420, 380);
+
+    // 同步 UI 到设置 (setupUI 之后)
+    {
+        QSignalBlocker block1(m_formatCombo);
+        QSignalBlocker block2(m_jpegSlider);
+        QSignalBlocker block3(m_jpegSpin);
+        QSignalBlocker block4(m_pngSpin);
+        QSignalBlocker block5(m_tiffCombo);
+        QSignalBlocker block6(m_webpSlider);
+        QSignalBlocker block7(m_webpSpin);
+        QSignalBlocker block8(m_resizeCombo);
+        QSignalBlocker block9(m_iccCheck);
+        QSignalBlocker block10(m_iccEdit);
+
+        m_formatCombo->setCurrentIndex(static_cast<int>(m_opts.format));
+        m_jpegSlider->setValue(m_opts.jpegQuality);
+        m_jpegSpin->setValue(m_opts.jpegQuality);
+        m_pngSpin->setValue(m_opts.pngCompression);
+        const int tiffIdx = m_tiffCombo->findText(m_opts.tiffCompression);
+        if (tiffIdx >= 0) m_tiffCombo->setCurrentIndex(tiffIdx);
+        m_webpSlider->setValue(m_opts.webpQuality);
+        m_webpSpin->setValue(m_opts.webpQuality);
+        const int resizeIdx = m_resizeCombo->findData(m_opts.resizePercent);
+        if (resizeIdx >= 0) m_resizeCombo->setCurrentIndex(resizeIdx);
+        m_iccCheck->setChecked(m_opts.embedIcc);
+        m_iccEdit->setText(m_opts.iccProfilePath);
+    }
 }
 
 ExportDialog::~ExportDialog() = default;
@@ -298,6 +338,18 @@ void ExportDialog::onAccept()
     m_opts.resizePercent   = m_resizeCombo->currentData().toInt();
     m_opts.embedIcc        = m_iccCheck->isChecked();
     m_opts.iccProfilePath  = m_iccEdit->text();
+
+    // P0-8.4 (2026-09-15): 持久化 settings 到 QSettings (跨 dialog 调用)
+    QSettings settings;
+    settings.setValue(QStringLiteral("ExportDialog/format"),         static_cast<int>(m_opts.format));
+    settings.setValue(QStringLiteral("ExportDialog/jpegQuality"),    m_opts.jpegQuality);
+    settings.setValue(QStringLiteral("ExportDialog/pngCompression"), m_opts.pngCompression);
+    settings.setValue(QStringLiteral("ExportDialog/tiffCompression"),m_opts.tiffCompression);
+    settings.setValue(QStringLiteral("ExportDialog/webpQuality"),    m_opts.webpQuality);
+    settings.setValue(QStringLiteral("ExportDialog/resizePercent"),  m_opts.resizePercent);
+    settings.setValue(QStringLiteral("ExportDialog/embedIcc"),       m_opts.embedIcc);
+    settings.setValue(QStringLiteral("ExportDialog/iccProfilePath"), m_opts.iccProfilePath);
+
     LOG_INFO("[ExportDialog] accepted: fmt={} jpeg={} png={} tiff={} webp={} resize={}% icc={}",
              formatName().toStdString(),
              m_opts.jpegQuality,
