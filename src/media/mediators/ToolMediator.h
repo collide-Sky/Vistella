@@ -44,6 +44,15 @@ enum class ToolId {
     Eyedropper  = 8,   // 吸管 (I)
     // P0-6.9 (2026-09-14): 自由变换 (Ctrl+T, 不在 LeftToolBar, 由 onFreeTransform 触发)
     Transform   = 9,
+    // P0-9.1 (2026-09-15): 形状工具 (Rectangle/Ellipse/Line/Polygon/Custom)
+    Shape       = 10,
+    // P0-9.2 (2026-09-15): Pen tool
+    Pen         = 11,
+    // P0-9.3 (2026-09-15): 修复工具 (Clone/Heal/Patch/RedEye 共用 placeholder)
+    Clone       = 12,
+    Heal        = 13,
+    Patch       = 14,
+    RedEye      = 15,
 };
 
 class ToolMediator : public QObject

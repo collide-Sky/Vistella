@@ -81,6 +81,20 @@ add_library(vistella_media STATIC
     # P0-6.9 (2026-09-14): TransformTool (Ctrl+T 自由变换)
     tools/TransformTool.h
     tools/TransformTool.cpp
+    # P0-9.1 (2026-09-15): ShapeTool (PS 同款 Rectangle/Ellipse/Line/Polygon/Custom)
+    tools/ShapeTool.h
+    tools/ShapeTool.cpp
+    # P0-9.2 (2026-09-15): PenTool (PS 同款钢笔)
+    tools/PenTool.h
+    tools/PenTool.cpp
+    # P0-9.3 (2026-09-15): 修复工具 (Clone/Heal/Patch/RedEye)
+    tools/CloneTool.h
+    tools/CloneTool.cpp
+    tools/HealTool.h
+    tools/RedEyeTool.h
+    tools/RedEyeTool.cpp
+    tools/PatchTool.h
+    tools/PatchTool.cpp
 
     # F-D (2026-09-09): LeftToolBar PS 风格 2 列图标 (2 工具)
     tools/LeftToolBar.h

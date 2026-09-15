@@ -34,8 +34,9 @@ void tst_ImageOptionBar::ctor_have9Pages()
     ImageOptionBar bar;
     QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
     QVERIFY(stack != nullptr);
-    // 9 pages: None(0) + 8 tools
-    QCOMPARE(stack->count(), 9);
+    // 16 pages: None(0) + 15 tools (None/Move/.../Eyedropper/Transform/Shape/Pen/Clone/Heal/Patch/RedEye)
+    //   P0-9 (2026-09-15): +7 pages for Shape/Pen/Clone/Heal/Patch/RedEye (was 9)
+    QCOMPARE(stack->count(), 16);
 }
 
 void tst_ImageOptionBar::ctor_defaultPageIsNone()

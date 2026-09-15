@@ -6,6 +6,12 @@
 #include "ui_ImageOptionBar.h"
 #include "ToolContext.h"
 #include "TransformTool.h"
+#include "ShapeTool.h"
+#include "PenTool.h"
+#include "CloneTool.h"
+#include "HealTool.h"
+#include "PatchTool.h"
+#include "RedEyeTool.h"
 #include "logger.h"
 
 #include <QComboBox>
@@ -74,6 +80,25 @@ void ImageOptionBar::onToolChanged(mediators::ToolId id)
         }
         return;
     }
+
+    // P0-9.1 (2026-09-15): 形状工具 (idx=10) 动态装载 optionPage
+    //   P0-9.2/9.3 同模式 (Pen/Clone/Heal/Patch/RedEye)
+    //   ui 已经有空 page10~15, 我们 replace 它, 避免 addPage 越界
+    if (m_ctx) {
+        if (auto* tool = m_ctx->currentState()) {
+            if (auto* page = tool->optionPage(this)) {
+                page->setObjectName(QString("page%1").arg(idx));
+                // replace 现有 idx 位置
+                QWidget* old = ui->stackedWidget->widget(idx);
+                if (old && old != page) {
+                    ui->stackedWidget->removeWidget(old);
+                    old->deleteLater();
+                }
+                ui->stackedWidget->insertWidget(idx, page);
+            }
+        }
+    }
+
     LOG_DEBUG("[OptionBar] onToolChanged: id={} idx={}", idx, idx);
     ui->stackedWidget->setCurrentIndex(idx);
 }

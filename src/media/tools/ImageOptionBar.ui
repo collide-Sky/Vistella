@@ -26,6 +26,13 @@
    <widget class="QWidget" name="page6"/>
    <widget class="QWidget" name="page7"/>
    <widget class="QWidget" name="page8"/>
+   <widget class="QWidget" name="page9"/>
+   <widget class="QWidget" name="page10"/>
+   <widget class="QWidget" name="page11"/>
+   <widget class="QWidget" name="page12"/>
+   <widget class="QWidget" name="page13"/>
+   <widget class="QWidget" name="page14"/>
+   <widget class="QWidget" name="page15"/>
   </widget>
  </widget>
  <resources/>

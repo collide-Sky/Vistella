@@ -73,6 +73,8 @@ struct Layer {
     QVector<QPainterPath> vectorPaths;
     QVector<QColor>        vectorFillColors;
     QVector<qreal>         vectorStrokeWidths;
+    // P0-9.1 (2026-09-15): vector stroke colors (PS 同款, 每 shape 独立 stroke color)
+    QVector<QColor>        vectorStrokeColors;
 
     // ---- Text payload (kind == Text, Phase 3) ----
     QString text;
