@@ -231,6 +231,9 @@ add_library(vistella_media STATIC
     # P1.3.7 (2026-09-16): ColorRange 颜色 -> 蒙版 (HSV 距离 + Fuzziness 阈值)
     masks/ColorRange.h
     masks/ColorRange.cpp
+    # P1.3.6 (2026-09-16): Refine Edge 4 sliders (smooth/feather/contrast/shift)
+    masks/RefineEdge.h
+    masks/RefineEdge.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
