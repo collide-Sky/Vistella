@@ -1,8 +1,10 @@
 #include "LiquifyDialog.h"
 
+#include "FaceDetector.h"
 #include "LiquifyBackingStore.h"
 #include "LiquifyCanvas.h"
 #include "LiquifyEngine.h"
+#include "LiquifyFaceAware.h"
 #include "LiquifyMesh.h"
 #include "LiquifyOptionsPanel.h"
 
@@ -25,6 +27,12 @@ LiquifyDialog::LiquifyDialog(const QImage& source, QWidget* parent)
     m_engine = new LiquifyEngine;
     m_engine->setStore(m_store);
 
+    // P1.2.7: face detector preloaded with OpenCV's bundled Haar cascade.
+    m_faceDetector = new FaceDetector;
+    m_faceDetector->load(QStringLiteral(
+        "D:/Collide/opencv/build/etc/haarcascades/"
+        "haarcascade_frontalface_default.xml"));
+
     buildUi();
     wireSignals();
 
@@ -34,6 +42,7 @@ LiquifyDialog::LiquifyDialog(const QImage& source, QWidget* parent)
 LiquifyDialog::~LiquifyDialog() {
     delete m_engine;
     delete m_store;
+    delete m_faceDetector;
 }
 
 QImage LiquifyDialog::resultImage() const {
@@ -87,6 +96,11 @@ void LiquifyDialog::wireSignals() {
             this, &LiquifyDialog::onShowFrozenChanged);
     connect(m_panel, &LiquifyOptionsPanel::resetRequested,
             this, &LiquifyDialog::onResetRequested);
+    // P1.2.7: face-aware
+    connect(m_panel, &LiquifyOptionsPanel::detectFacesRequested,
+            this, &LiquifyDialog::onDetectFacesRequested);
+    connect(m_panel, &LiquifyOptionsPanel::applyFaceAwareRequested,
+            this, &LiquifyDialog::onApplyFaceAwareRequested);
 }
 
 void LiquifyDialog::onToolModeChanged(LiquifyToolMode mode) {
@@ -124,6 +138,47 @@ void LiquifyDialog::onResetRequested() {
     if (!m_store || !m_engine) return;
     m_store->resetMesh();
     m_canvas->rebuildCache();
+}
+
+// P1.2.7: face-aware
+
+void LiquifyDialog::onDetectFacesRequested() {
+    if (!m_faceDetector || !m_faceDetector->isLoaded()) {
+        // Detector unavailable; surface a status message via the dialog
+        // title bar so the user knows the cascade is missing.
+        setWindowTitle(tr("Liquify (face detector unavailable)"));
+        return;
+    }
+    const QVector<Face> faces = m_faceDetector->detect(m_source);
+    m_panel->setFaces(faces);
+    setWindowTitle(tr("Liquify (%n face(s) detected)", "", faces.size()));
+}
+
+void LiquifyDialog::onApplyFaceAwareRequested(FaceSliders sliders,
+                                              int faceIndex) {
+    if (!m_store || faceIndex < 0) return;
+    // Pull the selected face from the panel's stored list.
+    const int idx = m_panel->selectedFaceIndex();
+    if (idx < 0) return;
+    // Re-detect so we have the live face data (the panel only stores the
+    // bounding-box summary in its combobox labels).
+    QVector<Face> faces;
+    if (m_faceDetector && m_faceDetector->isLoaded()) {
+        faces = m_faceDetector->detect(m_source);
+    }
+    if (idx >= faces.size()) return;
+    const Face& face = faces[idx];
+
+    LiquifyFaceAware::applyToMesh(m_store->mesh(), face, sliders);
+
+    // Re-render the affected region.
+    QRect dirty;
+    const QImage piece = m_engine->renderDirty(dirty);
+    if (!piece.isNull()) {
+        // Force a full re-render to keep cache consistent (face-aware
+        // touches many vertices across the image).
+        m_canvas->rebuildCache();
+    }
 }
 
 }  // namespace filters::liquify

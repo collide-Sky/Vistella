@@ -5,6 +5,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QGridLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -101,6 +102,40 @@ void LiquifyOptionsPanel::buildUi() {
     overlayRow->addWidget(m_resetBtn);
     root->addLayout(overlayRow);
 
+    // ---- Face-Aware Liquify (P1.2.7) ----
+    auto* faceBox = new QGroupBox(tr("Face-Aware Liquify"), this);
+    auto* faceLay = new QVBoxLayout(faceBox);
+    auto* detectRow = new QHBoxLayout;
+    m_detectFacesBtn = new QPushButton(tr("Detect Faces"), faceBox);
+    m_faceSelector = new QComboBox(faceBox);
+    m_faceSelector->setEnabled(false);
+    detectRow->addWidget(m_detectFacesBtn);
+    detectRow->addWidget(m_faceSelector, 1);
+    faceLay->addLayout(detectRow);
+
+    struct SliderEntry { QSlider** slider; const QString label; };
+    auto addFaceSlider = [&](QVBoxLayout* lay, QSlider** s, const QString& label) {
+        auto* row = new QHBoxLayout;
+        row->addWidget(new QLabel(label, faceBox));
+        *s = new QSlider(Qt::Horizontal, faceBox);
+        (*s)->setRange(-100, 100);
+        (*s)->setValue(0);
+        row->addWidget(*s, 1);
+        lay->addLayout(row);
+    };
+    addFaceSlider(faceLay, &m_eyeSize,    tr("Eye Size:"));
+    addFaceSlider(faceLay, &m_noseSize,   tr("Nose Size:"));
+    addFaceSlider(faceLay, &m_noseWidth,  tr("Nose Width:"));
+    addFaceSlider(faceLay, &m_mouthSize,  tr("Mouth Size:"));
+    addFaceSlider(faceLay, &m_mouthWidth, tr("Mouth Width:"));
+    addFaceSlider(faceLay, &m_faceWidth,  tr("Face Width:"));
+
+    m_applyFaceBtn = new QPushButton(tr("Apply"), faceBox);
+    m_applyFaceBtn->setEnabled(false);
+    faceLay->addWidget(m_applyFaceBtn);
+
+    root->addWidget(faceBox);
+
     root->addStretch(1);
 }
 
@@ -170,6 +205,13 @@ void LiquifyOptionsPanel::wireSignals() {
     connect(m_showMesh, &QCheckBox::toggled, this, &LiquifyOptionsPanel::showMeshChanged);
     connect(m_showFrozen, &QCheckBox::toggled, this, &LiquifyOptionsPanel::showFrozenChanged);
     connect(m_resetBtn, &QPushButton::clicked, this, &LiquifyOptionsPanel::resetRequested);
+
+    // P1.2.7: face-aware
+    connect(m_detectFacesBtn, &QPushButton::clicked, this,
+            &LiquifyOptionsPanel::detectFacesRequested);
+    connect(m_applyFaceBtn, &QPushButton::clicked, this, [this]() {
+        emit applyFaceAwareRequested(faceSliders(), selectedFaceIndex());
+    });
 }
 
 LiquifyToolMode LiquifyOptionsPanel::toolMode() const {
@@ -183,5 +225,46 @@ qreal LiquifyOptionsPanel::brushPressure() const {
 int LiquifyOptionsPanel::meshSize() const { return m_meshSize->value(); }
 bool LiquifyOptionsPanel::showMesh() const { return m_showMesh->isChecked(); }
 bool LiquifyOptionsPanel::showFrozen() const { return m_showFrozen->isChecked(); }
+
+// P1.2.7: face-aware accessors
+
+FaceSliders LiquifyOptionsPanel::faceSliders() const {
+    FaceSliders s;
+    const auto toUnit = [](int v) { return qreal(v) / qreal(100); };
+    s.eyeSize    = toUnit(m_eyeSize->value());
+    s.noseSize   = toUnit(m_noseSize->value());
+    s.noseWidth  = toUnit(m_noseWidth->value());
+    s.mouthSize  = toUnit(m_mouthSize->value());
+    s.mouthWidth = toUnit(m_mouthWidth->value());
+    s.faceWidth  = toUnit(m_faceWidth->value());
+    return s;
+}
+
+int LiquifyOptionsPanel::selectedFaceIndex() const {
+    return m_faceSelector->currentIndex();
+}
+
+void LiquifyOptionsPanel::setFaces(const QVector<Face>& faces) {
+    m_faces = faces;
+    m_faceSelector->clear();
+    if (faces.isEmpty()) {
+        m_faceSelector->addItem(tr("(no faces)"), -1);
+        m_faceSelector->setEnabled(false);
+        m_applyFaceBtn->setEnabled(false);
+        return;
+    }
+    for (int i = 0; i < faces.size(); ++i) {
+        m_faceSelector->addItem(
+            tr("Face %1  (%2, %3, %4 x %5)")
+                .arg(i + 1)
+                .arg(int(faces[i].bbox.x()))
+                .arg(int(faces[i].bbox.y()))
+                .arg(int(faces[i].bbox.width()))
+                .arg(int(faces[i].bbox.height())),
+            i);
+    }
+    m_faceSelector->setEnabled(true);
+    m_applyFaceBtn->setEnabled(true);
+}
 
 }  // namespace filters::liquify

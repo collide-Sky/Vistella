@@ -2357,131 +2357,198 @@ Selected: %1</source>
 <context>
     <name>filters::liquify::LiquifyDialog</name>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyDialog.cpp" line="20"/>
+        <location filename="../src/media/filters/liquify/LiquifyDialog.cpp" line="22"/>
         <source>Liquify</source>
         <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyDialog.cpp" line="149"/>
+        <source>Liquify (face detector unavailable)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/media/filters/liquify/LiquifyDialog.cpp" line="154"/>
+        <source>Liquify (%n face(s) detected)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
     </message>
 </context>
 <context>
     <name>filters::liquify::LiquifyOptionsPanel</name>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="35"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="36"/>
         <source>Forward Warp</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="35"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="36"/>
         <source>W</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="36"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="37"/>
         <source>Reconstruct</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="36"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="37"/>
         <source>R</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="37"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="38"/>
         <source>Smooth</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="37"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="38"/>
         <source>S</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="38"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="39"/>
         <source>Twirl</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="38"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="39"/>
         <source>C</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="39"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="40"/>
         <source>Pucker</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="39"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="40"/>
         <source>B</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="40"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="41"/>
         <source>Bloat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="40"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="41"/>
         <source>V</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="56"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="57"/>
         <source>Brush Size:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="69"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="70"/>
         <source>Pressure:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="82"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="83"/>
         <source>Mesh Size:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="95"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="96"/>
         <source>Show Mesh</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="96"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="97"/>
         <source>Show Frozen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="100"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="101"/>
         <source>Reset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="118"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="106"/>
+        <source>Face-Aware Liquify</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="109"/>
+        <source>Detect Faces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="126"/>
+        <source>Eye Size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="127"/>
+        <source>Nose Size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="128"/>
+        <source>Nose Width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="129"/>
+        <source>Mouth Size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="130"/>
+        <source>Mouth Width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="131"/>
+        <source>Face Width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="133"/>
+        <source>Apply</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="153"/>
         <source>Forward Warp (W)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="119"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="154"/>
         <source>Reconstruct (R)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="120"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="155"/>
         <source>Smooth (S)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="121"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="156"/>
         <source>Twirl (C)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="122"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="157"/>
         <source>Pucker (B)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="123"/>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="158"/>
         <source>Bloat (V)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="251"/>
+        <source>(no faces)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="258"/>
+        <source>Face %1  (%2, %3, %4 x %5)</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

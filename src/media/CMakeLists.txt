@@ -209,6 +209,11 @@ add_library(vistella_media STATIC
     # P1.2.8 (2026-09-16): Liquify undo (LiquifyCommand + ImageEditCommand 集成)
     filters/liquify/LiquifyCommand.h
     filters/liquify/LiquifyCommand.cpp
+    # P1.2.7 (2026-09-16): Liquify face-aware (Haar cascade + 启发式特征点 + 6 sliders 径向 warp)
+    filters/liquify/FaceDetector.h
+    filters/liquify/FaceDetector.cpp
+    filters/liquify/LiquifyFaceAware.h
+    filters/liquify/LiquifyFaceAware.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

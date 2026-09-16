@@ -3,10 +3,12 @@
 #include <QDialog>
 #include <QImage>
 
+#include "LiquifyFaceAware.h"
 #include "LiquifyMesh.h"
 
 namespace filters::liquify {
 
+class FaceDetector;
 class LiquifyBackingStore;
 class LiquifyEngine;
 class LiquifyOptionsPanel;
@@ -41,6 +43,9 @@ private slots:
     void onShowMeshChanged(bool show);
     void onShowFrozenChanged(bool show);
     void onResetRequested();
+    // P1.2.7: face-aware
+    void onDetectFacesRequested();
+    void onApplyFaceAwareRequested(FaceSliders sliders, int faceIndex);
 
 private:
     void buildUi();
@@ -52,6 +57,7 @@ private:
     LiquifyEngine* m_engine = nullptr;
     LiquifyOptionsPanel* m_panel = nullptr;
     LiquifyCanvas* m_canvas = nullptr;
+    FaceDetector* m_faceDetector = nullptr;
 };
 
 }  // namespace filters::liquify
