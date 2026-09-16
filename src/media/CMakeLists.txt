@@ -228,6 +228,9 @@ add_library(vistella_media STATIC
     tools/MaskOptionsPanel.cpp
     tools/MaskBrushCommand.h
     tools/MaskBrushCommand.cpp
+    # P1.3.7 (2026-09-16): ColorRange 颜色 -> 蒙版 (HSV 距离 + Fuzziness 阈值)
+    masks/ColorRange.h
+    masks/ColorRange.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
