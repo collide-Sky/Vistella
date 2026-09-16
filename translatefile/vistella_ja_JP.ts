@@ -140,6 +140,135 @@
     </message>
 </context>
 <context>
+    <name>BrushOptionsPanel</name>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="17"/>
+        <source>Brush Preset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="24"/>
+        <source>硬边圆笔</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="29"/>
+        <source>柔边圆笔</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="34"/>
+        <source>空气笔</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="39"/>
+        <source>粉笔</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="44"/>
+        <source>炭笔</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="52"/>
+        <source>...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="62"/>
+        <source>Settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="68"/>
+        <source>Size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="104"/>
+        <source>Hardness:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="140"/>
+        <source>Opacity:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="176"/>
+        <source>Flow:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="212"/>
+        <source>Spacing:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="248"/>
+        <source>Angle:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="284"/>
+        <source>Roundness:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="323"/>
+        <source>Shape Dynamics</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="329"/>
+        <source>Size Jitter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="350"/>
+        <source>Off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="355"/>
+        <source>Fade</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="360"/>
+        <source>Pen Pressure</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="365"/>
+        <source>Pen Tilt</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="376"/>
+        <source>Scattering</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="382"/>
+        <source>Enable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="389"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="431"/>
+        <source>Amount:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="425"/>
+        <source>Smoothing</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ChannelPathPanel</name>
     <message>
         <location filename="../src/media/docks/ChannelPathPanel.ui" line="32"/>
@@ -1856,6 +1985,55 @@
     <message>
         <location filename="../src/user/UserManager.cpp" line="107"/>
         <source>用户名不能为空</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>brushes::BrushPickerDialog</name>
+    <message>
+        <location filename="../src/media/brushes/BrushPickerDialog.cpp" line="27"/>
+        <source>Brush Preset Picker</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/brushes/BrushPickerDialog.cpp" line="34"/>
+        <source>Filter:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/brushes/BrushPickerDialog.cpp" line="36"/>
+        <source>type preset name...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/brushes/BrushPickerDialog.cpp" line="60"/>
+        <source>Load ABR...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/brushes/BrushPickerDialog.cpp" line="61"/>
+        <source>Cancel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/brushes/BrushPickerDialog.cpp" line="129"/>
+        <source>Load Adobe Brush (.abr)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/brushes/BrushPickerDialog.cpp" line="130"/>
+        <source>Adobe Brush (*.abr);;All Files (*)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/brushes/BrushPickerDialog.cpp" line="132"/>
+        <source>Load ABR - P1.1 follow-up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/brushes/BrushPickerDialog.cpp" line="133"/>
+        <source>ABR parser will be implemented in P1.1 follow-up.
+Selected: %1</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

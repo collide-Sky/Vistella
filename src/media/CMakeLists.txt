@@ -40,6 +40,27 @@ add_library(vistella_media STATIC
     icc/IccTiffEmbed.h
     icc/IccTiffEmbed.cpp
 
+    # P1.1 (2026-09-15): Brush full implementation (PS 同款)
+    #   数据层: BrushSettings/BrushShape/BrushDynamics + BrushPreset/Manager
+    brushes/BrushSettings.h
+    brushes/BrushDynamics.h
+    brushes/BrushShape.h
+    brushes/BrushPreset.h
+    brushes/BrushPreset.cpp
+    #   引擎层: stamp 生成 + paint + scatter/texture/dual
+    brushes/BrushEngine.h
+    brushes/BrushEngine.cpp
+    #   UX 层: 压感曲线 + 笔触平滑 + PickerDialog
+    brushes/PressureCurve.h
+    brushes/PressureCurve.cpp
+    brushes/StrokeSmoother.h
+    brushes/StrokeSmoother.cpp
+    brushes/BrushPickerDialog.h
+    brushes/BrushPickerDialog.cpp
+    #   ABR (Adobe Brush) 导入 - P1.1 (ABRv6 computed brush)
+    brushes/AbrParser.h
+    brushes/AbrParser.cpp
+
     # F-B1 (2026-09-08): Mediator 模式拆 3 个, ToolMediator 负责工具切换
     #   一个类一个方向, 避免 god class (user 拍板)
     mediators/ToolMediator.h
@@ -102,6 +123,11 @@ add_library(vistella_media STATIC
     tools/ImageOptionBar.h
     tools/ImageOptionBar.cpp
     tools/ImageOptionBar.ui
+
+    # P1.1 (2026-09-15): Brush full implementation - Brush 二级工具栏 (PS 风格 options panel)
+    tools/BrushOptionsPanel.h
+    tools/BrushOptionsPanel.cpp
+    tools/BrushOptionsPanel.ui
 
     # F-G (2026-09-09): RightPanelStack 右侧 panel 3 dock (颜色/属性/图层)
     docks/RightPanelStack.h
