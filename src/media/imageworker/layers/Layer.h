@@ -34,6 +34,8 @@
 #include <QColor>
 #include <QPainterPath>
 
+#include "LayerMask.h"
+
 #include <memory>
 
 namespace layers {
@@ -93,6 +95,9 @@ struct Layer {
     // ---- 蒙版 (Phase 4 实现) ----
     cv::Mat layerMask;            // 灰度图 8U, 0=透明 255=不透明
     bool    maskEnabled = false;
+
+    // P1.3.2 (2026-09-16): extended mask state (pixel/vector/density/feather/invert)
+    LayerMask mask;               // new structured mask (additive to layerMask)
 
     // ---- 构造 ----
     Layer() = default;

@@ -120,6 +120,17 @@ public:
     bool clearMask(int index);
     bool enableMask(int index, bool enabled);
 
+    // P1.3.2 (2026-09-16): 扩展 LayerMask 接口 (pixel/vector/density/feather/invert)
+    //   这些方法直接操作 layer.mask struct, 与上面 3 个旧方法互不冲突
+    bool addPixelMask(int index, const cv::Mat& grayMask);
+    bool addVectorMask(int index, const QVector<QPainterPath>& paths);
+    bool clearMaskFull(int index);  // clear full struct (vs old clearMask)
+    bool setMaskEnabled(int index, bool enabled);
+    bool setMaskDensity(int index, qreal density);
+    bool setMaskFeather(int index, qreal featherPx);
+    bool setMaskInvert(int index, bool invert);
+    const LayerMask* maskAt(int index) const;
+
     // ---- 合并 ----
     // 向下合并: 把 index 上面的 layer 合并到 index 位置的 layer, 上面删
     //   例: [A, B, C] 调 mergeDown(1) → B 合并到 A → [A+C, C]

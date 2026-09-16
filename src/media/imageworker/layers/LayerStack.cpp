@@ -481,6 +481,96 @@ bool LayerStack::enableMask(int index, bool enabled)
 }
 
 // =====================================================================
+//  P1.3.2 (2026-09-16): 扩展 LayerMask struct 接口
+// =====================================================================
+
+bool LayerStack::addPixelMask(int index, const cv::Mat& grayMask)
+{
+    auto l = at(index);
+    if (!l || grayMask.empty()) return false;
+    l->mask.kind = LayerMask::Pixel;
+    l->mask.pixel = grayMask.clone();
+    l->mask.enabled = true;
+    l->mask.density = 1.0;
+    l->mask.feather = 0.0;
+    l->mask.invert = false;
+    emit layerChanged(index);
+    return true;
+}
+
+bool LayerStack::addVectorMask(int index, const QVector<QPainterPath>& paths)
+{
+    auto l = at(index);
+    if (!l || paths.isEmpty()) return false;
+    l->mask.kind = LayerMask::Vector;
+    l->mask.vectorPaths = paths;
+    l->mask.enabled = true;
+    l->mask.density = 1.0;
+    l->mask.feather = 0.0;
+    l->mask.invert = false;
+    emit layerChanged(index);
+    return true;
+}
+
+bool LayerStack::clearMaskFull(int index)
+{
+    auto l = at(index);
+    if (!l) return false;
+    const bool had = l->mask.isActive() || l->mask.hasData();
+    l->mask.clear();
+    if (had) emit layerChanged(index);
+    return had;
+}
+
+bool LayerStack::setMaskEnabled(int index, bool enabled)
+{
+    auto l = at(index);
+    if (!l || !l->mask.hasData()) return false;
+    if (l->mask.enabled == enabled) return false;
+    l->mask.enabled = enabled;
+    emit layerChanged(index);
+    return true;
+}
+
+bool LayerStack::setMaskDensity(int index, qreal density)
+{
+    auto l = at(index);
+    if (!l) return false;
+    density = qBound(qreal(0.0), density, qreal(1.0));
+    if (qFuzzyCompare(l->mask.density, density)) return false;
+    l->mask.density = density;
+    emit layerChanged(index);
+    return true;
+}
+
+bool LayerStack::setMaskFeather(int index, qreal featherPx)
+{
+    auto l = at(index);
+    if (!l) return false;
+    featherPx = qMax(qreal(0.0), featherPx);
+    if (qFuzzyCompare(l->mask.feather, featherPx)) return false;
+    l->mask.feather = featherPx;
+    emit layerChanged(index);
+    return true;
+}
+
+bool LayerStack::setMaskInvert(int index, bool invert)
+{
+    auto l = at(index);
+    if (!l) return false;
+    if (l->mask.invert == invert) return false;
+    l->mask.invert = invert;
+    emit layerChanged(index);
+    return true;
+}
+
+const LayerMask* LayerStack::maskAt(int index) const
+{
+    auto l = at(index);
+    return l ? &l->mask : nullptr;
+}
+
+// =====================================================================
 //  阶段 1 W4.4 Phase 5 (2026-09-04): 智能对象扩展
 // =====================================================================
 

@@ -124,3 +124,5 @@ add_vistella_test(tst_LiquifyEngine)
 add_vistella_test(tst_LiquifyFace)
 # P1.3.1 (2026-09-16): LayerMask 数据 + Renderer (12 用例: pixel/vector/density/feather/invert)
 add_vistella_test(tst_LayerMaskStruct)
+# P1.3.2+8 (2026-09-16): LayerStack mask 集成 + LayerMaskCommand undo
+add_vistella_test(tst_LayerMaskIntegration)

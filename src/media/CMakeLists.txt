@@ -218,6 +218,9 @@ add_library(vistella_media STATIC
     imageworker/layers/LayerMask.h
     imageworker/layers/LayerMaskRenderer.h
     imageworker/layers/LayerMaskRenderer.cpp
+    # P1.3.2+8 (2026-09-16): LayerStack 扩展接口 + LayerMaskCommand undo
+    imageworker/layers/LayerMaskCommand.h
+    imageworker/layers/LayerMaskCommand.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
