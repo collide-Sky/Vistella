@@ -214,6 +214,10 @@ add_library(vistella_media STATIC
     filters/liquify/FaceDetector.cpp
     filters/liquify/LiquifyFaceAware.h
     filters/liquify/LiquifyFaceAware.cpp
+    # P1.3.1 (2026-09-16): LayerMask 数据结构 (pixel + vector + density + feather + invert)
+    imageworker/layers/LayerMask.h
+    imageworker/layers/LayerMaskRenderer.h
+    imageworker/layers/LayerMaskRenderer.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
