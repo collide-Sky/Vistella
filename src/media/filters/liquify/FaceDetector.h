@@ -8,61 +8,81 @@
 
 namespace filters::liquify {
 
-// One detected face + heuristically estimated feature points.
+// One detected face + 106-point landmark anchor subset.
 //
-// P1.2.7 design note (v2):
-//   Upgraded from bbox-only heuristic to Haar cascade face + eye detection.
-//   The eye cascade is run on the face ROI to locate the actual left/right
-//   eye midpoints; remaining anchors (nose tip, mouth center, mouth
-//   corners, chin, forehead) are placed at standard face proportions
-//   adjusted by the now-known eye inter-pupillary distance. This delivers
-//   noticeably better anchor precision than bbox-only heuristic, without
-//   requiring any external landmark model (dlib or ONNX PFLD).
+// v3 (P1.2.7 upgrade v2): uses InsightFace buffalo_l ONNX models for both
+// detection (det_10g.onnx, RetinaFace-10GF) and landmark localisation
+// (2d106det.onnx, 106-point 2D).
+//
+// Anchor mapping (InsightFace 106-point indices):
+//   leftEyeCenter    = average of indices 42..47
+//   rightEyeCenter   = average of indices 36..41
+//   noseTip          = index 33
+//   mouthCenter      = average of indices 68..81 (inner lip ring)
+//   leftMouthCorner  = index 48
+//   rightMouthCorner = index 54
+//   chin             = index 16 (jawline lowest)
+//   forehead         = index 18 (top of eyebrow start, approximate)
 struct Face {
     QRectF bbox;                  // tight bounding box (image coordinates)
-    QPointF leftEyeCenter;        // mid of left eye
-    QPointF rightEyeCenter;       // mid of right eye
-    QPointF noseTip;              // tip of the nose
-    QPointF mouthCenter;          // midpoint between mouth corners
+    QPointF leftEyeCenter;
+    QPointF rightEyeCenter;
+    QPointF noseTip;
+    QPointF mouthCenter;
     QPointF leftMouthCorner;
     QPointF rightMouthCorner;
     QPointF chin;
-    // Source of each eye anchor: 0 = Haar eye cascade, 1 = bbox heuristic
-    // (used when the eye cascade missed both eyes for this face).
-    int     leftEyeSource  = 1;
-    int     rightEyeSource = 1;
+    QPointF forehead;
+    // 0 = InsightFace DNN, 1 = bbox heuristic fallback.
+    int     source = 0;
     float   confidence = 1.0f;
 };
 
-// OpenCV Haar cascade face + eye detector + heuristic feature-point
-// estimator.
+namespace landmark_indices {
+constexpr int FOREHEAD          = 18;
+constexpr int LEFT_EYE_FIRST    = 42;
+constexpr int LEFT_EYE_LAST     = 47;
+constexpr int RIGHT_EYE_FIRST   = 36;
+constexpr int RIGHT_EYE_LAST    = 41;
+constexpr int NOSE_TIP          = 33;
+constexpr int MOUTH_LEFT        = 48;
+constexpr int MOUTH_RIGHT       = 54;
+constexpr int MOUTH_INNER_FIRST = 68;
+constexpr int MOUTH_INNER_LAST  = 81;
+constexpr int CHIN              = 16;
+}  // namespace landmark_indices
+
+// InsightFace buffalo_l face detector + landmark localiser.
 //
-// Loads two cascades:
-//   1. Frontal face detector (haarcascade_frontalface_default.xml)
-//   2. Eye detector         (haarcascade_eye.xml)
+// Loads two ONNX models from InsightFace's buffalo_l pack:
+//   1. det_10g.onnx    - face detection (RetinaFace-10GF)
+//   2. 2d106det.onnx   - 106-point landmark detection
 //
-// On detect(), each Face's left/right eye centers are populated from the
-// eye cascade. The remaining anchors (nose tip, mouth center, mouth
-// corners, chin, forehead) fall back to standard face proportions
-// relative to the bbox + the now-known eye midpoint. This gives markedly
-// better anchor precision than bbox-only heuristics, without needing any
-// external landmark model.
+// Both models are loaded via OpenCV's DNN module (cv::dnn::Net). The
+// detector runs end-to-end:
 //
-// If the eye cascade fails to load, the detector degrades gracefully to
-// bbox-only heuristic for every anchor.
+//   QImage -> preprocess -> detectNet -> boxes
+//            for each box:
+//                crop -> preprocess -> landmarkNet -> 106 x,y in [0,1]
+//                map back to image coordinates -> Face (8 anchors)
+//
+// If only the detection model is available (no landmark model), faces are
+// still detected but anchors fall back to bbox heuristic.
 class FaceDetector {
 public:
     FaceDetector();
     ~FaceDetector();
 
-    bool loadFaceCascade(const QString& xmlPath);
-    bool loadEyeCascade(const QString& xmlPath);
-    bool isLoaded() const;
-    bool hasEyeCascade() const;
-
-    // Convenience: load both cascades using the local OpenCV default paths
-    // (D:/Collide/opencv/build/etc/haarcascades/).
+    // Convenience: load both buffalo_l ONNX models from the project's
+    // third_party/landmark folder.
     bool loadDefaults();
+
+    // Load individual models. Both default to third_party/landmark/.
+    bool loadDetectModel(const QString& onnxPath);
+    bool loadLandmarkModel(const QString& onnxPath);
+
+    bool isLoaded() const;
+    bool hasLandmarkModel() const;
 
     // Detect faces in `image`. minSize is the smallest face to accept
     // (avoids spurious tiny matches); default 60 px.

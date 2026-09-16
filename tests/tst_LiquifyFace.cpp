@@ -2,12 +2,12 @@
 //
 // Coverage:
 //  1.  FaceDetector::isLoaded() false before load.
-//  2.  FaceDetector::loadFaceCascade succeeds with valid Haar xml.
-//  3.  FaceDetector::loadEyeCascade succeeds with valid Haar xml.
+//  2.  FaceDetector::loadDetectModel loads det_10g.onnx successfully.
+//  3.  FaceDetector::loadLandmarkModel loads 2d106det.onnx successfully.
 //  4.  FaceDetector::loadDefaults loads both.
 //  5.  FaceDetector::detect() on synthetic image does not crash.
-//  6.  Feature points lie inside the bbox and follow standard proportions.
-//  7.  Face struct has eyeSource fields (used by v2 to flag heuristic vs Haar).
+//  6.  Feature points lie inside the bbox.
+//  7.  Face struct has forehead anchor (new in v3).
 //  8.  LiquifyFaceAware::warpSize with zero slider produces no displacement.
 //  9.  warpSize positive slider moves a vertex at the center outward.
 // 10.  warpSize negative slider moves a vertex at the center inward.
@@ -42,25 +42,23 @@ private:
         return img;
     }
 
-    static QString faceCascadePath() {
+    static QString detectModelPath() {
         return QStringLiteral(
-            "D:/Collide/opencv/build/etc/haarcascades/"
-            "haarcascade_frontalface_default.xml");
+            "D:/Collide/MyCode/QT6Projects/MultiDoc/third_party/landmark/det_10g.onnx");
     }
-    static QString eyeCascadePath() {
+    static QString landmarkModelPath() {
         return QStringLiteral(
-            "D:/Collide/opencv/build/etc/haarcascades/"
-            "haarcascade_eye.xml");
+            "D:/Collide/MyCode/QT6Projects/MultiDoc/third_party/landmark/2d106det.onnx");
     }
 
 private slots:
     void detectorNotLoadedByDefault();
-    void detectorFaceLoadSucceeds();
-    void detectorEyeLoadSucceeds();
+    void detectorDetectLoadSucceeds();
+    void detectorLandmarkLoadSucceeds();
     void detectorDefaultsLoad();
     void detectorDetectsFace();
     void featurePointsInsideBbox();
-    void faceStructHasEyeSourceFields();
+    void faceStructHasForeheadAnchor();
     void warpSizeZeroIsNoop();
     void warpSizePositiveEnlarges();
     void warpSizeNegativeShrinks();
@@ -75,42 +73,41 @@ void TestLiquifyFace::detectorNotLoadedByDefault() {
     QVERIFY(!d.isLoaded());
 }
 
-void TestLiquifyFace::detectorFaceLoadSucceeds() {
+void TestLiquifyFace::detectorDetectLoadSucceeds() {
     FaceDetector d;
-    QVERIFY(d.loadFaceCascade(faceCascadePath()));
+    QVERIFY(d.loadDetectModel(detectModelPath()));
     QVERIFY(d.isLoaded());
 }
 
-void TestLiquifyFace::detectorEyeLoadSucceeds() {
+void TestLiquifyFace::detectorLandmarkLoadSucceeds() {
     FaceDetector d;
-    d.loadFaceCascade(faceCascadePath());
-    QVERIFY(d.loadEyeCascade(eyeCascadePath()));
-    QVERIFY(d.hasEyeCascade());
+    QVERIFY(d.loadLandmarkModel(landmarkModelPath()));
+    QVERIFY(d.hasLandmarkModel());
 }
 
 void TestLiquifyFace::detectorDefaultsLoad() {
     FaceDetector d;
     QVERIFY(d.loadDefaults());
     QVERIFY(d.isLoaded());
+    // Landmark model should also load from the default location.
+    QVERIFY(d.hasLandmarkModel());
 }
 
 void TestLiquifyFace::detectorDetectsFace() {
     FaceDetector d;
     if (!d.loadDefaults()) {
-        QSKIP("Haar cascades not present at expected paths");
+        QSKIP("ONNX models not present at third_party/landmark/");
     }
     const QVector<Face> faces = d.detect(makeFaceishImage());
     Q_UNUSED(faces);  // synthetic image -- accept any count
 }
 
-void TestLiquifyFace::faceStructHasEyeSourceFields() {
+void TestLiquifyFace::faceStructHasForeheadAnchor() {
     Face f;
-    // Defaults: heuristic (1) for both eyes.
-    QCOMPARE(f.leftEyeSource, 1);
-    QCOMPARE(f.rightEyeSource, 1);
-    // Caller can flag a successful Haar detection (0 = Haar).
-    f.leftEyeSource = 0;
-    QCOMPARE(f.leftEyeSource, 0);
+    // forehead defaults to (0,0); caller assigns it after detection.
+    QCOMPARE(f.forehead, QPointF(0, 0));
+    f.forehead = QPointF(50, 10);
+    QCOMPARE(f.forehead, QPointF(50, 10));
 }
 
 void TestLiquifyFace::featurePointsInsideBbox() {
