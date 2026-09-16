@@ -91,6 +91,12 @@ signals:
     void addMaskRequested(int index, const QString &maskPath);
     void clearMaskRequested(int index);
     void toggleMaskRequested(int index, bool enabled);
+    // P1.3.3 (2026-09-16): extended mask operations.
+    void addPixelMaskFromSelectionRequested(int index);
+    void addVectorMaskRequested(int index);
+    void setMaskDensityRequested(int index, qreal density);
+    void setMaskFeatherRequested(int index, qreal featherPx);
+    void setMaskInvertRequested(int index, bool invert);
     // Phase 5 (2026-09-04): 智能对象扩展信号
     void editSmartObjectSourceRequested(int index);   // QDesktopServices 打开源文件
     void refreshSmartObjectRequested(int index);

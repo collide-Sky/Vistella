@@ -850,6 +850,17 @@ void LayerPanel::onContextMenu(const QPoint &pos)
     QAction *actDup = menu.addAction(tr("复制"));
     QAction *actMerge = menu.addAction(tr("向下合并"));
     QAction *actDel = menu.addAction(tr("删除"));
+    menu.addSeparator();
+    // P1.3.3 (2026-09-16): mask context entries.
+    QAction *actAddPixel = menu.addAction(tr("添加像素蒙版 (从选区)"));
+    QAction *actAddVector = menu.addAction(tr("添加矢量蒙版"));
+    QAction *actClearMask = menu.addAction(tr("清除蒙版"));
+    QAction *actToggleMask = menu.addAction(l->mask.enabled
+                                            ? tr("禁用蒙版")
+                                            : tr("启用蒙版"));
+    QAction *actInvertMask = menu.addAction(l->mask.invert
+                                            ? tr("取消反转蒙版")
+                                            : tr("反转蒙版"));
 
     QAction *chosen = menu.exec(m_list->mapToGlobal(pos));
     if (!chosen) return;
@@ -869,6 +880,16 @@ void LayerPanel::onContextMenu(const QPoint &pos)
         if (index > 0) emit mergeDownRequested(index);
     } else if (chosen == actDel) {
         emit deleteLayerRequested(index);
+    } else if (chosen == actAddPixel) {
+        emit addPixelMaskFromSelectionRequested(index);
+    } else if (chosen == actAddVector) {
+        emit addVectorMaskRequested(index);
+    } else if (chosen == actClearMask) {
+        emit clearMaskRequested(index);
+    } else if (chosen == actToggleMask) {
+        emit toggleMaskRequested(index, !l->mask.enabled);
+    } else if (chosen == actInvertMask) {
+        emit setMaskInvertRequested(index, !l->mask.invert);
     }
 }
 
