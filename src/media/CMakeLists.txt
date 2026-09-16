@@ -190,6 +190,15 @@ add_library(vistella_media STATIC
     transform/TransformMath.cpp
     transform/TransformCommand.h
     transform/TransformCommand.cpp
+
+    # P1.2.1 (2026-09-16): Liquify mesh data structure (网格变形场 + 6 工具数学)
+    filters/liquify/LiquifyMesh.h
+    filters/liquify/LiquifyMesh.cpp
+    # P1.2.2 (2026-09-16): Liquify backing store + engine (反向 warp + freeze + 增量渲染)
+    filters/liquify/LiquifyBackingStore.h
+    filters/liquify/LiquifyBackingStore.cpp
+    filters/liquify/LiquifyEngine.h
+    filters/liquify/LiquifyEngine.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
