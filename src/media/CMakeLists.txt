@@ -199,6 +199,16 @@ add_library(vistella_media STATIC
     filters/liquify/LiquifyBackingStore.cpp
     filters/liquify/LiquifyEngine.h
     filters/liquify/LiquifyEngine.cpp
+    # P1.2.5+6 (2026-09-16): Liquify UI (OptionsPanel + Canvas + Dialog + 冻结画笔)
+    filters/liquify/LiquifyOptionsPanel.h
+    filters/liquify/LiquifyOptionsPanel.cpp
+    filters/liquify/LiquifyCanvas.h
+    filters/liquify/LiquifyCanvas.cpp
+    filters/liquify/LiquifyDialog.h
+    filters/liquify/LiquifyDialog.cpp
+    # P1.2.8 (2026-09-16): Liquify undo (LiquifyCommand + ImageEditCommand 集成)
+    filters/liquify/LiquifyCommand.h
+    filters/liquify/LiquifyCommand.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

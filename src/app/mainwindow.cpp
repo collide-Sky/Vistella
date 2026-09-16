@@ -10,6 +10,8 @@
 #include "../media/filters/FilterFactory.h"
 #include "../media/filters/FilterCommand.h"
 #include "../media/filters/FilterDialog.h"
+#include "../media/filters/liquify/LiquifyDialog.h"
+#include "../media/filters/liquify/LiquifyCommand.h"
 #include "logger.h"
 #include "recentmanager.h"
 #include "settingsdialog.h"
@@ -549,6 +551,12 @@ void MainWindow::buildActions()
     QAction *aFilterColorAdjust = mFilter->addAction(tr("色彩调整..."));
     connect(aFilterColorAdjust, &QAction::triggered, this, [this]{
         onFilterMenuTriggered(filter::FilterKind::PhotoFilter);
+    });
+    mFilter->addSeparator();
+    // P1.2.5+6+8 (2026-09-16): Liquify 滤镜 (交互式液化: 6 工具 + 网格 + 冻结 + 撤销)
+    QAction *aFilterLiquify = mFilter->addAction(tr("液化..."));
+    connect(aFilterLiquify, &QAction::triggered, this, [this]{
+        onLiquifyTriggered();
     });
 }
 
@@ -1656,6 +1664,54 @@ void MainWindow::onFilterMenuTriggered(filter::FilterKind kind)
         statusBar()->showMessage(
             tr("已应用 %1 (入撤销栈)").arg(QString::fromUtf8(filter::filterName(kind))),
             2000);
+    });
+    dlg->show();
+}
+
+// P1.2.5+6+8 (2026-09-16): 启动 Liquify 交互式液化对话框
+//   - 拿当前图像 -> 开 LiquifyDialog (modal)
+//   - OK: 拿 resultImage, push LiquifyCommand (入撤销栈)
+void MainWindow::onLiquifyTriggered()
+{
+    auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!img) {
+        statusBar()->showMessage(tr("当前页面不可应用 Liquify (需要图像窗口)"), 2000);
+        return;
+    }
+
+    // 取当前图像 (QImage from m_current cv::Mat)
+    const QImage source = img->currentImageAsQImage();
+    if (source.isNull()) {
+        statusBar()->showMessage(tr("Liquify: 当前图像为空"), 2000);
+        return;
+    }
+
+    auto *dlg = new filters::liquify::LiquifyDialog(source, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dlg, &QDialog::accepted, this, [this, dlg, img, source]() {
+        const QImage result = dlg->resultImage();
+        if (result.isNull()) return;
+
+        // before = current cv::Mat (clone), after = QImage -> cv::Mat
+        const cv::Mat before = img->currentImage().clone();
+        cv::Mat after;
+        if (result.format() == QImage::Format_ARGB32 || result.format() == QImage::Format_RGB32) {
+            after = cv::Mat(result.height(), result.width(), CV_8UC4,
+                             (void*)result.bits(), result.bytesPerLine()).clone();
+        } else if (result.format() == QImage::Format_RGB888) {
+            after = cv::Mat(result.height(), result.width(), CV_8UC3,
+                             (void*)result.bits(), result.bytesPerLine()).clone();
+        } else {
+            const QImage converted = result.convertToFormat(QImage::Format_ARGB32);
+            after = cv::Mat(converted.height(), converted.width(), CV_8UC4,
+                             (void*)converted.bits(), converted.bytesPerLine()).clone();
+        }
+
+        if (after.empty()) return;
+
+        auto *cmd = new filters::liquify::LiquifyCommand(img, before, after);
+        img->undoStack()->push(cmd);
+        statusBar()->showMessage(tr("已应用 Liquify (入撤销栈)"), 2000);
     });
     dlg->show();
 }

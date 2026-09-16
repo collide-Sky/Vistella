@@ -56,6 +56,10 @@ public:
     void setVertexDisplacement(int row, int col, const QPointF& disp);
     void addVertexDisplacement(int row, int col, const QPointF& delta);
 
+    // Direct index-based access (for overlays / iteration).
+    const QPointF& vertexPositionAt(int idx) const { return m_vertices[idx].position; }
+    QPointF vertexDisplacementAt(int idx) const { return m_vertices[idx].displacement; }
+
     // Triangle vertex lookup.
     // triangleIdx in [0, triangleCount()), localIdx in {0, 1, 2}.
     // Returns the global vertex row*cols+col for that corner.
