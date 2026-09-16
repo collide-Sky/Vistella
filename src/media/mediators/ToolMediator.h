@@ -53,6 +53,8 @@ enum class ToolId {
     Heal        = 13,
     Patch       = 14,
     RedEye      = 15,
+    // P1.3.4 (2026-09-16): Mask edit brush (图层蒙版画笔)
+    MaskBrush   = 16,
 };
 
 class ToolMediator : public QObject

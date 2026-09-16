@@ -126,3 +126,5 @@ add_vistella_test(tst_LiquifyFace)
 add_vistella_test(tst_LayerMaskStruct)
 # P1.3.2+8 (2026-09-16): LayerStack mask 集成 + LayerMaskCommand undo
 add_vistella_test(tst_LayerMaskIntegration)
+# P1.3.4 (2026-09-16): MaskBrushTool 单元测试 (stamp falloff + reveal/hide + bounds)
+add_vistella_test(tst_MaskBrush)
