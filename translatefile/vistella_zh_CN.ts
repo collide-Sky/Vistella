@@ -1645,6 +1645,11 @@
         <source>Liquify</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location filename="../src/media/tools/MaskBrushCommand.cpp" line="17"/>
+        <source>Mask Brush Stroke</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>RecentListModel</name>
@@ -2362,12 +2367,12 @@ Selected: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/liquify/LiquifyDialog.cpp" line="149"/>
+        <location filename="../src/media/filters/liquify/LiquifyDialog.cpp" line="148"/>
         <source>Liquify (face detector unavailable)</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/media/filters/liquify/LiquifyDialog.cpp" line="154"/>
+        <location filename="../src/media/filters/liquify/LiquifyDialog.cpp" line="153"/>
         <source>Liquify (%n face(s) detected)</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -2549,6 +2554,39 @@ Selected: %1</source>
     <message>
         <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="258"/>
         <source>Face %1  (%2, %3, %4 x %5)</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>tools::MaskOptionsPanel</name>
+    <message>
+        <location filename="../src/media/tools/MaskOptionsPanel.cpp" line="34"/>
+        <source>Size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MaskOptionsPanel.cpp" line="35"/>
+        <source>Hardness:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MaskOptionsPanel.cpp" line="36"/>
+        <source>Opacity:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MaskOptionsPanel.cpp" line="37"/>
+        <source>Flow:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MaskOptionsPanel.cpp" line="40"/>
+        <source>Reveal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MaskOptionsPanel.cpp" line="43"/>
+        <source>Protect</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
