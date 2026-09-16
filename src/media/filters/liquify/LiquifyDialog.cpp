@@ -27,11 +27,10 @@ LiquifyDialog::LiquifyDialog(const QImage& source, QWidget* parent)
     m_engine = new LiquifyEngine;
     m_engine->setStore(m_store);
 
-    // P1.2.7: face detector preloaded with OpenCV's bundled Haar cascade.
+    // P1.2.7: face detector preloaded with OpenCV's bundled Haar cascades.
+    //   v2: face + eye cascades for accurate eye anchor positions.
     m_faceDetector = new FaceDetector;
-    m_faceDetector->load(QStringLiteral(
-        "D:/Collide/opencv/build/etc/haarcascades/"
-        "haarcascade_frontalface_default.xml"));
+    m_faceDetector->loadDefaults();
 
     buildUi();
     wireSignals();

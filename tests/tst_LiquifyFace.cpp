@@ -1,19 +1,20 @@
 // FaceDetector + LiquifyFaceAware unit tests.
 //
 // Coverage:
-//  1.  FaceDetector::isLoaded() false before load().
-//  2.  FaceDetector::load() succeeds with valid Haar cascade.
-//  3.  FaceDetector::detect() on a synthetic image containing a face-like
-//      rectangle returns >= 1 face (the Haar detector is permissive).
-//  4.  Feature points lie inside the bbox and follow standard proportions.
-//  5.  LiquifyFaceAware::warpSize with zero slider produces no displacement.
-//  6.  warpSize positive slider moves a vertex at the center outward.
-//  7.  warpSize negative slider moves a vertex at the center inward.
-//  8.  warpSize leaves vertices outside the radius untouched.
-//  9.  warpWidth positive slider widens horizontally (y unchanged).
-// 10.  warpWidth leaves vertical displacement at zero.
-// 11.  warpWidthPair operates on both sides of the face.
-// 12.  applyToMesh with all sliders at zero is a no-op.
+//  1.  FaceDetector::isLoaded() false before load.
+//  2.  FaceDetector::loadFaceCascade succeeds with valid Haar xml.
+//  3.  FaceDetector::loadEyeCascade succeeds with valid Haar xml.
+//  4.  FaceDetector::loadDefaults loads both.
+//  5.  FaceDetector::detect() on synthetic image does not crash.
+//  6.  Feature points lie inside the bbox and follow standard proportions.
+//  7.  Face struct has eyeSource fields (used by v2 to flag heuristic vs Haar).
+//  8.  LiquifyFaceAware::warpSize with zero slider produces no displacement.
+//  9.  warpSize positive slider moves a vertex at the center outward.
+// 10.  warpSize negative slider moves a vertex at the center inward.
+// 11.  warpSize leaves vertices outside the radius untouched.
+// 12.  warpWidth positive slider widens horizontally (y unchanged).
+// 13.  warpWidthPair operates on both sides of the face.
+// 14.  applyToMesh with all sliders at zero is a no-op.
 
 #include <QtTest>
 #include <QtMath>
@@ -28,41 +29,38 @@ class TestLiquifyFace : public QObject {
     Q_OBJECT
 
 private:
-    // Build a 200x200 ARGB image with a single dark rectangle in the middle
-    // that the Haar detector sometimes recognises as a face. The detector
-    // is permissive so the test is forgiving.
     static QImage makeFaceishImage() {
         QImage img(200, 200, QImage::Format_ARGB32);
         img.fill(QColor(220, 220, 220, 255));
-        // Draw a darker rectangle.
         for (int y = 50; y < 150; ++y) {
             for (int x = 60; x < 140; ++x) {
                 img.setPixelColor(x, y, QColor(80, 80, 80, 255));
             }
         }
-        // Two small "eye" highlights.
         img.setPixelColor(80, 80, QColor(220, 220, 220, 255));
         img.setPixelColor(120, 80, QColor(220, 220, 220, 255));
         return img;
     }
 
-    // Path to the bundled Haar cascade from the local OpenCV install.
-    static QString cascadePath() {
+    static QString faceCascadePath() {
         return QStringLiteral(
             "D:/Collide/opencv/build/etc/haarcascades/"
             "haarcascade_frontalface_default.xml");
     }
-
-    static bool approxPoint(const QPointF& a, const QPointF& b, qreal tol = 1.5) {
-        return std::fabs(a.x() - b.x()) <= tol
-            && std::fabs(a.y() - b.y()) <= tol;
+    static QString eyeCascadePath() {
+        return QStringLiteral(
+            "D:/Collide/opencv/build/etc/haarcascades/"
+            "haarcascade_eye.xml");
     }
 
 private slots:
     void detectorNotLoadedByDefault();
-    void detectorLoadSucceeds();
+    void detectorFaceLoadSucceeds();
+    void detectorEyeLoadSucceeds();
+    void detectorDefaultsLoad();
     void detectorDetectsFace();
     void featurePointsInsideBbox();
+    void faceStructHasEyeSourceFields();
     void warpSizeZeroIsNoop();
     void warpSizePositiveEnlarges();
     void warpSizeNegativeShrinks();
@@ -77,21 +75,42 @@ void TestLiquifyFace::detectorNotLoadedByDefault() {
     QVERIFY(!d.isLoaded());
 }
 
-void TestLiquifyFace::detectorLoadSucceeds() {
+void TestLiquifyFace::detectorFaceLoadSucceeds() {
     FaceDetector d;
-    QVERIFY(d.load(cascadePath()));
+    QVERIFY(d.loadFaceCascade(faceCascadePath()));
+    QVERIFY(d.isLoaded());
+}
+
+void TestLiquifyFace::detectorEyeLoadSucceeds() {
+    FaceDetector d;
+    d.loadFaceCascade(faceCascadePath());
+    QVERIFY(d.loadEyeCascade(eyeCascadePath()));
+    QVERIFY(d.hasEyeCascade());
+}
+
+void TestLiquifyFace::detectorDefaultsLoad() {
+    FaceDetector d;
+    QVERIFY(d.loadDefaults());
     QVERIFY(d.isLoaded());
 }
 
 void TestLiquifyFace::detectorDetectsFace() {
     FaceDetector d;
-    if (!d.load(cascadePath())) {
-        QSKIP("Haar cascade not present at the expected path");
+    if (!d.loadDefaults()) {
+        QSKIP("Haar cascades not present at expected paths");
     }
     const QVector<Face> faces = d.detect(makeFaceishImage());
-    // The synthetic image is not a real face, so we accept 0 or 1+ matches.
-    // (Test is structured to pass either way; what matters is "no crash".)
-    Q_UNUSED(faces);
+    Q_UNUSED(faces);  // synthetic image -- accept any count
+}
+
+void TestLiquifyFace::faceStructHasEyeSourceFields() {
+    Face f;
+    // Defaults: heuristic (1) for both eyes.
+    QCOMPARE(f.leftEyeSource, 1);
+    QCOMPARE(f.rightEyeSource, 1);
+    // Caller can flag a successful Haar detection (0 = Haar).
+    f.leftEyeSource = 0;
+    QCOMPARE(f.leftEyeSource, 0);
 }
 
 void TestLiquifyFace::featurePointsInsideBbox() {
