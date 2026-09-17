@@ -43,6 +43,11 @@ public:
     // 窗口模式 (2026-09-09 简单状态机: 1 mode + 1 size)
     void setMode(WindowMode m);
     void loadWindowState();
+    // Apply current m_mode through setMode(). External code (e.g. main.cpp splash timer)
+    //   must NEVER call showMaximized()/showNormal() directly. Always go through
+    //   this so the Normal branch's centered setGeometry runs and button text syncs.
+    // P1.4.6 fix (2026-09-17): unify all 3 showMaximized/showNormal entry points.
+    void applyWindowMode() { setMode(m_mode); }
     WindowMode mode() const { return m_mode; }
 
     // 工作区 Mediator (F-F 2026-09-09: mainwindow 临时持有, F-G 改成 imagewindow 共享)

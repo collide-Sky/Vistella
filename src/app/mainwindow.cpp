@@ -835,19 +835,9 @@ void MainWindow::loadWindowState()
     LOG_INFO("[State] loadWindowState read m_mode={} m_normalSize={}x{} (default, not persisted)",
              static_cast<int>(m_mode), m_normalSize.width(), m_normalSize.height());
 
-    // 应用 mode (Stage H 简化 2026-09-15: showMaximized / showNormal 标准用法)
-    if (m_mode == WindowMode::Maximized) {
-        showMaximized();
-    } else {
-        showNormal();
-        // Normal 路径额外居中 (saved geometry 不可靠)
-        if (QScreen *scr = screen()) {
-            const QRect avail = scr->availableGeometry();
-            setGeometry(QRect(avail.center().x() - m_normalSize.width() / 2,
-                              avail.center().y() - m_normalSize.height() / 2,
-                              m_normalSize.width(), m_normalSize.height()));
-        }
-    }
+    // P1.4.6 fix (2026-09-17): 走 setMode 统一入口, 不再直接 showMaximized/showNormal.
+    //   setMode 内部已经处理 Normal 的居中 setGeometry + 按钮文字同步.
+    applyWindowMode();
 }
 
 // 计算标题栏可拖动区域: titleLeft + titleMid (避开右侧的按钮)

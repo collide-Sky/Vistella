@@ -224,11 +224,7 @@ int main(int argc, char *argv[])
             // PS/WPS/VS 风格 (2026-09-10): mainStack ctor 默认 page 0 (HomePage)
             //   无 session 看到 HomePage, 有 session 已经被 restore
             LOG_DEBUG("上次正常退出, 显示主窗口 (mainStack ctor 默认 page 0)");
-            if (w.mode() == WindowMode::Maximized) {
-                w.showMaximized();
-            } else {
-                w.showNormal();
-            }
+            w.applyWindowMode();   // 走 setMode 唯一入口 (修复 cancel-recovery 路径)
             return;
         }
 
@@ -247,11 +243,7 @@ int main(int argc, char *argv[])
         if (validFiles.isEmpty()) {
             // 没有可恢复的文件, 进 HomePage (PS/WPS/VS 风格 page 0)
             // mainStack ctor 默认 page 0, 不需要额外切
-            if (w.mode() == WindowMode::Maximized) {
-                w.showMaximized();
-            } else {
-                w.showNormal();
-            }
+            w.applyWindowMode();   // 走 setMode 唯一入口
             return;
         }
 
@@ -279,11 +271,9 @@ int main(int argc, char *argv[])
             SessionManager::instance().setLastExitClean(true);
             // mainStack ctor 默认 page 0 (HomePage), 不需要额外切
         }
-        if (w.mode() == WindowMode::Maximized) {
-            w.showMaximized();
-        } else {
-            w.showNormal();
-        }
+        // 不管恢复 / 不恢复, 最后都用唯一入口 applyWindowMode (= setMode(m_mode))
+        //   修复 9/17 报告的 cancel-recovery → maximized → 不能 normal 路径
+        w.applyWindowMode();
         } catch (const std::exception &e) {
             LOG_EXCEPTION(vistella::LogLevel::Error, "5s splash timer", e);
         } catch (...) {
