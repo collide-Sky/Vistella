@@ -123,12 +123,15 @@ private slots:
     void onRefineMaskEdge();            // Refine Edge 对话框
     void onColorRangeMask();            // Color Range 对话框
 
-    // P1.4.2 (2026-09-17): 智能对象 4 主菜单 action (idx=-1 表示用当前 selection)
-    //   LayerPanel 右键菜单 emit 信号时传 idx, 主菜单触发时传 -1
+    // P1.4.2 (2026-09-17): Smart object main menu actions (idx=-1 = use current selection)
+    //   LayerPanel right-click menu emits with idx; main menu triggers pass -1.
     void onSmartObjectConvert(int idx = -1);
     void onSmartObjectRasterize(int idx = -1);
     void onSmartObjectEditSource(int idx = -1);
     void onSmartObjectRelink(int idx = -1);
+    // P1.4.4 (2026-09-17): Smart filter main menu entry; shares the flow with
+    //   the LayerPanel right-click "Apply Smart Filter..." handler.
+    void onApplySmartFilter(int idx = -1);
 
     // P1.4.2: 4 slot 共用的 image/stack/idx 解析 (idx<0 → stack->selection())
     //   填 msg 给 statusBar 提示; 返 false 表示已发提示, 调用方直接 return

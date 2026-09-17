@@ -49,6 +49,7 @@ struct Layer {
         Text,          // text + fontSize + color
         SmartObject,   // sourceFilePath
         Adjustment,    // adjustmentType + adjustmentLut
+        SmartFilter    // P1.4.4 (2026-09-17): SmartObject sub-filter (filterType + filterStrength)
     };
     LayerKind kind = Bitmap;
 
@@ -99,6 +100,15 @@ struct Layer {
     QString adjustmentType;       // "curves" / "levels" / "hueSat" / "colorBalance" / ...
     cv::Mat adjustmentLut;        // 256x1 CV_8U (curves / levels LUT)
 
+    // ---- SmartFilter payload (kind == SmartFilter, P1.4.4 2026-09-17) ----
+    //   Sub-filter of a SmartObject layer. References parent via
+    //   LayerStack::smartFiltersFor(smartIdx). Owns the filtered image (cv::Mat)
+    //   so the renderer can stack outputs without re-running the filter.
+    QString filterType;           // "GaussianBlur" / "Sharpen" / "Brightness" / ...
+    double  filterStrength = 1.0; // 0..2 intensity multiplier
+    int     parentSmartIndex = -1; // index of parent SmartObject in stack (-1 = orphan)
+    int     filterSlotIndex  = -1; // 0-based position in parent's smartFilters chain
+
     // ---- 蒙版 (Phase 4 实现) ----
     cv::Mat layerMask;            // 灰度图 8U, 0=透明 255=不透明
     bool    maskEnabled = false;
@@ -132,6 +142,9 @@ struct Layer {
             return !text.isEmpty();
         case SmartObject:
             return !sourceFilePath.isEmpty();
+        case SmartFilter:
+            return !image.empty() && image.depth() == CV_8U
+                && !filterType.isEmpty() && parentSmartIndex >= 0;
         case Vector:
         case Adjustment:
         default:

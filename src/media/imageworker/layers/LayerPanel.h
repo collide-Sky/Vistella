@@ -106,6 +106,10 @@ signals:
     void rasterizeSmartObjectRequested(int index);    // SmartObject -> Bitmap
     void relinkSmartObjectRequested(int index);       // 重新链接源文件
     void selectionChangedFromPanel(int index);
+    // P1.4.4 (2026-09-17): SmartFilter sub-layer entry (SmartObject right-click)
+    //   Routed to MainWindow: pops filter picker dialog + calls appendSmartFilter
+    //   + pushes undo command.
+    void applySmartFilterRequested(int smartIdx);
 
 private slots:
     // 内部: 监听 LayerStack signals

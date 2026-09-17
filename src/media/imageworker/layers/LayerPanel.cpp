@@ -870,6 +870,7 @@ void LayerPanel::onContextMenu(const QPoint &pos)
     QAction *actSmartEditContents = nullptr;
     QAction *actSmartRelink = nullptr;
     QAction *actSmartRasterize = nullptr;
+    QAction *actSmartFilter = nullptr;   // P1.4.4 (2026-09-17): SmartFilter sub-layer
     menu.addSeparator();
     if (l->kind == Layer::Bitmap && !l->image.empty()) {
         actSmartConvert = menu.addAction(tr("转换为智能对象"));
@@ -877,6 +878,7 @@ void LayerPanel::onContextMenu(const QPoint &pos)
         actSmartEditContents = menu.addAction(tr("编辑源内容 (Edit Contents)"));
         actSmartRelink = menu.addAction(tr("重新链接 (Relink)..."));
         actSmartRasterize = menu.addAction(tr("栅格化智能对象"));
+        actSmartFilter = menu.addAction(tr("应用智能滤镜..."));
     }
 
     QAction *chosen = menu.exec(m_list->mapToGlobal(pos));
@@ -915,6 +917,8 @@ void LayerPanel::onContextMenu(const QPoint &pos)
         emit relinkSmartObjectRequested(index);
     } else if (chosen && chosen == actSmartRasterize) {
         emit rasterizeSmartObjectRequested(index);
+    } else if (chosen && chosen == actSmartFilter) {
+        emit applySmartFilterRequested(index);
     }
 }
 

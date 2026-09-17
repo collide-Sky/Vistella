@@ -549,6 +549,12 @@ void MainWindow::buildActions()
     connect(aSmartRelink, &QAction::triggered, this, [this]{
         onSmartObjectRelink();
     });
+    // P1.4.4 (2026-09-17): SmartFilter main menu entry (shares the LayerPanel
+    //   right-click handler flow).
+    QAction *aSmartFilter = mLayer->addAction(tr("应用智能滤镜..."));
+    connect(aSmartFilter, &QAction::triggered, this, [this]{
+        onApplySmartFilter();
+    });
 
     // ---- 文字 (Text) ----
     QMenu *mText = mb->addMenu(tr("文字"));
@@ -2107,6 +2113,50 @@ void MainWindow::onSmartObjectRelink(int idx)
         img->smartObjectWatcher()->rewatchAll(stack);
     statusBar()->showMessage(
         tr("已重新链接到: %1").arg(QFileInfo(path).fileName()), 3000);
+}
+
+// P1.4.4 (2026-09-17): Smart filter main menu entry.
+//   Same flow as the LayerPanel right-click handler: pick filter type,
+//   rasterize the SmartObject as base image, append the SmartFilter, push
+//   a makeAppendSmartFilter undo command.
+void MainWindow::onApplySmartFilter(int idx)
+{
+    ImageWindow *img = nullptr;
+    layers::LayerStack *stack = nullptr;
+    int realIdx = -1;
+    QString msg;
+    if (!resolveSmartObjectTarget(idx, &img, &stack, &realIdx, &msg)) {
+        statusBar()->showMessage(msg, 2000);
+        return;
+    }
+    auto l = stack->at(realIdx);
+    if (!l || l->kind != layers::Layer::SmartObject) {
+        statusBar()->showMessage(tr("请先选中一个智能对象图层"), 2000);
+        return;
+    }
+    static const QStringList kFilters = {
+        QStringLiteral("GaussianBlur"),
+        QStringLiteral("Sharpen"),
+        QStringLiteral("Brightness"),
+        QStringLiteral("Contrast"),
+        QStringLiteral("Emboss"),
+    };
+    bool ok = false;
+    const QString picked = QInputDialog::getItem(
+        this, tr("选择智能滤镜"),
+        tr("滤镜类型:"), kFilters, 0, false, &ok);
+    if (!ok || picked.isEmpty()) return;
+    const cv::Mat baseImage = stack->rasterizeForRender(realIdx);
+    const int newIdx = stack->appendSmartFilter(realIdx, picked, 1.0, baseImage);
+    if (newIdx < 0) {
+        statusBar()->showMessage(tr("应用滤镜失败"), 2000);
+        return;
+    }
+    if (auto *undo = img->undoStack()) {
+        undo->push(layers::LayerCommand::makeAppendSmartFilter(
+            stack, newIdx, picked, 1.0));
+    }
+    statusBar()->showMessage(tr("已应用智能滤镜: %1").arg(picked), 3000);
 }
 
 void MainWindow::onHomeOpenFolderRequested()

@@ -50,6 +50,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QColorDialog>
 #include <QFont>
 #include <QFontComboBox>
@@ -698,6 +699,41 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             }
             invalidateCurrentCache();
             statusBar()->showMessage(tr("已重新链接源文件"), 3000);
+        });
+        // P1.4.4 (2026-09-17): SmartFilter chain entry (PS-style smart filter).
+        //   Right-click on a SmartObject layer -> apply filter dialog -> append.
+        connect(rawPanel, &layers::LayerPanel::applySmartFilterRequested,
+                this, [this](int smartIdx) {
+            if (!m_layerStack || smartIdx < 0 || smartIdx >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(smartIdx);
+            if (!l || l->kind != layers::Layer::SmartObject) return;
+            static const QStringList kFilters = {
+                QStringLiteral("GaussianBlur"),
+                QStringLiteral("Sharpen"),
+                QStringLiteral("Brightness"),
+                QStringLiteral("Contrast"),
+                QStringLiteral("Emboss"),
+            };
+            bool ok = false;
+            const QString picked = QInputDialog::getItem(
+                this, tr("选择智能滤镜"),
+                tr("滤镜类型:"), kFilters, 0, false, &ok);
+            if (!ok || picked.isEmpty()) return;
+            const cv::Mat baseImage = m_layerStack->rasterizeForRender(smartIdx);
+            const int newIdx = m_layerStack->appendSmartFilter(
+                smartIdx, picked, 1.0, baseImage);
+            if (newIdx < 0) {
+                statusBar()->showMessage(tr("应用滤镜失败"), 3000);
+                return;
+            }
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeAppendSmartFilter(
+                    m_layerStack.get(), newIdx, picked, 1.0);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("已应用智能滤镜: %1").arg(picked), 3000);
         });
     }
 

@@ -281,6 +281,70 @@ LayerCommand* LayerCommand::makeSetSmartObjectTransform(LayerStack *stack, int i
 }
 
 // =====================================================================
+//  P1.4.4 (2026-09-17): SmartFilter chain undo factories
+// =====================================================================
+//
+// AppendSmartFilter: caller has already called appendSmartFilter() before
+//   pushing this command; filterIdx is the new layer's stack index. We
+//   store m_strVal = filterType so undo can verify which type to remove.
+//   redo is a no-op (matches other LayerCommand factories — push happens
+//   after the apply).
+LayerCommand* LayerCommand::makeAppendSmartFilter(LayerStack *stack, int filterIdx,
+                                                  const QString &filterType,
+                                                  double oldStrength)
+{
+    auto *cmd = new LayerCommand(stack, AppendSmartFilter, filterIdx);
+    cmd->m_strVal = filterType;
+    cmd->m_floatVal = oldStrength;
+    cmd->setText(QStringLiteral("Append Smart Filter"));
+    return cmd;
+}
+
+// RemoveSmartFilter: caller has already called removeSmartFilter() before
+//   pushing. m_layer holds the full removed layer (cv::Mat clone +
+//   filterType / filterStrength / parentSmartIndex / filterSlotIndex)
+//   so undo can restore by addLayer() back at the original slot.
+LayerCommand* LayerCommand::makeRemoveSmartFilter(LayerStack *stack, int filterIdx,
+                                                  const Layer &oldLayer)
+{
+    auto *cmd = new LayerCommand(stack, RemoveSmartFilter, filterIdx);
+    cmd->m_layer = oldLayer;
+    cmd->setText(QStringLiteral("Remove Smart Filter"));
+    return cmd;
+}
+
+// MoveSmartFilter: m_intVal holds the new slot (post-move); m_oldSlot
+//   holds the slot before move. redo no-op (caller has already moved);
+//   undo moves the filter back to m_oldSlot.
+LayerCommand* LayerCommand::makeMoveSmartFilter(LayerStack *stack, int filterIdx,
+                                                 int oldSlot)
+{
+    auto *cmd = new LayerCommand(stack, MoveSmartFilter, filterIdx);
+    cmd->m_intVal = -1;  // post-move slot is unknown; undo only needs old slot
+    cmd->m_oldSlot = oldSlot;
+    cmd->setText(QStringLiteral("Reorder Smart Filter"));
+    return cmd;
+}
+
+LayerCommand* LayerCommand::makeSetSmartFilterEnabled(LayerStack *stack, int filterIdx,
+                                                      bool oldEnabled)
+{
+    auto *cmd = new LayerCommand(stack, SetSmartFilterEnabled, filterIdx);
+    cmd->m_boolVal = oldEnabled;
+    cmd->setText(QStringLiteral("Toggle Smart Filter"));
+    return cmd;
+}
+
+LayerCommand* LayerCommand::makeSetSmartFilterStrength(LayerStack *stack, int filterIdx,
+                                                       double oldStrength)
+{
+    auto *cmd = new LayerCommand(stack, SetSmartFilterStrength, filterIdx);
+    cmd->m_floatVal = oldStrength;
+    cmd->setText(QStringLiteral("Set Smart Filter Strength"));
+    return cmd;
+}
+
+// =====================================================================
 //  undo / redo
 // =====================================================================
 
@@ -476,6 +540,52 @@ void LayerCommand::undo()
         }
         break;
     }
+    case AppendSmartFilter: {
+        // undo: drop the appended filter sub-layer.
+        //   We rely on m_stack->removeSmartFilter which cleans chain
+        //   bookkeeping. The filter's parent is m_layer.parentSmartIndex
+        //   captured at push time. If the index has shifted (e.g. another
+        //   layer was inserted before), fall back to m_index lookup of
+        //   a SmartFilter layer with parentSmartIndex stored in m_strVal
+        //   hint — for simplicity we trust m_index here since the chain
+        //   API doesn't reorder.
+        auto l = m_stack->at(m_index);
+        if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
+            m_stack->removeSmartFilter(l->parentSmartIndex, m_index);
+        }
+        break;
+    }
+    case RemoveSmartFilter: {
+        // undo: re-insert the SmartFilter at the captured slot position
+        //   in its parent SmartObject's chain.
+        if (m_layer.kind == Layer::SmartFilter && m_layer.parentSmartIndex >= 0) {
+            m_stack->reinsertSmartFilter(m_layer, m_layer.filterSlotIndex);
+        }
+        break;
+    }
+    case MoveSmartFilter: {
+        // undo: move filter back to m_oldSlot.
+        auto l = m_stack->at(m_index);
+        if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
+            m_stack->moveSmartFilter(l->parentSmartIndex, m_index, m_oldSlot);
+        }
+        break;
+    }
+    case SetSmartFilterEnabled: {
+        // undo: restore old opacity (enabled = opacity 1, disabled = 0).
+        auto l = m_stack->at(m_index);
+        if (l && l->kind == Layer::SmartFilter) {
+            l->opacity = m_boolVal ? 1.0f : 0.0f;
+        }
+        break;
+    }
+    case SetSmartFilterStrength: {
+        auto l = m_stack->at(m_index);
+        if (l && l->kind == Layer::SmartFilter) {
+            l->filterStrength = m_floatVal;
+        }
+        break;
+    }
     }
 }
 
@@ -569,6 +679,15 @@ void LayerCommand::redo()
         // P0-3.3 (2026-09-08) 分支: m_host 非空 → redo 走 image-based
         //   (跟 undo 对称, m_newMat 是 push 之前存好的)
         if (m_host && !m_newMat.empty()) m_host->replaceCurrentImage(m_newMat);
+        break;
+    case AppendSmartFilter:
+    case RemoveSmartFilter:
+    case MoveSmartFilter:
+    case SetSmartFilterEnabled:
+    case SetSmartFilterStrength:
+        // Phase 1 simplification (matches other factories): redo no-op.
+        //   The UI applies the change before push, so redo doesn't need
+        //   to re-apply. Undo reverses via the captured state.
         break;
     }
 }

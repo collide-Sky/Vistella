@@ -68,6 +68,12 @@ public:
         ConvertToSmartObject,    // Bitmap->SmartObject (in-place kind change)
         RasterizeSmartObject,   // SmartObject->Bitmap (in-place kind change)
         SetSmartObjectTransform,// affine transform (m_oldTransform/m_newTransform)
+        // P1.4.4 (2026-09-17): SmartFilter sub-layer Ops
+        AppendSmartFilter,      // add SmartFilter sub-layer (m_strVal=filterType, m_intVal=filterIdx)
+        RemoveSmartFilter,      // remove SmartFilter sub-layer (m_layer=old full Layer)
+        MoveSmartFilter,        // reorder (m_intVal=newSlot)
+        SetSmartFilterEnabled,  // enable/disable (m_boolVal=old enabled)
+        SetSmartFilterStrength, // strength (m_floatVal=old strength)
     };
 
     // Add: 给一个 layer, push 时 add, undo 时 remove
@@ -132,6 +138,28 @@ public:
                                                      bool oldHas,
                                                      const QTransform &newT,
                                                      bool newHas);
+    // P1.4.4 (2026-09-17): SmartFilter chain undo factories.
+    //   AppendSmartFilter: caller appends the filter first (UI pushes the
+    //     LayerCommand after appendSmartFilter returns the new idx); on
+    //     undo we drop the filter sub-layer and any chain bookkeeping.
+    //   RemoveSmartFilter: caller removes the filter first via
+    //     removeSmartFilter; factory stores the old layer + parent chain
+    //     state (m_strVal = parent SmartObject index as text).
+    //   MoveSmartFilter: m_intVal = new slot; redo applies moveSmartFilter,
+    //     undo reverses by moving to the original slot.
+    //   SetSmartFilterEnabled: m_boolVal = old enabled.
+    //   SetSmartFilterStrength: m_floatVal = old strength.
+    static LayerCommand* makeAppendSmartFilter(LayerStack *stack, int filterIdx,
+                                               const QString &filterType,
+                                               double oldStrength);
+    static LayerCommand* makeRemoveSmartFilter(LayerStack *stack, int filterIdx,
+                                               const Layer &oldLayer);
+    static LayerCommand* makeMoveSmartFilter(LayerStack *stack, int filterIdx,
+                                             int oldSlot);
+    static LayerCommand* makeSetSmartFilterEnabled(LayerStack *stack, int filterIdx,
+                                                   bool oldEnabled);
+    static LayerCommand* makeSetSmartFilterStrength(LayerStack *stack, int filterIdx,
+                                                    double oldStrength);
 
     void undo() override;
     void redo() override;
@@ -170,6 +198,10 @@ private:
     QTransform  m_newTransform;      // SetSmartObjectTransform: after
     bool        m_oldHasTransform = false;  // SetSmartObjectTransform: before has flag
     bool        m_newHasTransform = false;  // SetSmartObjectTransform: after has flag
+    // P1.4.4 (2026-09-17): SmartFilter undo state.
+    //   AppendSmartFilter / RemoveSmartFilter reuse m_layer (full clone).
+    //   MoveSmartFilter stores old/new slot in m_intVal (current) / m_index2 (old).
+    int         m_oldSlot = -1;      // MoveSmartFilter: slot before move
 };
 
 } // namespace layers

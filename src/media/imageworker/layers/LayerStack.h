@@ -118,6 +118,39 @@ public:
     bool clearSmartObjectTransform(int index);
     QTransform smartObjectTransform(int index) const;
 
+    // P1.4.4 (2026-09-17): SmartFilter chain management (PS-style smart filters)
+    //   Each SmartObject layer can have 0+ filter sub-layers stored in
+    //   smartFiltersFor(smartIdx). Filter sub-layers occupy indices in the main
+    //   stack (so they show up in LayerPanel) but are tagged with parentSmartIndex.
+    //   The renderer skips them in the main loop and applies them as a chain to
+    //   their parent SmartObject.
+    const QList<int>& smartFiltersFor(int smartIdx) const;   // ordered indices
+    int smartFilterCount(int smartIdx) const;
+    // Append a filter sub-layer to a SmartObject's chain.
+    //   Applies the filter to imageBefore via the inline filter dispatcher
+    //   (currently 5 hardcoded filters: GaussianBlur / Sharpen / Brightness /
+    //   Contrast / Emboss). Stores the filtered image in the new layer so the
+    //   renderer can chain without re-running filters. Returns new layer index
+    //   or -1 on failure.
+    int appendSmartFilter(int smartIdx, const QString &filterType, double strength,
+                          const cv::Mat &imageBefore);
+    bool removeSmartFilter(int smartIdx, int filterIdx);
+    bool moveSmartFilter(int smartIdx, int filterIdx, int newSlot);
+    bool setSmartFilterEnabled(int smartIdx, int filterIdx, bool enabled);
+    bool setSmartFilterStrength(int smartIdx, int filterIdx, double strength);
+
+    // P1.4.4 (2026-09-17): Re-insert a previously-removed filter sub-layer
+    //   (used by undo). The layer is added at end of m_layers and inserted
+    //   into the chain at `atSlot`. Used by LayerCommand::undo for the
+    //   RemoveSmartFilter case.
+    int reinsertSmartFilter(const Layer &filterLayer, int atSlot);
+
+    // P1.4.4 (2026-09-17): Public accessor for SmartObject base image.
+    //   Loads source from sourceFilePath, applies transform/resize to canvas
+    //   (no filter chain). Returns cv::Mat or empty if source missing.
+    //   Used by UI to obtain the input image for a new SmartFilter.
+    cv::Mat rasterizeForRender(int idx) const;
+
     // Phase 5 (2026-09-04): 全局 cache 清理
     //   遍历 cache dir, 删掉不被任何 layer 引用的文件
     //   返删除的文件数
@@ -214,6 +247,13 @@ private:
     int  m_selection = -1;
     // Phase 3: 画布尺寸 (无 base layer 时 rasterize text/vector 用)
     cv::Size m_canvasSize = cv::Size(800, 600);
+
+    // P1.4.4 (2026-09-17): SmartObject -> SmartFilter sub-layer indices.
+    //   Each SmartObject at index `smartIdx` has a QList of filter sub-layer
+    //   indices in chain order (0..N-1). Filter sub-layers are full Layer
+    //   entries in m_layers (so they show up in LayerPanel) but tagged with
+    //   parentSmartIndex so the renderer knows to skip them as standalone.
+    QHash<int, QList<int>> m_smartFilterChain;
 
     void reassignZOrder();
     void disconnectLayer(LayerPtr l);

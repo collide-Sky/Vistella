@@ -45,6 +45,64 @@ LayerStack::~LayerStack()
 }
 
 // =====================================================================
+//  P1.4.4 (2026-09-17): SmartFilter dispatcher (5 hardcoded filters inlined)
+// =====================================================================
+//   Apply a single filter to a cv::Mat and return the result.
+//   Supported: "GaussianBlur" / "Sharpen" / "Brightness" / "Contrast" /
+//   "Emboss". FilterStrategy/FilterFactory integration is deferred to P1.4.6
+//   to avoid FeatureFilterKind -> algorithm dispatch complexity. strength in 0..2.
+namespace {
+cv::Mat applySmartFilter(const QString &filterType, double strength, const cv::Mat &in)
+{
+    if (in.empty() || filterType.isEmpty()) return cv::Mat();
+    if (filterType == QStringLiteral("GaussianBlur")) {
+        // strength 1.0 -> 5x5, 0.0 -> 1x1 (no-op), 2.0 -> 9x9
+        int ksize = std::max(1, static_cast<int>(std::lround(1.0 + strength * 4.0)));
+        if (ksize % 2 == 0) ++ksize;
+        cv::Mat out;
+        cv::GaussianBlur(in, out, cv::Size(ksize, ksize), 0, 0);
+        return out;
+    }
+    if (filterType == QStringLiteral("Sharpen")) {
+        // strength 1.0 -> mild sharpen (center 5, surrounding -1). 0..2 scales.
+        cv::Mat kernel = (cv::Mat_<float>(3, 3) <<
+            0.0f, -1.0f, 0.0f,
+           -1.0f,  5.0f, -1.0f,
+            0.0f, -1.0f, 0.0f);
+        const float s = static_cast<float>(strength);
+        const float center = 1.0f + 4.0f * s;
+        kernel.at<float>(1, 1) = center;
+        cv::Mat out;
+        cv::filter2D(in, out, -1, kernel);
+        return out;
+    }
+    if (filterType == QStringLiteral("Brightness")) {
+        // strength 1.0 -> no change, 0.0 -> black, 2.0 -> ~2x brighter
+        const double alpha = strength;
+        const double beta = (1.0 - strength) * 128.0;
+        cv::Mat out;
+        in.convertTo(out, -1, alpha, beta);
+        return out;
+    }
+    if (filterType == QStringLiteral("Contrast")) {
+        cv::Mat out;
+        in.convertTo(out, -1, strength, 0);
+        return out;
+    }
+    if (filterType == QStringLiteral("Emboss")) {
+        cv::Mat kernel = (cv::Mat_<float>(3, 3) <<
+           -2.0f, -1.0f, 0.0f,
+           -1.0f,  1.0f, 1.0f,
+            0.0f,  1.0f, 2.0f);
+        cv::Mat out;
+        cv::filter2D(in, out, -1, kernel);
+        return out;
+    }
+    return in.clone();
+}
+} // anonymous namespace
+
+// =====================================================================
 //  基础查询
 // =====================================================================
 
@@ -199,6 +257,12 @@ int LayerStack::addAdjustmentLayer(const QString &name, const QString &adjustmen
 bool LayerStack::removeLayer(int index)
 {
     if (index < 0 || index >= m_layers.size()) return false;
+    // P1.4.4 (2026-09-17): SmartFilter chain bookkeeping is intentionally
+    //   NOT done here. Callers that remove SmartFilter sub-layers should go
+    //   through removeSmartFilter() (which handles chain), and SmartObject
+    //   removal should be paired with rasterizeSmartObject()/a cascade helper
+    //   to also drop orphaned SmartFilter children. Doing chain cleanup
+    //   here would double-mutate and leave stale indices in m_smartFilterChain.
     m_layers.removeAt(index);
     reassignZOrder();
     // 选中更新
@@ -694,6 +758,12 @@ bool LayerStack::rasterizeSmartObject(int index)
                        ? l->sourceFilePath
                        : smartObjectCachePath(l->sourceFilePath);
     }
+    // P1.4.4 (2026-09-17): Drop SmartFilter sub-layers first (reverse order
+    //   so the indices in m_smartFilterChain[index] stay valid during removal).
+    auto childCopy = smartFiltersFor(index);
+    for (int i = childCopy.size() - 1; i >= 0; --i) {
+        removeLayer(childCopy[i]);
+    }
     cv::Mat result = rasterize(l);
     if (result.empty()) return false;
     l->image = result;
@@ -701,6 +771,7 @@ bool LayerStack::rasterizeSmartObject(int index)
     l->sourceFilePath.clear();
     l->sourceEmbedded = false;
     l->transform = QTransform();
+    m_smartFilterChain.remove(index);
     l->hasTransform = false;
     emit layerChanged(index);
     // Remove the now-orphan embedded cache file.
@@ -767,6 +838,147 @@ int LayerStack::cleanupSmartObjectCache()
 QString LayerStack::smartObjectCachePathFor(const QString &sourceFilePath)
 {
     return smartObjectCachePath(sourceFilePath);
+}
+
+// =====================================================================
+//  P1.4.4 (2026-09-17): SmartFilter chain management
+// =====================================================================
+//   Each SmartObject at stack index `smartIdx` owns a QList<int> of filter
+//   sub-layer indices in chain order. Filter sub-layers occupy indices in
+//   the main stack (so they show up in LayerPanel) but carry parentSmartIndex
+//   so the renderer skips them in the main loop and applies them as a chain
+//   to their parent SmartObject.
+
+const QList<int>& LayerStack::smartFiltersFor(int smartIdx) const
+{
+    static const QList<int> kEmpty;
+    auto it = m_smartFilterChain.constFind(smartIdx);
+    if (it == m_smartFilterChain.constEnd()) return kEmpty;
+    return it.value();
+}
+
+int LayerStack::smartFilterCount(int smartIdx) const
+{
+    auto it = m_smartFilterChain.constFind(smartIdx);
+    if (it == m_smartFilterChain.constEnd()) return 0;
+    return it.value().size();
+}
+
+int LayerStack::appendSmartFilter(int smartIdx, const QString &filterType,
+                                  double strength, const cv::Mat &imageBefore)
+{
+    auto sl = at(smartIdx);
+    if (!sl || sl->kind != Layer::SmartObject) return -1;
+    if (filterType.isEmpty() || imageBefore.empty()) return -1;
+    // Apply filter now so the layer caches a filtered snapshot for previews.
+    //   The render loop also re-applies fresh on every render (so reorder /
+    //   strength changes take effect without re-running append).
+    cv::Mat filtered = applySmartFilter(filterType, strength, imageBefore);
+    if (filtered.empty()) return -1;
+    Layer l;
+    l.kind = Layer::SmartFilter;
+    l.name = QStringLiteral("Filter: %1").arg(filterType);
+    l.filterType = filterType;
+    l.filterStrength = strength;
+    l.parentSmartIndex = smartIdx;
+    l.image = filtered;
+    // Stamp the slot BEFORE addLayer so the stored layer carries the
+    //   pre-append size (which equals the new 0-based slot index).
+    auto &chain = m_smartFilterChain[smartIdx];
+    l.filterSlotIndex = chain.size();
+    const int newIdx = addLayer(l);
+    if (newIdx < 0) return -1;
+    chain.append(newIdx);
+    return newIdx;
+}
+
+bool LayerStack::removeSmartFilter(int smartIdx, int filterIdx)
+{
+    auto &chain = m_smartFilterChain[smartIdx];
+    const int pos = chain.indexOf(filterIdx);
+    if (pos < 0) return false;
+    // P1.4.4 (2026-09-17): Remove from m_layers FIRST, then fix up chain
+    //   indices. removeLayer shifts all subsequent indices down by 1, so
+    //   we decrement chain entries > filterIdx to point at their new positions.
+    if (!removeLayer(filterIdx)) return false;
+    chain.removeAt(pos);
+    for (int i = 0; i < chain.size(); ++i) {
+        int &idx = chain[i];
+        if (idx > filterIdx) --idx;
+        if (auto l = at(idx)) l->filterSlotIndex = i;
+    }
+    if (chain.isEmpty()) m_smartFilterChain.remove(smartIdx);
+    return true;
+}
+
+bool LayerStack::moveSmartFilter(int smartIdx, int filterIdx, int newSlot)
+{
+    auto &chain = m_smartFilterChain[smartIdx];
+    const int oldPos = chain.indexOf(filterIdx);
+    if (oldPos < 0) return false;
+    if (newSlot < 0 || newSlot >= chain.size()) return false;
+    if (oldPos == newSlot) return true;
+    chain.move(oldPos, newSlot);
+    for (int i = 0; i < chain.size(); ++i) {
+        if (auto l = at(chain[i])) l->filterSlotIndex = i;
+    }
+    return true;
+}
+
+bool LayerStack::setSmartFilterEnabled(int smartIdx, int filterIdx, bool enabled)
+{
+    auto l = at(filterIdx);
+    if (!l || l->kind != Layer::SmartFilter) return false;
+    if (l->parentSmartIndex != smartIdx) return false;
+    // PS: opacity 0 = hidden, opacity 1 = enabled. Keep the layer in chain.
+    l->opacity = enabled ? 1.0f : 0.0f;
+    emit layerChanged(filterIdx);
+    return true;
+}
+
+bool LayerStack::setSmartFilterStrength(int smartIdx, int filterIdx, double strength)
+{
+    auto l = at(filterIdx);
+    if (!l || l->kind != Layer::SmartFilter) return false;
+    if (l->parentSmartIndex != smartIdx) return false;
+    l->filterStrength = strength;
+    emit layerChanged(filterIdx);
+    return true;
+}
+
+// P1.4.4 (2026-09-17): Public accessor returning the SmartObject's rasterized
+//   base image (after transform + resize). Used by UI to obtain `imageBefore`
+//   when appending a new SmartFilter. Empty on failure / wrong kind.
+cv::Mat LayerStack::rasterizeForRender(int idx) const
+{
+    auto l = at(idx);
+    if (!l || l->kind != Layer::SmartObject) return cv::Mat();
+    return rasterize(l);
+}
+
+// P1.4.4 (2026-09-17): Re-insert a SmartFilter (used by undo).
+//   The layer is appended at end of m_layers and the new index is inserted
+//   into the parent chain at `atSlot` (clamped to [0..chain.size()]). Returns
+//   the new layer index or -1 on failure.
+int LayerStack::reinsertSmartFilter(const Layer &filterLayer, int atSlot)
+{
+    if (filterLayer.kind != Layer::SmartFilter
+        || filterLayer.parentSmartIndex < 0) return -1;
+    auto sl = at(filterLayer.parentSmartIndex);
+    if (!sl || sl->kind != Layer::SmartObject) return -1;
+    const int newIdx = addLayer(filterLayer);
+    if (newIdx < 0) return -1;
+    auto &chain = m_smartFilterChain[filterLayer.parentSmartIndex];
+    if (atSlot < 0) atSlot = 0;
+    if (atSlot > chain.size()) atSlot = chain.size();
+    chain.insert(atSlot, newIdx);
+    if (auto inserted = at(newIdx)) {
+        inserted->filterSlotIndex = atSlot;
+    }
+    for (int i = 0; i < chain.size(); ++i) {
+        if (auto l = at(chain[i])) l->filterSlotIndex = i;
+    }
+    return newIdx;
 }
 
 // =====================================================================
@@ -1085,6 +1297,9 @@ cv::Mat LayerStack::render() const
     for (int i = std::max(0, baseIdx); i < m_layers.size(); ++i) {
         const auto &l = m_layers[i];
         if (!l || !l->visible) continue;
+        // P1.4.4 (2026-09-17): SmartFilter sub-layers render only as part of
+        //   their parent SmartObject's chain; skip them in the main loop.
+        if (l->kind == Layer::SmartFilter) continue;
         if (i == baseIdx) {
             // base 层: 单独处理 opacity
             if (l->opacity < 1.0f) {
@@ -1116,6 +1331,21 @@ cv::Mat LayerStack::render() const
         // 其他 kind: rasterize 后 blend
         cv::Mat layerMat = rasterize(l);
         if (layerMat.empty()) continue;
+        // P1.4.4 (2026-09-17): SmartObject chain application.
+        //   Walk m_smartFilterChain[i] in order and re-apply each enabled
+        //   filter fresh (so reorder / strength changes take effect without
+        //   re-running append).
+        if (l->kind == Layer::SmartObject) {
+            const auto &chain = smartFiltersFor(i);
+            for (int fIdx : chain) {
+                auto fL = at(fIdx);
+                if (!fL || !fL->visible || fL->opacity <= 0.0f) continue;
+                cv::Mat filtered = applySmartFilter(fL->filterType,
+                                                    fL->filterStrength,
+                                                    layerMat);
+                if (!filtered.empty()) layerMat = filtered;
+            }
+        }
         // Phase 4 (2026-09-04): 应用蒙版 (mask 调制 layer alpha)
         if (l->maskEnabled && !l->layerMask.empty()) {
             layerMat = applyMask(layerMat, l->layerMask);
@@ -1164,6 +1394,7 @@ void LayerStack::clear()
 {
     if (m_layers.isEmpty()) return;
     m_layers.clear();
+    m_smartFilterChain.clear();
     m_selection = -1;
     emit countChanged();
     emit selectionChanged(-1);
