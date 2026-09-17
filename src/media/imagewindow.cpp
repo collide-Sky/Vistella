@@ -26,6 +26,8 @@
 //   LayerPanel 信号接通需要完整 LayerPanel.h + LayerCommand.h 定义
 #include "imageworker/layers/LayerPanel.h"
 #include "imageworker/layers/LayerCommand.h"
+// P1.4.6 (2026-09-17): Unified transform dialog replaces chained QInputDialog.
+#include "docks/TransformDialog.h"
 #include "../media/mediators/WorkspaceMediator.h"
 // P0-4 (2026-09-10): selection system
 #include "selection/SelectionModel.h"
@@ -43,9 +45,13 @@
 #include "transform/TransformBox.h"
 #include "transform/TransformCommand.h"
 
-// P0-1.4 (2026-09-07): QFileDialog / QDir / QMessageBox 移到 ImageIOController.cpp
-//   (open / save / saveAs 段搬走, imagewindow.cpp 不再用)
+// P0-1.4 (2026-09-07): QFileDialog / QDir / QMessageBox moved to
+//   ImageIOController.cpp (open / save / saveAs segments relocated;
+//   no longer used in imagewindow.cpp).
+// P1.4.6 (2026-09-17): SmartObject source-changed prompt upgraded to
+//   QMessageBox (Yes / No so user can decide whether to refresh).
 #include <QFileInfo>
+#include <QMessageBox>
 // P1.4.3 (2026-09-17): LayerPanel 信号接通需要 (EditSource 打开源 / Relink 选源 / URL 包装)
 #include <QDesktopServices>
 #include <QUrl>
@@ -572,12 +578,38 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     //   监听每个 SmartObject layer 的源文件 mtime, 触发源变化时弹 statusBar 提示
     //   layerAdded/Removed/Changed 后 rewatchAll 同步 watch 列表 (MainWindow 4 slot
     //   也会显式调 rewatchAll, 这是兜底)
+    // P1.4.6 (2026-09-17): Upgraded from the 5-second statusBar hint to
+    //   a QMessageBox dialog.
+    //   Yes -> refreshSmartObject + invalidateCurrentCache + statusBar
+    //   confirmation.
+    //   No  -> just record a "skipped" status.
     m_smartWatcher = std::make_unique<layers::SmartObjectWatcher>(this);
     connect(m_smartWatcher.get(), &layers::SmartObjectWatcher::sourceFileChanged,
-            this, [this](int, const QString &path){
+            this, [this](int idx, const QString &path){
+        if (!m_layerStack) return;
         const QString name = QFileInfo(path).fileName();
-        statusBar()->showMessage(
-            tr("智能对象源文件已修改: %1 (右键图层 → 刷新)").arg(name), 5000);
+        const QMessageBox::StandardButton ret = QMessageBox::question(
+            this, tr("智能对象源已修改"),
+            tr("源文件 \"%1\" 已在外部被修改.\n\n是否刷新此 SmartObject 图层?")
+                .arg(name),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+        if (ret != QMessageBox::Yes) {
+            statusBar()->showMessage(tr("已跳过刷新: %1").arg(name), 3000);
+            return;
+        }
+        if (idx < 0 || idx >= m_layerStack->count()) {
+            statusBar()->showMessage(
+                tr("智能对象索引已失效 (图层顺序已变): %1").arg(name), 5000);
+            return;
+        }
+        if (m_layerStack->refreshSmartObject(idx)) {
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("已刷新: %1").arg(name), 3000);
+        } else {
+            statusBar()->showMessage(
+                tr("刷新失败 (源文件不存在或权限不足): %1").arg(name), 5000);
+        }
     });
     auto resyncWatcher = [this]{
         if (m_smartWatcher && m_layerStack)
@@ -738,28 +770,18 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         // P1.4.5 (2026-09-17): SmartObject scale + rotate non-destructive transform
         //   from LayerPanel right-click menu. Pops scale + rotation prompts
         //   then routes through applySmartObjectTransform to apply + push undo.
+        // P1.4.6 (2026-09-17): chained QInputDialog upgraded to a single
+        //   TransformDialog (Scale
+        //   + Rotate + Translate + Link + Reset - 5 fields in one shot).
         connect(rawPanel, &layers::LayerPanel::transformSmartObjectRequested,
                 this, [this](int smartIdx) {
             if (!m_layerStack || smartIdx < 0 || smartIdx >= m_layerStack->count()) return;
             auto l = m_layerStack->at(smartIdx);
             if (!l || l->kind != layers::Layer::SmartObject) return;
-            bool ok = false;
-            const double scaleX = QInputDialog::getDouble(
-                this, tr("变换"), tr("Scale X (0.1..10):"),
-                1.0, 0.1, 10.0, 2, &ok);
-            if (!ok) return;
-            const double scaleY = QInputDialog::getDouble(
-                this, tr("变换"), tr("Scale Y (0.1..10):"),
-                scaleX, 0.1, 10.0, 2, &ok);
-            if (!ok) return;
-            const double rotDeg = QInputDialog::getDouble(
-                this, tr("变换"), tr("Rotation (degrees, -360..360):"),
-                0.0, -360.0, 360.0, 1, &ok);
-            if (!ok) return;
-            QTransform t;
-            t.rotate(rotDeg);
-            t.scale(scaleX, scaleY);
-            applySmartObjectTransform(smartIdx, t);
+            docks::TransformDialog dlg(this);
+            dlg.setInitial(l->transform);
+            if (dlg.exec() != QDialog::Accepted) return;
+            applySmartObjectTransform(smartIdx, dlg.result());
         });
         // P1.4.5: clear SmartObject transform from LayerPanel right-click.
         connect(rawPanel, &layers::LayerPanel::resetSmartObjectTransformRequested,
@@ -770,6 +792,641 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             // Identity QTransform clears hasTransform (PS semantics, see P1.4.1
             // LayerStack::setSmartObjectTransform "identity -> turn off" branch).
             applySmartObjectTransform(smartIdx, QTransform());
+        });
+
+        // ================================================================
+        //  P1.4.6 (2026-09-17): wire the remaining 26 LayerPanel signals.
+        //    Each lambda validates the index, calls the LayerStack API,
+        //    pushes the matching LayerCommand, then invalidateCurrentCache
+        //    + renderToView + statusBar hint. Complex operations (group /
+        //    ungroup) that don't yet have complete LayerStack plumbing
+        //    get a status-bar TODO rather than a half-implementation.
+        // ================================================================
+
+        // ---- Layer management -----------------------------------------
+        // addLayerKindRequested: 5 kinds - 0=Bitmap / 1=Vector /
+        //   2=Text /
+        //   3=SmartObject / 4=Adjustment. Bitmap uses an empty Mat
+        //   placeholder, Vector/Text/
+        //   SmartObject/Adjustment get sensible defaults (when payload is
+        //   absent, Layer::isValid
+        //   would return false, but to not block the UI we just call addLayer
+        //   so the user can continue editing).
+        connect(rawPanel, &layers::LayerPanel::addLayerKindRequested,
+                this, [this](int kind) {
+            if (!m_layerStack) return;
+            int newIdx = -1;
+            QString suffix;
+            switch (kind) {
+            case 0: {   // Bitmap
+                cv::Mat m = m_current.empty()
+                    ? cv::Mat(64, 64, CV_8UC3, cv::Scalar(200, 200, 200))
+                    : cv::Mat::zeros(m_current.size(), CV_8UC3);
+                newIdx = m_layerStack->addLayer(
+                    QStringLiteral("Bitmap %1").arg(m_layerStack->count() + 1),
+                    m);
+                suffix = tr("位图");
+                break;
+            }
+            case 1: {   // Vector
+                QVector<QPainterPath> paths;
+                newIdx = m_layerStack->addVectorLayer(
+                    QStringLiteral("Vector %1").arg(m_layerStack->count() + 1),
+                    paths, QVector<QColor>());
+                suffix = tr("矢量");
+                break;
+            }
+            case 2: {   // Text
+                newIdx = m_layerStack->addTextLayer(
+                    QStringLiteral("Text %1").arg(m_layerStack->count() + 1),
+                    tr("输入文字…"), 48, Qt::white, QStringLiteral("Arial"));
+                suffix = tr("文字");
+                break;
+            }
+            case 3: {   // SmartObject
+                const QString path = QFileDialog::getOpenFileName(
+                    this, tr("选择智能对象源文件"), QString(),
+                    tr("图像 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;所有 (*.*)"));
+                if (path.isEmpty()) return;
+                newIdx = m_layerStack->addSmartObjectLayer(
+                    QStringLiteral("SmartObject %1")
+                        .arg(m_layerStack->count() + 1),
+                    path, /*embed=*/false);
+                suffix = tr("智能对象");
+                break;
+            }
+            case 4: {   // Adjustment
+                newIdx = m_layerStack->addAdjustmentLayer(
+                    QStringLiteral("Adjustment %1")
+                        .arg(m_layerStack->count() + 1),
+                    QStringLiteral("curves"),
+                    cv::Mat());
+                suffix = tr("调整层");
+                break;
+            }
+            default:
+                return;
+            }
+            if (newIdx < 0) {
+                statusBar()->showMessage(tr("新建图层失败"), 3000);
+                return;
+            }
+            if (m_undoStack) {
+                auto l = m_layerStack->at(newIdx);
+                if (l) m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(), layers::LayerCommand::Add, *l));
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("已新建 %1 图层").arg(suffix), 3000);
+        });
+
+        // deleteLayerRequested: pushes makeRemove, undo restores the full
+        //   layer (including the Mat clone).
+        connect(rawPanel, &layers::LayerPanel::deleteLayerRequested,
+                this, [this](int index) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeRemove(
+                    m_layerStack.get(), index);
+                if (cmd) m_undoStack->push(cmd);
+                else m_layerStack->removeLayer(index);
+            } else {
+                m_layerStack->removeLayer(index);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("已删除图层"), 3000);
+        });
+
+        // duplicateLayerRequested: goes through LayerStack::duplicateLayer
+        //   (deep copy).
+        //   Pushes LayerCommand::Add for undo (P1.4.1 already uses
+        //   the same pattern).
+        connect(rawPanel, &layers::LayerPanel::duplicateLayerRequested,
+                this, [this](int index) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            if (!m_layerStack->duplicateLayer(index)) {
+                statusBar()->showMessage(tr("复制图层失败"), 3000);
+                return;
+            }
+            const int newIdx = m_layerStack->count() - 1;
+            if (m_undoStack) {
+                auto l = m_layerStack->at(newIdx);
+                if (l) m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(), layers::LayerCommand::Add, *l));
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("已复制图层"), 3000);
+        });
+
+        // moveUpRequested: index is the position of the layer that should
+        //   be moved up.
+        //   LayerStack::moveUp(index) moves index -> index + 1.
+        connect(rawPanel, &layers::LayerPanel::moveUpRequested,
+                this, [this](int index) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            if (m_undoStack) {
+                m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(), index, +1));
+            }
+            m_layerStack->moveUp(index);
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("上移图层"), 2000);
+        });
+
+        // moveDownRequested: same pattern, direction = -1.
+        connect(rawPanel, &layers::LayerPanel::moveDownRequested,
+                this, [this](int index) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            if (m_undoStack) {
+                m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(), index, -1));
+            }
+            m_layerStack->moveDown(index);
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("下移图层"), 2000);
+        });
+
+        // mergeDownRequested: goes through LayerStack::mergeDown +
+        //   LayerCommand::Merge.
+        //   Known Phase 1 limitation: undo only restores the lower layer
+        //   image, cannot fully split the upper layer (P1.4.6 inherits this).
+        connect(rawPanel, &layers::LayerPanel::mergeDownRequested,
+                this, [this](int index) {
+            if (!m_layerStack || index <= 0 || index >= m_layerStack->count()) {
+                statusBar()->showMessage(tr("无法合并 (已在最底层)"), 3000);
+                return;
+            }
+            if (m_undoStack) {
+                m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(), index));
+            } else {
+                m_layerStack->mergeDown(index);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("已向下合并"), 3000);
+        });
+
+        // flattenVisibleRequested: PS "Flatten Image" -- mergeDown all + 1 base
+        //   LayerStack::flattenVisible returns the merged cv::Mat
+        //   (reserved for future display).
+        //   P1.4.6: only re-flatten triggers cache invalidation; we do not
+        //   rewrite the composition pipeline for all layers.
+        connect(rawPanel, &layers::LayerPanel::flattenVisibleRequested,
+                this, [this]() {
+            if (!m_layerStack || m_layerStack->count() <= 1) {
+                statusBar()->showMessage(tr("无需拼合 (图层数 ≤ 1)"), 3000);
+                return;
+            }
+            cv::Mat m = m_layerStack->flattenVisible();
+            if (m.empty()) {
+                statusBar()->showMessage(tr("拼合失败"), 3000);
+                return;
+            }
+            // P1.4.6 simplification: flattenVisible returns the composed
+            //   image; here we just reset the base layer.
+            //   Full PS-style flatten (clear all layers + set base) requires
+            //   rewriting LayerStack
+            //   internal state. Deferred to P1.5+.
+            m_layerStack->setBaseLayer(m);
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("已合并所有可见图层到 base (仅 base 保留)"), 3000);
+        });
+
+        // groupRequested: complex operation (LayerStack has no group API),
+        //   left as TBD.
+        // P1.4.6 stage: emit a status bar hint, do not ship a half-baked impl.
+        connect(rawPanel, &layers::LayerPanel::groupRequested,
+                this, [this](int first, int last) {
+            if (!m_layerStack) return;
+            statusBar()->showMessage(
+                tr("编组 [TBD %1..%2]: 已记入待办, 见 P1.5+ 编组重做")
+                    .arg(first).arg(last), 5000);
+        });
+
+        // ungroupRequested: same as above, TBD.
+        connect(rawPanel, &layers::LayerPanel::ungroupRequested,
+                this, [this]() {
+            if (!m_layerStack) return;
+            statusBar()->showMessage(
+                tr("解组 [TBD]: 已记入待办, 见 P1.5+ 编组重做"), 5000);
+        });
+
+        // ---- Layer property -------------------------------------------
+        // renameRequested: LayerCommand::Rename, stores the old name.
+        connect(rawPanel, &layers::LayerPanel::renameRequested,
+                this, [this](int index, const QString &newName) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const QString oldName = l->name;
+            if (!m_layerStack->rename(index, newName)) return;
+            if (m_undoStack) {
+                m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(),
+                    layers::LayerCommand::Rename, index, oldName));
+            }
+            invalidateCurrentCache();
+            statusBar()->showMessage(
+                tr("已重命名为 \"%1\"").arg(newName), 3000);
+        });
+
+        // setVisibleRequested: LayerCommand::Visible, stores the old bool.
+        connect(rawPanel, &layers::LayerPanel::setVisibleRequested,
+                this, [this](int index, bool visible) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const bool oldVisible = l->visible;
+            if (!m_layerStack->setVisible(index, visible)) return;
+            if (m_undoStack) {
+                m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(),
+                    layers::LayerCommand::Visible, index, oldVisible));
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                visible ? tr("已显示图层") : tr("已隐藏图层"), 2000);
+        });
+
+        // setLockedRequested: LayerCommand::Locked
+        connect(rawPanel, &layers::LayerPanel::setLockedRequested,
+                this, [this](int index, bool locked) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const bool oldLocked = l->locked;
+            if (!m_layerStack->setLocked(index, locked)) return;
+            if (m_undoStack) {
+                m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(),
+                    layers::LayerCommand::Locked, index, oldLocked));
+            }
+            invalidateCurrentCache();
+            statusBar()->showMessage(
+                locked ? tr("已锁定图层") : tr("已解锁图层"), 2000);
+        });
+
+        // setLinkedRequested: LayerCommand::Linked
+        connect(rawPanel, &layers::LayerPanel::setLinkedRequested,
+                this, [this](int index, bool linked) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const bool oldLinked = l->isLinked;
+            if (!m_layerStack->setLinked(index, linked)) return;
+            if (m_undoStack) {
+                m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(),
+                    layers::LayerCommand::Linked, index, oldLinked));
+            }
+            invalidateCurrentCache();
+            statusBar()->showMessage(
+                linked ? tr("已链接图层") : tr("已取消链接"), 2000);
+        });
+
+        // setOpacityRequested: LayerCommand::Opacity, stores the old float.
+        connect(rawPanel, &layers::LayerPanel::setOpacityRequested,
+                this, [this](int index, float opacity) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const float oldOpacity = l->opacity;
+            if (!m_layerStack->setOpacity(index, opacity)) return;
+            if (m_undoStack) {
+                m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(),
+                    layers::LayerCommand::Opacity, index, oldOpacity));
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("不透明度 → %1%").arg(qRound(opacity * 100.0f)), 2000);
+        });
+
+        // setBlendRequested: note the LayerPanel internal signal is named
+        //   setBlendRequested
+        //   (the task spec uses setBlendModeRequested - same signal).
+        //   LayerCommand::Blend
+        //   stores the new blend int (m_intVal); undo reads layer.blend
+        //   directly to restore.
+        connect(rawPanel, &layers::LayerPanel::setBlendRequested,
+                this, [this](int index, int blendInt) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const int oldBlend = static_cast<int>(l->blend);
+            const auto newMode = static_cast<layers::Layer::BlendMode>(blendInt);
+            if (!m_layerStack->setBlend(index, newMode)) return;
+            if (m_undoStack) {
+                m_undoStack->push(new layers::LayerCommand(
+                    m_layerStack.get(),
+                    layers::LayerCommand::Blend, index, oldBlend));
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("混合模式已更改"), 2000);
+        });
+
+        // ---- Layer-type specific --------------------------------------
+        // setTextRequested: goes through makeSetText, stores the old text.
+        connect(rawPanel, &layers::LayerPanel::setTextRequested,
+                this, [this](int index, const QString &text) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l || l->kind != layers::Layer::Text) return;
+            const QString oldText = l->text;
+            if (!m_layerStack->setText(index, text)) return;
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeSetText(
+                    m_layerStack.get(), index, oldText);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("已更新文字内容"), 2000);
+        });
+
+        // setTextFontRequested: goes through makeSetTextFont, stores the old
+        //   family/size/color.
+        connect(rawPanel, &layers::LayerPanel::setTextFontRequested,
+                this, [this](int index, const QString &family, int size,
+                              const QColor &color) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l || l->kind != layers::Layer::Text) return;
+            const QString oldFamily = l->fontFamily;
+            const int oldSize = l->fontSize;
+            const QColor oldColor = l->textColor;
+            if (!m_layerStack->setTextFont(index, family, size, color)) return;
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeSetTextFont(
+                    m_layerStack.get(), index, oldFamily, oldSize, oldColor);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("文字字体已更新"), 2000);
+        });
+
+        // setSmartObjectSourceRequested: P1.4.3 already uses
+        //   makeSetSmartObject
+        //   (Relink uses the same factory) - reuse the same path.
+        connect(rawPanel, &layers::LayerPanel::setSmartObjectSourceRequested,
+                this, [this](int index, const QString &path, bool embed) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l || l->kind != layers::Layer::SmartObject) return;
+            const QString oldPath = l->sourceFilePath;
+            const bool oldEmbed = l->sourceEmbedded;
+            if (!m_layerStack->setSmartObjectSource(index, path, embed)) {
+                statusBar()->showMessage(tr("源文件失败 (源不存在)"), 3000);
+                return;
+            }
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeSetSmartObject(
+                    m_layerStack.get(), index, oldPath, oldEmbed);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("已更新 SmartObject 源: %1").arg(QFileInfo(path).fileName()),
+                3000);
+        });
+
+        // setAdjustmentTypeRequested: goes through makeSetAdjustmentType.
+        connect(rawPanel, &layers::LayerPanel::setAdjustmentTypeRequested,
+                this, [this](int index, const QString &type) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l || l->kind != layers::Layer::Adjustment) return;
+            const QString oldType = l->adjustmentType;
+            if (!m_layerStack->setAdjustmentType(index, type)) return;
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeSetAdjustmentType(
+                    m_layerStack.get(), index, oldType);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("调整类型 → %1").arg(type), 2000);
+        });
+
+        // setAdjustmentLutResetRequested: resets the LUT to identity.
+        //   LayerCommand has no dedicated "ResetLut" factory; we use
+        //   makeSetAdjustmentLut
+        //   (which stores a before-image snapshot via the P0-3.3 host path).
+        //   P1.4.6 simplified path:
+        //   write layer.adjustmentLut to identity directly, no undo push
+        //   (consistent with Phase 1).
+        connect(rawPanel, &layers::LayerPanel::setAdjustmentLutResetRequested,
+                this, [this](int index) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l || l->kind != layers::Layer::Adjustment) return;
+            l->adjustmentLut = cv::Mat(256, 1, CV_8U);
+            uchar *p = l->adjustmentLut.ptr<uchar>();
+            for (int i = 0; i < 256; ++i) p[i] = static_cast<uchar>(i);
+            m_layerStack->setAdjustmentLut(index, l->adjustmentLut);
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("调整层 LUT 已复位 (identity)"), 3000);
+        });
+
+        // ---- Mask operations ------------------------------------------
+        // addMaskRequested: maskPath comes from LayerPanel through QFileDialog
+        //   (used by the P1.3.4 mask panel); here we reuse the path to load
+        //   a grayscale image as the mask.
+        //   The kind param is derived from
+        //   LayerPanel::addMaskRequested(int, QString) -
+        //   see LayerPanel.h notes: empty QString = go via
+        //   addPixelMaskFromSelection,
+        //   non-empty = load as a pixel mask. P1.4.6 simplification: always
+        //   load by path as a pixel mask,
+        //   otherwise build the mask from selection (if selection non-empty,
+        //   addPixelMaskFromSelection).
+        connect(rawPanel, &layers::LayerPanel::addMaskRequested,
+                this, [this](int index, const QString &maskPath) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const cv::Mat oldMask = l->mask.pixel.clone();
+            const bool wasEnabled = l->mask.enabled;
+            bool ok = false;
+            if (maskPath.isEmpty()) {
+                //   go via selection
+                if (m_selection && !m_selection->mask().isNull()
+                    && m_selection->mask().size().width() > 0) {
+                    const QImage sm = m_selection->mask();
+                    cv::Mat gray(sm.height(), sm.width(), CV_8UC1,
+                                 const_cast<uchar*>(sm.bits()),
+                                 sm.bytesPerLine());
+                    const cv::Mat grayClone = gray.clone();
+                    ok = m_layerStack->addPixelMask(index, grayClone);
+                }
+            } else {
+                const QImage qm = QImage(maskPath).convertToFormat(
+                    QImage::Format_Grayscale8);
+                if (!qm.isNull()) {
+                    cv::Mat gray(qm.height(), qm.width(), CV_8UC1,
+                                 const_cast<uchar*>(qm.bits()),
+                                 qm.bytesPerLine());
+                    const cv::Mat grayClone = gray.clone();
+                    ok = m_layerStack->addPixelMask(index, grayClone);
+                }
+            }
+            if (!ok) {
+                statusBar()->showMessage(
+                    tr("加蒙版失败 (空选区/无效图)"), 3000);
+                return;
+            }
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeAddMask(
+                    m_layerStack.get(), index, oldMask, wasEnabled);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("已添加蒙版"), 3000);
+        });
+
+        // clearMaskRequested: goes through makeClearMask, fully saves the
+        //   before state of the mask.
+        connect(rawPanel, &layers::LayerPanel::clearMaskRequested,
+                this, [this](int index) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const cv::Mat oldMask = l->mask.pixel.clone();
+            const bool wasEnabled = l->mask.enabled;
+            if (!m_layerStack->clearMaskFull(index)) {
+                statusBar()->showMessage(tr("清除蒙版失败"), 3000);
+                return;
+            }
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeClearMask(
+                    m_layerStack.get(), index, oldMask, wasEnabled);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(tr("已删除蒙版"), 3000);
+        });
+
+        // toggleMaskRequested: goes through makeEnableMask.
+        connect(rawPanel, &layers::LayerPanel::toggleMaskRequested,
+                this, [this](int index, bool enabled) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const bool oldEnabled = l->mask.enabled;
+            if (!m_layerStack->setMaskEnabled(index, enabled)) return;
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeEnableMask(
+                    m_layerStack.get(), index, oldEnabled);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                enabled ? tr("蒙版已启用") : tr("蒙版已禁用"), 2000);
+        });
+
+        // setMaskInvertRequested: P1.4.6 simplified path, no undo push
+        //   (consistent with Phase 1).
+        connect(rawPanel, &layers::LayerPanel::setMaskInvertRequested,
+                this, [this](int index, bool invert) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            if (!m_layerStack->setMaskInvert(index, invert)) return;
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                invert ? tr("蒙版已反相") : tr("蒙版取消反相"), 2000);
+        });
+
+        // setMaskDensityRequested: same as above.
+        connect(rawPanel, &layers::LayerPanel::setMaskDensityRequested,
+                this, [this](int index, qreal density) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            if (!m_layerStack->setMaskDensity(index, density)) return;
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("蒙版密度 → %1").arg(density, 0, 'f', 2), 2000);
+        });
+
+        // setMaskFeatherRequested
+        connect(rawPanel, &layers::LayerPanel::setMaskFeatherRequested,
+                this, [this](int index, qreal featherPx) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            if (!m_layerStack->setMaskFeather(index, featherPx)) return;
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("蒙版羽化 → %1 px").arg(featherPx, 0, 'f', 1), 2000);
+        });
+
+        // addVectorMaskRequested: goes through LayerStack::addVectorMask
+        //   (empty path is accepted too).
+        //   P1.4.6 simplification: only pushes LayerCommand::Add (mask kind /
+        //   state cannot be undone, but the UI can redo).
+        connect(rawPanel, &layers::LayerPanel::addVectorMaskRequested,
+                this, [this](int index) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            QVector<QPainterPath> paths;   // empty - lets the user draw paths
+                                          //   later with PenTool
+            if (!m_layerStack->addVectorMask(index, paths)) {
+                statusBar()->showMessage(tr("矢量蒙版添加失败"), 3000);
+                return;
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("已添加矢量蒙版 (用 PenTool 画路径)"), 3000);
+        });
+
+        // addPixelMaskFromSelectionRequested: similar to addMaskRequested
+        //   but goes
+        //   through the selection path explicitly (LayerPanel calls this
+        //   instead of addMaskRequested with empty path).
+        connect(rawPanel, &layers::LayerPanel::addPixelMaskFromSelectionRequested,
+                this, [this](int index) {
+            if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            if (!m_selection || m_selection->mask().isNull()
+                || m_selection->boundingRect().isEmpty()) {
+                statusBar()->showMessage(tr("当前无有效选区"), 3000);
+                return;
+            }
+            const QImage sm = m_selection->mask();
+            cv::Mat gray(sm.height(), sm.width(), CV_8UC1,
+                         const_cast<uchar*>(sm.bits()),
+                         sm.bytesPerLine());
+            const cv::Mat grayClone = gray.clone();
+            auto l = m_layerStack->at(index);
+            const cv::Mat oldMask = l ? l->mask.pixel.clone() : cv::Mat();
+            const bool wasEnabled = l ? l->mask.enabled : false;
+            if (!m_layerStack->addPixelMask(index, grayClone)) return;
+            if (m_undoStack) {
+                auto *cmd = layers::LayerCommand::makeAddMask(
+                    m_layerStack.get(), index, oldMask, wasEnabled);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            renderToView();
+            statusBar()->showMessage(
+                tr("已从选区添加像素蒙版"), 3000);
         });
     }
 

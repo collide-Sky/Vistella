@@ -145,3 +145,6 @@ add_vistella_test(tst_SmartFilter)
 # P1.4.5 (2026-09-17): SmartObject non-destructive transform 主菜单 + 撤销栈集成
 #   (set/clear transform persistence, rasterize with transform applied, undo + re-apply)
 add_vistella_test(tst_SmartObjectTransform)
+# P1.4.6 (2026-09-17): P1.4 UI wrap-up tests (TransformDialog 4 cases; the 26
+#   LayerPanel signal wires and QMessageBox prompt are QSKIPed with reasons).
+add_vistella_test(tst_P1_4_6_Integration)

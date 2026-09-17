@@ -18,6 +18,9 @@
 #include "../media/imageworker/layers/Layer.h"
 #include "../media/imageworker/layers/LayerCommand.h"
 #include "../media/imageworker/layers/LayerMaskCommand.h"
+// P1.4.6 (2026-09-17): Unified transform dialog (replaces P1.4.5's chained
+//   QInputDialog).
+#include "../media/docks/TransformDialog.h"
 #include <opencv2/imgproc.hpp>
 #include <QInputDialog>
 #include "logger.h"
@@ -2255,10 +2258,11 @@ void MainWindow::onSmartObjectRotate(int idx)
 
 void MainWindow::onSmartObjectTransform(int idx)
 {
-    // Chained alias: Scale first, then Rotate. PS also has free transform (F1)
-    // with handle drag — that's a separate dialog (P1.4.6 / P1.5+), here we
-    // cover the parametric Scale + Rotate compose. Implementation mirrors
-    // the LayerPanel right-click "变换 (Scale + Rotate)" entry.
+    // P1.4.5 chained alias (Scale + Rotate + Translate): replaced by the unified
+    // docks::TransformDialog (P1.4.6) which collects 5 fields (scale X/Y,
+    // rotation degrees, translate X/Y) in a single QDialog + Link toggle + Reset.
+    // PS also has free transform (F1) with handle drag — that's a separate dialog
+    // (P1.5+), the parametric entry we cover here uses numerical fields only.
     ImageWindow *img = nullptr;
     layers::LayerStack *stack = nullptr;
     int realIdx = -1;
@@ -2272,28 +2276,14 @@ void MainWindow::onSmartObjectTransform(int idx)
         statusBar()->showMessage(tr("请先选中一个智能对象图层"), 2000);
         return;
     }
-    bool ok = false;
-    const double sx = QInputDialog::getDouble(this, tr("变换"),
-                                             tr("Scale X (0.1..10):"),
-                                             1.0, 0.1, 10.0, 2, &ok);
-    if (!ok) return;
-    const double sy = QInputDialog::getDouble(this, tr("变换"),
-                                             tr("Scale Y (0.1..10):"),
-                                             sx, 0.1, 10.0, 2, &ok);
-    if (!ok) return;
-    const double deg = QInputDialog::getDouble(this, tr("变换"),
-                                               tr("Rotation (degrees, -360..360):"),
-                                               0.0, -360.0, 360.0, 1, &ok);
-    if (!ok) return;
-    // Compose rotate-then-scale (PS 自由变换方向: rotate left, scale right, i.e.
-    // column-major pixels = T * R * S * P, so the resulting QTransform t = R * S).
-    QTransform t;
-    t.scale(sx, sy);
-    QTransform r;
-    r.rotate(deg);
-    QTransform delta = r * t;
-    QTransform combined = l->hasTransform ? (l->transform * delta) : delta;
-    img->applySmartObjectTransform(realIdx, combined);
+    docks::TransformDialog dlg(this);
+    dlg.setInitial(l->transform);
+    if (dlg.exec() != QDialog::Accepted) return;
+    // P1.4.6 compose semantics: TransformDialog.result() returns a fully composed
+    //   QTransform with scale + rotate + translate, matching the previous
+    //   chained QInputDialog's R * S composition. applySmartObjectTransform
+    //   keeps the layer's existing transform and combines with the new delta.
+    img->applySmartObjectTransform(realIdx, dlg.result());
 }
 
 void MainWindow::onSmartObjectResetTransform(int idx)

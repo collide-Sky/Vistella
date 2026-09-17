@@ -152,6 +152,10 @@ add_library(vistella_media STATIC
     docks/ChannelPathPanel.h
     docks/ChannelPathPanel.cpp
     docks/ChannelPathPanel.ui
+    # P1.4.6 (2026-09-17): Unified transform dialog (Scale + Rotate + Translate
+    #   + Link + Reset) replacing P1.4.5's chained QInputDialog.
+    docks/TransformDialog.h
+    docks/TransformDialog.cpp
     # P0-8.1 (2026-09-15): HistoryDock (PS 同款 history panel, RightPanelDock 第 6 tab)
     docks/HistoryDock.h
     docks/HistoryDock.cpp
