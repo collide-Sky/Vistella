@@ -31,6 +31,11 @@ add_library(vistella_imageworker STATIC
     # 阶段 1 W4.3 Phase 2 (2026-09-04): 11 种 PS 混合模式
     layers/BlendMode.h
     layers/BlendMode.cpp
+    # P1.4.1 (2026-09-17): SmartObject file watcher
+    #   QFileSystemWatcher 包装 + 2s mtime poll fallback. 监听所有
+    #   SmartObject layer 源, emit sourceFileChanged(index, path) 供 UI 弹提示.
+    layers/SmartObjectWatcher.h
+    layers/SmartObjectWatcher.cpp
 )
 
 target_include_directories(vistella_imageworker

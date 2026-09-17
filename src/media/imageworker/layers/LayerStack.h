@@ -104,6 +104,20 @@ public:
     bool isSmartObjectSourceMissing(int index) const;
     bool toggleSmartObjectEmbed(int index);
 
+    // P1.4.1 (2026-09-17): 智能对象 Convert / Rasterize / Transform 完整化
+    //   convertToSmartObject(index, embed=true): in-place Bitmap -> SmartObject.
+    //     embed=true: write current image to MD5 cache, sourceFilePath = cache path.
+    //     embed=false: sourceFilePath empty (caller will provide later).
+    //   rasterizeSmartObject(index): SmartObject -> Bitmap, in-place.
+    //     Loads source via rasterize(), replaces image, clears SmartObject payload.
+    //   setSmartObjectTransform / clearSmartObjectTransform / smartObjectTransform:
+    //     Non-destructive affine transform applied at rasterize() time. Identity = off.
+    bool convertToSmartObject(int index, bool embed = true);
+    bool rasterizeSmartObject(int index);
+    bool setSmartObjectTransform(int index, const QTransform &t);
+    bool clearSmartObjectTransform(int index);
+    QTransform smartObjectTransform(int index) const;
+
     // Phase 5 (2026-09-04): 全局 cache 清理
     //   遍历 cache dir, 删掉不被任何 layer 引用的文件
     //   返删除的文件数

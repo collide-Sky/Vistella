@@ -33,6 +33,7 @@
 #include <QVector>
 #include <QColor>
 #include <QPainterPath>
+#include <QTransform>
 
 #include "LayerMask.h"
 
@@ -87,6 +88,12 @@ struct Layer {
     // ---- SmartObject payload (kind == SmartObject, Phase 3+5) ----
     QString sourceFilePath;       // 源文件绝对路径 (嵌入时为空)
     bool    sourceEmbedded = false; // true = 嵌入 (复制源文件到 cache), false = 链接
+
+    // P1.4.1 (2026-09-17): Non-destructive transform (SmartObject only).
+    //   Identity = no transform applied. rasterize() applies to source pixels
+    //   when loading. Persisted via LayerCommand::SetSmartObjectTransform.
+    QTransform transform;
+    bool    hasTransform = false;
 
     // ---- Adjustment payload (kind == Adjustment, Phase 3) ----
     QString adjustmentType;       // "curves" / "levels" / "hueSat" / "colorBalance" / ...

@@ -35,6 +35,7 @@
 #include <QUndoCommand>
 #include <QString>
 #include <QColor>
+#include <QTransform>
 #include <QPointer>
 
 // 前向声明 (P0-3.3 引入 host 指针做 image-based undo)
@@ -63,6 +64,10 @@ public:
         EnableMask,         // 开关 (m_boolVal=old enabled)
         // 阶段 1 W4.4 Phase 5 (2026-09-04): 智能对象扩展 Op
         ToggleSmartObjectEmbed,  // link↔embed (m_boolVal=old embedded)
+        // P1.4.1 (2026-09-17): 智能对象 Convert / Rasterize / Transform
+        ConvertToSmartObject,    // Bitmap->SmartObject (in-place kind change)
+        RasterizeSmartObject,   // SmartObject->Bitmap (in-place kind change)
+        SetSmartObjectTransform,// affine transform (m_oldTransform/m_newTransform)
     };
 
     // Add: 给一个 layer, push 时 add, undo 时 remove
@@ -114,6 +119,19 @@ public:
     static LayerCommand* makeEnableMask(LayerStack *stack, int index, bool oldEnabled);
     // 阶段 1 W4.4 Phase 5 (2026-09-04): 智能对象扩展 factory
     static LayerCommand* makeToggleSmartObjectEmbed(LayerStack *stack, int index, bool oldEmbedded);
+    // P1.4.1 (2026-09-17): Convert / Rasterize / Transform factories
+    //   ConvertToSmartObject: stores full before layer (cv::Mat clone) for undo.
+    //   RasterizeSmartObject: stores full before layer (cv::Mat clone + sourceFilePath).
+    //   SetSmartObjectTransform: old/new QTransform + hasTransform flag.
+    static LayerCommand* makeConvertToSmartObject(LayerStack *stack, int index,
+                                                  const Layer &beforeLayer);
+    static LayerCommand* makeRasterizeSmartObject(LayerStack *stack, int index,
+                                                   const Layer &beforeLayer);
+    static LayerCommand* makeSetSmartObjectTransform(LayerStack *stack, int index,
+                                                     const QTransform &oldT,
+                                                     bool oldHas,
+                                                     const QTransform &newT,
+                                                     bool newHas);
 
     void undo() override;
     void redo() override;
@@ -143,6 +161,15 @@ private:
     Layer       m_mergeAfter;        // Merge: 下层 (merge target) after
     QList<bool> m_groupBefore;       // Group: 区间内 link 状态
     QList<bool> m_ungroupBefore;     // Ungroup: 全部 link 状态
+    // P1.4.1 (2026-09-17): Convert / Rasterize smart object before-state.
+    //   We reuse m_layer for the "before" snapshot (containing cv::Mat + sourceFilePath
+    //   + transform) so we can restore the original payload on undo. This is
+    //   lighter than introducing a separate "ConvertBefore/after" + "RasterizeBefore".
+    // P1.4.1 (2026-09-17): Smart object transform undo state.
+    QTransform  m_oldTransform;      // SetSmartObjectTransform: before
+    QTransform  m_newTransform;      // SetSmartObjectTransform: after
+    bool        m_oldHasTransform = false;  // SetSmartObjectTransform: before has flag
+    bool        m_newHasTransform = false;  // SetSmartObjectTransform: after has flag
 };
 
 } // namespace layers

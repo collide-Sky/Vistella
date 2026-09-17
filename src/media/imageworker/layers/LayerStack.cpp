@@ -18,6 +18,7 @@
 #include <QDir>
 #include <QUuid>
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QMetaObject>
 #include <QCoreApplication>
 
@@ -597,7 +598,10 @@ bool LayerStack::isSmartObjectSourceMissing(int index) const
     if (!l || l->kind != Layer::SmartObject) return false;
     if (l->sourceFilePath.isEmpty()) return true;
     if (l->sourceEmbedded) {
-        // 嵌入: 查 cache
+        // P1.4.1 (2026-09-17): convertToSmartObject sets sourceFilePath to the
+        //   cache path directly; if that file exists, treat as present.
+        if (QFile::exists(l->sourceFilePath)) return false;
+        // Otherwise it's a link→embedded smart object: MD5-derive the cache.
         const QString cachePath = smartObjectCachePath(l->sourceFilePath);
         return !QFile::exists(cachePath);
     }
@@ -627,6 +631,118 @@ bool LayerStack::toggleSmartObjectEmbed(int index)
     }
     emit layerChanged(index);
     return true;
+}
+
+// =====================================================================
+//  P1.4.1 (2026-09-17): 智能对象 Convert / Rasterize / Transform
+// =====================================================================
+
+// Helper to allocate a fresh cache path for convertToSmartObject. The path is
+// derived from MD5(currentMSecsSinceEpoch) so consecutive converts from
+// the same Bitmap layer still yield distinct cache files.
+static QString generateConvertSmartObjectCachePath()
+{
+    const QString baseDir = QStandardPaths::writableLocation(
+        QStandardPaths::AppLocalDataLocation)
+        + QStringLiteral("/smartobject-cache");
+    QDir().mkpath(baseDir);
+    const QByteArray hash = QCryptographicHash::hash(
+        QByteArray::number(QDateTime::currentMSecsSinceEpoch()),
+        QCryptographicHash::Md5).toHex();
+    return baseDir + QStringLiteral("/") + QString::fromLatin1(hash)
+           + QStringLiteral(".png");
+}
+
+bool LayerStack::convertToSmartObject(int index, bool embed)
+{
+    auto l = at(index);
+    if (!l) return false;
+    // Only valid for Bitmap kind (the canonical PS "Convert to Smart Object"
+    //   works on bitmap / text / shape layers; P1.4.1 starts with Bitmap).
+    if (l->kind != Layer::Bitmap) return false;
+
+    if (embed) {
+        if (l->image.empty()) return false;
+        const QString cachePath = generateConvertSmartObjectCachePath();
+        if (!cv::imwrite(cachePath.toStdString(), l->image)) return false;
+        l->sourceFilePath = cachePath;
+        l->sourceEmbedded = true;
+    } else {
+        l->sourceFilePath.clear();
+        l->sourceEmbedded = false;
+    }
+    l->kind = Layer::SmartObject;
+    l->transform = QTransform();
+    l->hasTransform = false;
+    emit layerChanged(index);
+    return true;
+}
+
+bool LayerStack::rasterizeSmartObject(int index)
+{
+    auto l = at(index);
+    if (!l || l->kind != Layer::SmartObject) return false;
+    // P1.4.1 (2026-09-17): rasterize fails when source is missing on disk
+    //   (matches Photoshop behavior: rasterizing a broken smart object surfaces
+    //    "Could not rasterize..." instead of committing a placeholder).
+    if (isSmartObjectSourceMissing(index)) return false;
+    // Capture the cache path before rasterize() so we can clean up the orphan
+    //   cache file (embedded) after the kind flip.
+    QString oldCache;
+    if (l->sourceEmbedded && !l->sourceFilePath.isEmpty()) {
+        oldCache = QFile::exists(l->sourceFilePath)
+                       ? l->sourceFilePath
+                       : smartObjectCachePath(l->sourceFilePath);
+    }
+    cv::Mat result = rasterize(l);
+    if (result.empty()) return false;
+    l->image = result;
+    l->kind = Layer::Bitmap;
+    l->sourceFilePath.clear();
+    l->sourceEmbedded = false;
+    l->transform = QTransform();
+    l->hasTransform = false;
+    emit layerChanged(index);
+    // Remove the now-orphan embedded cache file.
+    if (!oldCache.isEmpty()) QFile::remove(oldCache);
+    return true;
+}
+
+bool LayerStack::setSmartObjectTransform(int index, const QTransform &t)
+{
+    auto l = at(index);
+    if (!l || l->kind != Layer::SmartObject) return false;
+    // Identity input => turn off (matches PS semantics: setting identity clears).
+    if (t.isIdentity()) {
+        const bool was = l->hasTransform;
+        l->transform = QTransform();
+        l->hasTransform = false;
+        if (was) emit layerChanged(index);
+        return was;
+    }
+    if (l->transform == t && l->hasTransform) return false;
+    l->transform = t;
+    l->hasTransform = true;
+    emit layerChanged(index);
+    return true;
+}
+
+bool LayerStack::clearSmartObjectTransform(int index)
+{
+    auto l = at(index);
+    if (!l || l->kind != Layer::SmartObject) return false;
+    if (!l->hasTransform) return false;
+    l->transform = QTransform();
+    l->hasTransform = false;
+    emit layerChanged(index);
+    return true;
+}
+
+QTransform LayerStack::smartObjectTransform(int index) const
+{
+    auto l = at(index);
+    if (!l) return QTransform();
+    return l->transform;
 }
 
 int LayerStack::cleanupSmartObjectCache()
@@ -883,7 +999,14 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
     case Layer::SmartObject: {
         QString path = l->sourceFilePath;
         if (l->sourceEmbedded) {
-            path = smartObjectCachePath(l->sourceFilePath);
+            // P1.4.1 (2026-09-17): convertToSmartObject writes the cache path
+            //   directly into sourceFilePath (no MD5 derivation). For such
+            //   layers the path IS the cache file, so use it as-is when it
+            //   exists. For link→embedded toggles, sourceFilePath is still
+            //   the external path and we MD5-derive the cache location.
+            if (!QFile::exists(path)) {
+                path = smartObjectCachePath(l->sourceFilePath);
+            }
         }
         const cv::Size sz = canvasSize();
         if (path.isEmpty() || !QFile::exists(path)) {
@@ -905,6 +1028,22 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
             cv::line(placeholder, cv::Point(0, sz.height), cv::Point(sz.width, 0),
                      cv::Scalar(0, 0, 200), 2);
             return placeholder;
+        }
+        // P1.4.1 (2026-09-17): apply non-destructive affine transform if set
+        //   Identity = no-op. cv::warpAffine in-place semantics on a clone.
+        if (l->hasTransform && !l->transform.isIdentity() && l->transform.isAffine()) {
+            cv::Mat M(2, 3, CV_64F);
+            M.at<double>(0, 0) = l->transform.m11();
+            M.at<double>(0, 1) = l->transform.m12();
+            M.at<double>(0, 2) = l->transform.dx();
+            M.at<double>(1, 0) = l->transform.m21();
+            M.at<double>(1, 1) = l->transform.m22();
+            M.at<double>(1, 2) = l->transform.dy();
+            cv::Mat warped;
+            cv::warpAffine(img, warped, M, img.size(),
+                           cv::INTER_LINEAR, cv::BORDER_CONSTANT,
+                           cv::Scalar(0, 0, 0));
+            img = warped;
         }
         // resize 到 canvas 尺寸 (保持宽高比, fit)
         if (img.size() != sz) {

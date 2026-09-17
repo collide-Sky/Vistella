@@ -235,6 +235,52 @@ LayerCommand* LayerCommand::makeToggleSmartObjectEmbed(LayerStack *stack, int in
 }
 
 // =====================================================================
+//  P1.4.1 (2026-09-17): Convert / Rasterize / Transform factories
+// =====================================================================
+
+// ConvertToSmartObject: caller must invoke convertToSmartObject() BEFORE pushing
+//   this command; on push we capture the BEFORE state in m_layer for undo.
+//   redo() re-applies the conversion from m_layer (Bitmap image) by calling
+//   convertToSmartObject with the captured before-image encoded to cache.
+//   This matches the "factory only stores; apply happens around push" pattern
+//   used by other LayerCommand factories.
+LayerCommand* LayerCommand::makeConvertToSmartObject(LayerStack *stack, int index,
+                                                      const Layer &beforeLayer)
+{
+    auto *cmd = new LayerCommand(stack, ConvertToSmartObject, index);
+    cmd->m_layer = beforeLayer;  // deep copy: cv::Mat + QString + payload
+    cmd->setText(QStringLiteral("Convert to Smart Object"));
+    return cmd;
+}
+
+// RasterizeSmartObject: similar pattern. beforeLayer captures the SmartObject
+//   state (sourceFilePath / sourceEmbedded / transform / hasTransform) for undo.
+LayerCommand* LayerCommand::makeRasterizeSmartObject(LayerStack *stack, int index,
+                                                       const Layer &beforeLayer)
+{
+    auto *cmd = new LayerCommand(stack, RasterizeSmartObject, index);
+    cmd->m_layer = beforeLayer;
+    cmd->setText(QStringLiteral("Rasterize Smart Object"));
+    return cmd;
+}
+
+// SetSmartObjectTransform: stores old + new QTransform and has flag pairs.
+LayerCommand* LayerCommand::makeSetSmartObjectTransform(LayerStack *stack, int index,
+                                                         const QTransform &oldT,
+                                                         bool oldHas,
+                                                         const QTransform &newT,
+                                                         bool newHas)
+{
+    auto *cmd = new LayerCommand(stack, SetSmartObjectTransform, index);
+    cmd->m_oldTransform = oldT;
+    cmd->m_oldHasTransform = oldHas;
+    cmd->m_newTransform = newT;
+    cmd->m_newHasTransform = newHas;
+    cmd->setText(QStringLiteral("Set Smart Object Transform"));
+    return cmd;
+}
+
+// =====================================================================
 //  undo / redo
 // =====================================================================
 
@@ -392,6 +438,44 @@ void LayerCommand::undo()
         }
         break;
     }
+    case ConvertToSmartObject: {
+        // undo: restore Bitmap state captured in m_layer.
+        //   m_layer holds the Bitmap (image + name + visibility / opacity / etc.)
+        //   Use replace semantics: write m_layer fields into the live layer.
+        auto l = m_stack->at(m_index);
+        if (l) {
+            l->kind = m_layer.kind;
+            l->name = m_layer.name;
+            l->image = m_layer.image.clone();
+            l->sourceFilePath = m_layer.sourceFilePath;
+            l->sourceEmbedded = m_layer.sourceEmbedded;
+            l->transform = m_layer.transform;
+            l->hasTransform = m_layer.hasTransform;
+        }
+        break;
+    }
+    case RasterizeSmartObject: {
+        // undo: restore SmartObject state captured in m_layer.
+        auto l = m_stack->at(m_index);
+        if (l) {
+            l->kind = m_layer.kind;
+            l->sourceFilePath = m_layer.sourceFilePath;
+            l->sourceEmbedded = m_layer.sourceEmbedded;
+            l->transform = m_layer.transform;
+            l->hasTransform = m_layer.hasTransform;
+            // image is irrelevant for SmartObject (rendered from source) — drop.
+            l->image = cv::Mat();
+        }
+        break;
+    }
+    case SetSmartObjectTransform: {
+        auto l = m_stack->at(m_index);
+        if (l) {
+            l->transform = m_oldTransform;
+            l->hasTransform = m_oldHasTransform;
+        }
+        break;
+    }
     }
 }
 
@@ -475,6 +559,9 @@ void LayerCommand::redo()
     case ClearMask:
     case EnableMask:
     case ToggleSmartObjectEmbed:
+    case ConvertToSmartObject:
+    case RasterizeSmartObject:
+    case SetSmartObjectTransform:
         // Phase 3/4/5 简化: redo no-op (跟 Opacity 一致)
         //   真实 mainwindow 流程: push(cmd 存 old) → setXxx(new) → undo 还原 old → setXxx(new) → redo no-op
         break;
