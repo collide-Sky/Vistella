@@ -24,6 +24,7 @@
 #include <QGraphicsTextItem>
 
 #include "imageworker/layers/LayerStack.h"
+#include "imageworker/layers/SmartObjectWatcher.h"
 
 // P0-2 (2026-09-08): 接 ThreadPool v2 异步化入口
 //   EngineContext 是 src/core/ThreadPool/ 提供的 6 池 + GPU serial 包装
@@ -298,6 +299,13 @@ public:
     void emitEditTimeShouldUpdate() { emit editTimeShouldUpdate(m_filePath); }
     void emitCloseRequested() { emit closeRequested(); }
 
+    // P1.4.2 (2026-09-17): SmartObject source file watcher
+    //   Tracks all SmartObject layer source files for external modification.
+    //   MainWindow slots call rewatchAll() after Convert / Rasterize / Relink
+    //   to keep watch state in sync with the LayerStack. Returns nullptr until
+    //   loadFile() has run.
+    layers::SmartObjectWatcher* smartObjectWatcher() const { return m_smartWatcher.get(); }
+
     // P0-2 (2026-09-08): EngineContext 公开访问 (供 ImageAdjustmentPanel 等组件用)
     //   raw pointer - lifetime 由 ImageWindow 持有 unique_ptr<m_engine> 保证
     //   ImageWindow 总是比组件晚析构 (QObject parent-child 关系), 不会悬空
@@ -418,6 +426,12 @@ private:
     //   当前不直接改渲染 (切 layer 不改像素), 但触发重绘让激活层指示器更新
     //   也给 MainWindow 一个挂钩点 (e.g. 切到 Adjustment 时自动展开属性面板)
     void onLayerSelectionChanged(int index);
+
+    // P1.4.2 (2026-09-17): SmartObject file watcher
+    //   lifetime tied to ImageWindow; created in loadFile() after m_layerStack.
+    //   receives layerAdded/Removed/Changed signals to keep watch state in sync
+    //   with the stack; emits sourceFileChanged(idx, path) -> statusBar hint.
+    std::unique_ptr<layers::SmartObjectWatcher> m_smartWatcher;
 
     QUndoStack *m_undoStack = nullptr;
     int         m_savedIndex = 0;   // 上次保存时的栈 index, 用于 isDirty

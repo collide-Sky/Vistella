@@ -559,6 +559,25 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             this, [this](int){ invalidateCurrentCache(); });
     connect(m_layerStack.get(), &layers::LayerStack::layerRemoved,
             this, [this](int){ invalidateCurrentCache(); });
+    // P1.4.2 (2026-09-17): 智能对象文件监听器
+    //   监听每个 SmartObject layer 的源文件 mtime, 触发源变化时弹 statusBar 提示
+    //   layerAdded/Removed/Changed 后 rewatchAll 同步 watch 列表 (MainWindow 4 slot
+    //   也会显式调 rewatchAll, 这是兜底)
+    m_smartWatcher = std::make_unique<layers::SmartObjectWatcher>(this);
+    connect(m_smartWatcher.get(), &layers::SmartObjectWatcher::sourceFileChanged,
+            this, [this](int, const QString &path){
+        const QString name = QFileInfo(path).fileName();
+        statusBar()->showMessage(
+            tr("智能对象源文件已修改: %1 (右键图层 → 刷新)").arg(name), 5000);
+    });
+    auto resyncWatcher = [this]{
+        if (m_smartWatcher && m_layerStack)
+            m_smartWatcher->rewatchAll(m_layerStack.get());
+    };
+    connect(m_layerStack.get(), &layers::LayerStack::layerAdded, this, resyncWatcher);
+    connect(m_layerStack.get(), &layers::LayerStack::layerRemoved, this, resyncWatcher);
+    connect(m_layerStack.get(), &layers::LayerStack::layerChanged, this, resyncWatcher);
+    resyncWatcher();
     // 阶段 1 Step A Bug 1 (2026-09-04): 监听 selection 变化
     //   切 layer 不改像素, 但要让画布知道, 触发重绘 + 通知 MainWindow
     connect(m_layerStack.get(), &layers::LayerStack::selectionChanged,

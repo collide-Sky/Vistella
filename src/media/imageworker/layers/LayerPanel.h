@@ -101,6 +101,11 @@ signals:
     void editSmartObjectSourceRequested(int index);   // QDesktopServices 打开源文件
     void refreshSmartObjectRequested(int index);
     void toggleSmartObjectEmbedRequested(int index);
+    // P1.4.2 (2026-09-17): 智能对象右键菜单入口
+    //   转发到 MainWindow onSmartObjectConvert/Rasterize/Relink (带 idx 参数版)
+    void convertToSmartObjectRequested(int index);    // Bitmap -> SmartObject (嵌入)
+    void rasterizeSmartObjectRequested(int index);    // SmartObject -> Bitmap
+    void relinkSmartObjectRequested(int index);       // 重新链接源文件
     void selectionChangedFromPanel(int index);
 
 private slots:

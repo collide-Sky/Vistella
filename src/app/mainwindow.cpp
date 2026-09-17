@@ -16,6 +16,7 @@
 #include "../media/masks/ColorRange.h"
 #include "../media/mediators/ToolMediator.h"
 #include "../media/imageworker/layers/Layer.h"
+#include "../media/imageworker/layers/LayerCommand.h"
 #include "../media/imageworker/layers/LayerMaskCommand.h"
 #include <opencv2/imgproc.hpp>
 #include <QInputDialog>
@@ -36,6 +37,7 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QShowEvent>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -58,6 +60,7 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QTranslator>
+#include <QUrl>
 #include <QWidget>
 #include <QWindow>
 
@@ -526,6 +529,25 @@ void MainWindow::buildActions()
     QAction *aMaskColorRange = mLayer->addAction(tr("颜色范围 (Color Range)..."));
     connect(aMaskColorRange, &QAction::triggered, this, [this]{
         onColorRangeMask();
+    });
+
+    // P1.4.2 (2026-09-17): 智能对象 4 主菜单 action (idx=-1 → 用当前 selection)
+    mLayer->addSeparator();
+    QAction *aSmartConvert = mLayer->addAction(tr("转换为智能对象"));
+    connect(aSmartConvert, &QAction::triggered, this, [this]{
+        onSmartObjectConvert();
+    });
+    QAction *aSmartRasterize = mLayer->addAction(tr("栅格化智能对象"));
+    connect(aSmartRasterize, &QAction::triggered, this, [this]{
+        onSmartObjectRasterize();
+    });
+    QAction *aSmartEditSource = mLayer->addAction(tr("编辑源内容 (Edit Contents)"));
+    connect(aSmartEditSource, &QAction::triggered, this, [this]{
+        onSmartObjectEditSource();
+    });
+    QAction *aSmartRelink = mLayer->addAction(tr("重新链接 (Relink)..."));
+    connect(aSmartRelink, &QAction::triggered, this, [this]{
+        onSmartObjectRelink();
     });
 
     // ---- 文字 (Text) ----
@@ -1935,6 +1957,156 @@ void MainWindow::onColorRangeMask()
     statusBar()->showMessage(
         tr("已应用 Color Range (fuzziness=%1, invert=%2)").arg(fuzziness).arg(invert),
         3000);
+}
+
+// =====================================================================
+//  P1.4.2 (2026-09-17): 智能对象 4 主菜单 / 右键菜单入口
+//   - 主菜单触发: idx=-1 (用 stack->selection())
+//   - LayerPanel 右键触发: idx=具体值 (绕过 selection, 直接对右键目标)
+//   - 所有 4 个 slot 都通过 LayerCommand 推 undoStack, undo/redo 完整恢复
+// =====================================================================
+
+bool MainWindow::resolveSmartObjectTarget(int idxIn,
+                                          ImageWindow **outImg,
+                                          layers::LayerStack **outStack,
+                                          int *outIdx,
+                                          QString *outMsg)
+{
+    auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!img) { *outMsg = tr("需要图像窗口"); return false; }
+    auto *stack = img->layerStack();
+    if (!stack) { *outMsg = tr("LayerStack 未初始化"); return false; }
+    int idx = idxIn;
+    if (idx < 0) idx = stack->selection();
+    if (idx < 0) { *outMsg = tr("请先选中图层"); return false; }
+    *outImg = img; *outStack = stack; *outIdx = idx;
+    return true;
+}
+
+void MainWindow::onSmartObjectConvert(int idx)
+{
+    ImageWindow *img = nullptr;
+    layers::LayerStack *stack = nullptr;
+    int realIdx = -1;
+    QString msg;
+    if (!resolveSmartObjectTarget(idx, &img, &stack, &realIdx, &msg)) {
+        statusBar()->showMessage(msg, 2000);
+        return;
+    }
+    auto l = stack->at(realIdx);
+    if (!l) {
+        statusBar()->showMessage(tr("图层无效"), 2000);
+        return;
+    }
+    if (l->kind == layers::Layer::SmartObject) {
+        statusBar()->showMessage(tr("该图层已是智能对象"), 2000);
+        return;
+    }
+    if (l->kind != layers::Layer::Bitmap || l->image.empty()) {
+        statusBar()->showMessage(tr("请先选中一个有图像的 Bitmap 图层"), 2000);
+        return;
+    }
+    // 备份 before layer (LayerCommand 用 before 状态做还原)
+    const layers::Layer before = *l;
+    if (!stack->convertToSmartObject(realIdx, /*embed*/true)) {
+        statusBar()->showMessage(tr("转换为智能对象失败"), 2000);
+        return;
+    }
+    if (auto *undo = img->undoStack()) {
+        undo->push(layers::LayerCommand::makeConvertToSmartObject(stack, realIdx, before));
+    }
+    if (img->smartObjectWatcher())
+        img->smartObjectWatcher()->rewatchAll(stack);
+    statusBar()->showMessage(tr("已转换为智能对象 (嵌入模式)"), 3000);
+}
+
+void MainWindow::onSmartObjectRasterize(int idx)
+{
+    ImageWindow *img = nullptr;
+    layers::LayerStack *stack = nullptr;
+    int realIdx = -1;
+    QString msg;
+    if (!resolveSmartObjectTarget(idx, &img, &stack, &realIdx, &msg)) {
+        statusBar()->showMessage(msg, 2000);
+        return;
+    }
+    auto l = stack->at(realIdx);
+    if (!l || l->kind != layers::Layer::SmartObject) {
+        statusBar()->showMessage(tr("请先选中一个智能对象图层"), 2000);
+        return;
+    }
+    const layers::Layer before = *l;
+    if (!stack->rasterizeSmartObject(realIdx)) {
+        statusBar()->showMessage(tr("栅格化失败 (源文件不存在)"), 3000);
+        return;
+    }
+    if (auto *undo = img->undoStack()) {
+        undo->push(layers::LayerCommand::makeRasterizeSmartObject(stack, realIdx, before));
+    }
+    if (img->smartObjectWatcher())
+        img->smartObjectWatcher()->rewatchAll(stack);
+    statusBar()->showMessage(tr("已栅格化智能对象"), 3000);
+}
+
+void MainWindow::onSmartObjectEditSource(int idx)
+{
+    ImageWindow *img = nullptr;
+    layers::LayerStack *stack = nullptr;
+    int realIdx = -1;
+    QString msg;
+    if (!resolveSmartObjectTarget(idx, &img, &stack, &realIdx, &msg)) {
+        statusBar()->showMessage(msg, 2000);
+        return;
+    }
+    auto l = stack->at(realIdx);
+    if (!l || l->kind != layers::Layer::SmartObject || l->sourceFilePath.isEmpty()) {
+        statusBar()->showMessage(tr("该图层不是智能对象或未设置源文件"), 2000);
+        return;
+    }
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(l->sourceFilePath))) {
+        statusBar()->showMessage(tr("无法打开源文件: %1").arg(l->sourceFilePath), 3000);
+        return;
+    }
+    statusBar()->showMessage(tr("已在系统默认应用打开源文件: %1").arg(l->sourceFilePath), 3000);
+}
+
+void MainWindow::onSmartObjectRelink(int idx)
+{
+    ImageWindow *img = nullptr;
+    layers::LayerStack *stack = nullptr;
+    int realIdx = -1;
+    QString msg;
+    if (!resolveSmartObjectTarget(idx, &img, &stack, &realIdx, &msg)) {
+        statusBar()->showMessage(msg, 2000);
+        return;
+    }
+    auto l = stack->at(realIdx);
+    if (!l || l->kind != layers::Layer::SmartObject) {
+        statusBar()->showMessage(tr("请先选中一个智能对象图层"), 2000);
+        return;
+    }
+    const QString startDir = l->sourceFilePath.isEmpty()
+        ? QDir::homePath()
+        : QFileInfo(l->sourceFilePath).absolutePath();
+    const QString path = QFileDialog::getOpenFileName(this, tr("选择源文件"), startDir,
+        tr("图像 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;所有 (*.*)"));
+    if (path.isEmpty()) return;
+
+    const QString oldPath = l->sourceFilePath;
+    const bool    oldEmbed = l->sourceEmbedded;
+    if (!stack->setSmartObjectSource(realIdx, path, l->sourceEmbedded)) {
+        // setSmartObjectSource 在 path/embed 未变时返 false, 但这里 path 是新选的
+        // 不会触发未变分支, 失败极少见 (kind != SmartObject 时) — 已经在前面过滤
+        statusBar()->showMessage(tr("重新链接失败"), 2000);
+        return;
+    }
+    if (auto *undo = img->undoStack()) {
+        undo->push(layers::LayerCommand::makeSetSmartObject(stack, realIdx, oldPath, oldEmbed));
+    }
+    if (img->smartObjectWatcher())
+        img->smartObjectWatcher()->rewatchAll(stack);
+    statusBar()->showMessage(
+        tr("已重新链接到: %1").arg(QFileInfo(path).fileName()), 3000);
 }
 
 void MainWindow::onHomeOpenFolderRequested()

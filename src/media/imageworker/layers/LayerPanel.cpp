@@ -862,6 +862,22 @@ void LayerPanel::onContextMenu(const QPoint &pos)
                                             ? tr("取消反转蒙版")
                                             : tr("反转蒙版"));
 
+    // P1.4.2 (2026-09-17): 智能对象右键菜单项 (按 kind 显隐)
+    //   Bitmap (且 image 非空): 1 项 - 转换为智能对象
+    //   SmartObject: 3 项 - 编辑源 / 重新链接 / 栅格化
+    QAction *actSmartConvert = nullptr;
+    QAction *actSmartEditContents = nullptr;
+    QAction *actSmartRelink = nullptr;
+    QAction *actSmartRasterize = nullptr;
+    menu.addSeparator();
+    if (l->kind == Layer::Bitmap && !l->image.empty()) {
+        actSmartConvert = menu.addAction(tr("转换为智能对象"));
+    } else if (l->kind == Layer::SmartObject) {
+        actSmartEditContents = menu.addAction(tr("编辑源内容 (Edit Contents)"));
+        actSmartRelink = menu.addAction(tr("重新链接 (Relink)..."));
+        actSmartRasterize = menu.addAction(tr("栅格化智能对象"));
+    }
+
     QAction *chosen = menu.exec(m_list->mapToGlobal(pos));
     if (!chosen) return;
     if (chosen == actRename) {
@@ -890,6 +906,14 @@ void LayerPanel::onContextMenu(const QPoint &pos)
         emit toggleMaskRequested(index, !l->mask.enabled);
     } else if (chosen == actInvertMask) {
         emit setMaskInvertRequested(index, !l->mask.invert);
+    } else if (chosen && chosen == actSmartConvert) {
+        emit convertToSmartObjectRequested(index);
+    } else if (chosen && chosen == actSmartEditContents) {
+        emit editSmartObjectSourceRequested(index);
+    } else if (chosen && chosen == actSmartRelink) {
+        emit relinkSmartObjectRequested(index);
+    } else if (chosen && chosen == actSmartRasterize) {
+        emit rasterizeSmartObjectRequested(index);
     }
 }
 

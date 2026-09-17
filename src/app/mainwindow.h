@@ -19,6 +19,7 @@ class InfoTreeDock;
 class ImageWindow;
 class HomePage;
 namespace filter { enum class FilterKind : int; }
+namespace layers { class LayerStack; }
 namespace mediators { class WorkspaceMediator; }
 class QMouseEvent;
 QT_END_NAMESPACE
@@ -121,6 +122,21 @@ private slots:
     void onAddPixelMaskFromSelection(); // 选区 -> 像素蒙版 (全 255)
     void onRefineMaskEdge();            // Refine Edge 对话框
     void onColorRangeMask();            // Color Range 对话框
+
+    // P1.4.2 (2026-09-17): 智能对象 4 主菜单 action (idx=-1 表示用当前 selection)
+    //   LayerPanel 右键菜单 emit 信号时传 idx, 主菜单触发时传 -1
+    void onSmartObjectConvert(int idx = -1);
+    void onSmartObjectRasterize(int idx = -1);
+    void onSmartObjectEditSource(int idx = -1);
+    void onSmartObjectRelink(int idx = -1);
+
+    // P1.4.2: 4 slot 共用的 image/stack/idx 解析 (idx<0 → stack->selection())
+    //   填 msg 给 statusBar 提示; 返 false 表示已发提示, 调用方直接 return
+    bool resolveSmartObjectTarget(int idxIn,
+                                   ImageWindow **outImg,
+                                   layers::LayerStack **outStack,
+                                   int *outIdx,
+                                   QString *outMsg);
 
     // Tab
     void onTabChanged(int index);
