@@ -348,6 +348,13 @@ public slots:
     //   (PS 风格通用入口, 4 mode + 翻转 + 旋转都走这个)
     void applyImageTransform(const QTransform& t, const QString& text);
 
+    // P1.4.5 (2026-09-17): non-destructive SmartObject transform.
+    //   Called by MainWindow (主菜单) and LayerPanel (右键) to set a SmartObject
+    //   layer's QTransform via LayerStack::setSmartObjectTransform and push a
+    //   LayerCommand::makeSetSmartObjectTransform undo entry. Identity transform
+    //   clears hasTransform (matches PS semantics).
+    void applySmartObjectTransform(int idx, const QTransform& t);
+
 private slots:
     // 工具栏 actions
     // P0-1.4 (2026-09-07): onSave / onSaveAs / onOpen / onClose 搬到 ImageIOController

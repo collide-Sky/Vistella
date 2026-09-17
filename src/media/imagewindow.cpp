@@ -735,6 +735,42 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             renderToView();
             statusBar()->showMessage(tr("已应用智能滤镜: %1").arg(picked), 3000);
         });
+        // P1.4.5 (2026-09-17): SmartObject scale + rotate non-destructive transform
+        //   from LayerPanel right-click menu. Pops scale + rotation prompts
+        //   then routes through applySmartObjectTransform to apply + push undo.
+        connect(rawPanel, &layers::LayerPanel::transformSmartObjectRequested,
+                this, [this](int smartIdx) {
+            if (!m_layerStack || smartIdx < 0 || smartIdx >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(smartIdx);
+            if (!l || l->kind != layers::Layer::SmartObject) return;
+            bool ok = false;
+            const double scaleX = QInputDialog::getDouble(
+                this, tr("变换"), tr("Scale X (0.1..10):"),
+                1.0, 0.1, 10.0, 2, &ok);
+            if (!ok) return;
+            const double scaleY = QInputDialog::getDouble(
+                this, tr("变换"), tr("Scale Y (0.1..10):"),
+                scaleX, 0.1, 10.0, 2, &ok);
+            if (!ok) return;
+            const double rotDeg = QInputDialog::getDouble(
+                this, tr("变换"), tr("Rotation (degrees, -360..360):"),
+                0.0, -360.0, 360.0, 1, &ok);
+            if (!ok) return;
+            QTransform t;
+            t.rotate(rotDeg);
+            t.scale(scaleX, scaleY);
+            applySmartObjectTransform(smartIdx, t);
+        });
+        // P1.4.5: clear SmartObject transform from LayerPanel right-click.
+        connect(rawPanel, &layers::LayerPanel::resetSmartObjectTransformRequested,
+                this, [this](int smartIdx) {
+            if (!m_layerStack || smartIdx < 0 || smartIdx >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(smartIdx);
+            if (!l || l->kind != layers::Layer::SmartObject) return;
+            // Identity QTransform clears hasTransform (PS semantics, see P1.4.1
+            // LayerStack::setSmartObjectTransform "identity -> turn off" branch).
+            applySmartObjectTransform(smartIdx, QTransform());
+        });
     }
 
     emit filePathChanged(m_filePath);
@@ -1453,6 +1489,45 @@ void ImageWindow::applyImageTransform(const QTransform& t, const QString& text)
     } else {
         setCurrentImage(after);
     }
+}
+
+// P1.4.5 (2026-09-17): apply non-destructive transform to a SmartObject layer.
+//   Used by MainWindow menu actions and LayerPanel right-click "Transform..."
+//   entry to drive LayerStack::setSmartObjectTransform + LayerCommand undo.
+//
+// Identity / no-op short-circuits avoid pushing empty undo entries, matching
+// LayerStack::setSmartObjectTransform's "returns false on no-change" semantics.
+void ImageWindow::applySmartObjectTransform(int idx, const QTransform& newTransform)
+{
+    if (!m_layerStack) return;
+    if (idx < 0 || idx >= m_layerStack->count()) return;
+    auto l = m_layerStack->at(idx);
+    if (!l || l->kind != layers::Layer::SmartObject) return;
+    const QTransform oldT = l->transform;
+    const bool     oldHad = l->hasTransform;
+    // Identity input on a layer without transform is a complete no-op.
+    if (newTransform.isIdentity() && !oldHad) return;
+    // Identity input on a layer WITH transform clears it (still meaningful
+    // for undo); only skip if already cleared (defensive duplicate-guard).
+    if (oldHad && newTransform.isIdentity() == false && newTransform == oldT) return;
+    if (!m_layerStack->setSmartObjectTransform(idx, newTransform)) {
+        // LayerStack returned false: same transform already applied
+        // (Idempotent guard inside LayerStack itself)
+        return;
+    }
+    if (m_undoStack) {
+        // Read post-state for the redo-side stamp. The post-undo transform
+        // and has-flag are required for redo symmetry (LayerCommand stores
+        // old + new pairs even though redo is no-op for transform).
+        auto lAfter = m_layerStack->at(idx);
+        const QTransform newT = lAfter ? lAfter->transform : QTransform();
+        const bool       newHad = lAfter ? lAfter->hasTransform : false;
+        auto *cmd = layers::LayerCommand::makeSetSmartObjectTransform(
+            m_layerStack.get(), idx, oldT, oldHad, newT, newHad);
+        m_undoStack->push(cmd);
+    }
+    invalidateCurrentCache();
+    statusBar()->showMessage(tr("已应用 SmartObject 变换"), 3000);
 }
 
 void ImageWindow::onFreeTransform()

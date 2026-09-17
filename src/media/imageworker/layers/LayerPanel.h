@@ -110,6 +110,12 @@ signals:
     //   Routed to MainWindow: pops filter picker dialog + calls appendSmartFilter
     //   + pushes undo command.
     void applySmartFilterRequested(int smartIdx);
+    // P1.4.5 (2026-09-17): SmartObject non-destructive transform right-click
+    //   entries. Routed to ImageWindow::applySmartObjectTransform.
+    //   transformSmartObjectRequested: pops scale + rotation QInputDialog.
+    //   resetSmartObjectTransformRequested: clears the existing transform.
+    void transformSmartObjectRequested(int smartIdx);
+    void resetSmartObjectTransformRequested(int smartIdx);
 
 private slots:
     // 内部: 监听 LayerStack signals

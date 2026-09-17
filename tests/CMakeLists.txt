@@ -142,3 +142,6 @@ add_vistella_test(tst_SmartObject_v3)
 add_vistella_test(tst_LayerPanelIntegration)
 # P1.4.4 (2026-09-17): SmartFilter chain (append / remove / move / enable / render / undo)
 add_vistella_test(tst_SmartFilter)
+# P1.4.5 (2026-09-17): SmartObject non-destructive transform 主菜单 + 撤销栈集成
+#   (set/clear transform persistence, rasterize with transform applied, undo + re-apply)
+add_vistella_test(tst_SmartObjectTransform)

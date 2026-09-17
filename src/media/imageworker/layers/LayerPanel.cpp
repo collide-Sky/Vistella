@@ -871,6 +871,10 @@ void LayerPanel::onContextMenu(const QPoint &pos)
     QAction *actSmartRelink = nullptr;
     QAction *actSmartRasterize = nullptr;
     QAction *actSmartFilter = nullptr;   // P1.4.4 (2026-09-17): SmartFilter sub-layer
+    // P1.4.5 (2026-09-17): SmartObject non-destructive transform right-click
+    // entries. transform pops scale + rotation prompts; reset clears.
+    QAction *actSmartTransform = nullptr;
+    QAction *actSmartResetTransform = nullptr;
     menu.addSeparator();
     if (l->kind == Layer::Bitmap && !l->image.empty()) {
         actSmartConvert = menu.addAction(tr("转换为智能对象"));
@@ -879,6 +883,10 @@ void LayerPanel::onContextMenu(const QPoint &pos)
         actSmartRelink = menu.addAction(tr("重新链接 (Relink)..."));
         actSmartRasterize = menu.addAction(tr("栅格化智能对象"));
         actSmartFilter = menu.addAction(tr("应用智能滤镜..."));
+        // P1.4.5: scale + rotate + reset transform (composition order matters in PS,
+        // but QInputDialog chain keeps the v1 entry simple).
+        actSmartTransform = menu.addAction(tr("变换 (Scale + Rotate)..."));
+        actSmartResetTransform = menu.addAction(tr("重置变换"));
     }
 
     QAction *chosen = menu.exec(m_list->mapToGlobal(pos));
@@ -919,6 +927,12 @@ void LayerPanel::onContextMenu(const QPoint &pos)
         emit rasterizeSmartObjectRequested(index);
     } else if (chosen && chosen == actSmartFilter) {
         emit applySmartFilterRequested(index);
+    } else if (chosen && chosen == actSmartTransform) {
+        // P1.4.5 (2026-09-17): SmartObject non-destructive scale + rotate.
+        emit transformSmartObjectRequested(index);
+    } else if (chosen && chosen == actSmartResetTransform) {
+        // P1.4.5: clear SmartObject transform.
+        emit resetSmartObjectTransformRequested(index);
     }
 }
 

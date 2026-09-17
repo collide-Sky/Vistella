@@ -556,6 +556,27 @@ void MainWindow::buildActions()
         onApplySmartFilter();
     });
 
+    // P1.4.5 (2026-09-17): SmartObject 非破坏性变换 主菜单 4 entry
+    //   (与 LayerPanel 右键菜单的变换/重置 同流程, 通过 ImageWindow::applySmartObjectTransform
+    //    路径接入, 推 LayerCommand::makeSetSmartObjectTransform 进 undoStack)
+    mLayer->addSeparator();
+    QAction *aSmartTransform = mLayer->addAction(tr("SmartObject 变换 (Scale + Rotate)..."));
+    connect(aSmartTransform, &QAction::triggered, this, [this]{
+        onSmartObjectTransform();
+    });
+    QAction *aSmartScale = mLayer->addAction(tr("SmartObject 缩放 (Scale)..."));
+    connect(aSmartScale, &QAction::triggered, this, [this]{
+        onSmartObjectScale();
+    });
+    QAction *aSmartRotate = mLayer->addAction(tr("SmartObject 旋转 (Rotate)..."));
+    connect(aSmartRotate, &QAction::triggered, this, [this]{
+        onSmartObjectRotate();
+    });
+    QAction *aSmartResetTransform = mLayer->addAction(tr("SmartObject 重置变换"));
+    connect(aSmartResetTransform, &QAction::triggered, this, [this]{
+        onSmartObjectResetTransform();
+    });
+
     // ---- 文字 (Text) ----
     QMenu *mText = mb->addMenu(tr("文字"));
     QAction *aTextFont = mText->addAction(tr("字体..."));
@@ -2157,6 +2178,147 @@ void MainWindow::onApplySmartFilter(int idx)
             stack, newIdx, picked, 1.0));
     }
     statusBar()->showMessage(tr("已应用智能滤镜: %1").arg(picked), 3000);
+}
+
+// =====================================================================
+//  P1.4.5 (2026-09-17): SmartObject 非破坏性变换 主菜单 4 入口
+//
+//  共享 resolveSmartObjectTarget 解析 img/stack/idx. 路径:
+//    1. 主菜单触发: idx=-1 → resolveSmartObjectTarget 走 stack->selection()
+//    2. LayerPanel 右键触发: idx=具体值 (符号保留)
+//    3. 调 ImageWindow::applySmartObjectTransform → 推 LayerCommand
+//
+//  4 slot:
+//    - onSmartObjectTransform: chained Scale + Rotate (compose scale, rotate
+//      顺序 = Photoshop 默认). Composition order matters: QTransform 乘法是
+//      左乘 (t.rotate * t.scale), 跟"先 scale 后 rotate"视觉一致.
+//    - onSmartObjectScale: 仅缩放, 跟现有 transform 复合 (有 transform 时).
+//    - onSmartObjectRotate: 仅旋转, 跟现有 transform 复合.
+//    - onSmartObjectResetTransform: identity → 清除 hasTransform (走 imagewindow
+//      的同一入口, 推 makeSetSmartObjectTransform 用于 undo).
+// =====================================================================
+
+void MainWindow::onSmartObjectScale(int idx)
+{
+    ImageWindow *img = nullptr;
+    layers::LayerStack *stack = nullptr;
+    int realIdx = -1;
+    QString msg;
+    if (!resolveSmartObjectTarget(idx, &img, &stack, &realIdx, &msg)) {
+        statusBar()->showMessage(msg, 2000);
+        return;
+    }
+    auto l = stack->at(realIdx);
+    if (!l || l->kind != layers::Layer::SmartObject) {
+        statusBar()->showMessage(tr("请先选中一个智能对象图层"), 2000);
+        return;
+    }
+    bool ok = false;
+    const double sx = QInputDialog::getDouble(this, tr("缩放"),
+                                             tr("Scale X (0.1..10):"),
+                                             1.0, 0.1, 10.0, 2, &ok);
+    if (!ok) return;
+    const double sy = QInputDialog::getDouble(this, tr("缩放"),
+                                             tr("Scale Y (0.1..10):"),
+                                             sx, 0.1, 10.0, 2, &ok);
+    if (!ok) return;
+    QTransform delta = QTransform::fromScale(sx, sy);
+    QTransform combined = l->hasTransform ? (l->transform * delta) : delta;
+    img->applySmartObjectTransform(realIdx, combined);
+}
+
+void MainWindow::onSmartObjectRotate(int idx)
+{
+    ImageWindow *img = nullptr;
+    layers::LayerStack *stack = nullptr;
+    int realIdx = -1;
+    QString msg;
+    if (!resolveSmartObjectTarget(idx, &img, &stack, &realIdx, &msg)) {
+        statusBar()->showMessage(msg, 2000);
+        return;
+    }
+    auto l = stack->at(realIdx);
+    if (!l || l->kind != layers::Layer::SmartObject) {
+        statusBar()->showMessage(tr("请先选中一个智能对象图层"), 2000);
+        return;
+    }
+    bool ok = false;
+    const double deg = QInputDialog::getDouble(this, tr("旋转"),
+                                               tr("Rotation (degrees, -360..360):"),
+                                               0.0, -360.0, 360.0, 1, &ok);
+    if (!ok) return;
+    QTransform delta;
+    delta.rotate(deg);
+    QTransform combined = l->hasTransform ? (l->transform * delta) : delta;
+    img->applySmartObjectTransform(realIdx, combined);
+}
+
+void MainWindow::onSmartObjectTransform(int idx)
+{
+    // Chained alias: Scale first, then Rotate. PS also has free transform (F1)
+    // with handle drag — that's a separate dialog (P1.4.6 / P1.5+), here we
+    // cover the parametric Scale + Rotate compose. Implementation mirrors
+    // the LayerPanel right-click "变换 (Scale + Rotate)" entry.
+    ImageWindow *img = nullptr;
+    layers::LayerStack *stack = nullptr;
+    int realIdx = -1;
+    QString msg;
+    if (!resolveSmartObjectTarget(idx, &img, &stack, &realIdx, &msg)) {
+        statusBar()->showMessage(msg, 2000);
+        return;
+    }
+    auto l = stack->at(realIdx);
+    if (!l || l->kind != layers::Layer::SmartObject) {
+        statusBar()->showMessage(tr("请先选中一个智能对象图层"), 2000);
+        return;
+    }
+    bool ok = false;
+    const double sx = QInputDialog::getDouble(this, tr("变换"),
+                                             tr("Scale X (0.1..10):"),
+                                             1.0, 0.1, 10.0, 2, &ok);
+    if (!ok) return;
+    const double sy = QInputDialog::getDouble(this, tr("变换"),
+                                             tr("Scale Y (0.1..10):"),
+                                             sx, 0.1, 10.0, 2, &ok);
+    if (!ok) return;
+    const double deg = QInputDialog::getDouble(this, tr("变换"),
+                                               tr("Rotation (degrees, -360..360):"),
+                                               0.0, -360.0, 360.0, 1, &ok);
+    if (!ok) return;
+    // Compose rotate-then-scale (PS 自由变换方向: rotate left, scale right, i.e.
+    // column-major pixels = T * R * S * P, so the resulting QTransform t = R * S).
+    QTransform t;
+    t.scale(sx, sy);
+    QTransform r;
+    r.rotate(deg);
+    QTransform delta = r * t;
+    QTransform combined = l->hasTransform ? (l->transform * delta) : delta;
+    img->applySmartObjectTransform(realIdx, combined);
+}
+
+void MainWindow::onSmartObjectResetTransform(int idx)
+{
+    ImageWindow *img = nullptr;
+    layers::LayerStack *stack = nullptr;
+    int realIdx = -1;
+    QString msg;
+    if (!resolveSmartObjectTarget(idx, &img, &stack, &realIdx, &msg)) {
+        statusBar()->showMessage(msg, 2000);
+        return;
+    }
+    auto l = stack->at(realIdx);
+    if (!l || l->kind != layers::Layer::SmartObject) {
+        statusBar()->showMessage(tr("请先选中一个智能对象图层"), 2000);
+        return;
+    }
+    if (!l->hasTransform) {
+        statusBar()->showMessage(tr("未应用任何变换"), 2000);
+        return;
+    }
+    // Identity QTransform triggers setSmartObjectTransform's "identity -> turn off"
+    // branch (P1.4.1 LayerStack.cpp:787-792), still records a makeSetSmartObjectTransform
+    // undo entry for the previous non-identity transform.
+    img->applySmartObjectTransform(realIdx, QTransform());
 }
 
 void MainWindow::onHomeOpenFolderRequested()

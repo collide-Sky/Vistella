@@ -133,6 +133,14 @@ private slots:
     //   the LayerPanel right-click "Apply Smart Filter..." handler.
     void onApplySmartFilter(int idx = -1);
 
+    // P1.4.5 (2026-09-17): SmartObject non-destructive transform 主菜单 4 入口
+    //   (idx=-1 = use current selection). onSmartObjectTransform is a chained
+    //   alias for Scale + Rotate (simpler v1 UX, fancy dialog deferred to P1.4.6).
+    void onSmartObjectTransform(int idx = -1);
+    void onSmartObjectScale(int idx = -1);
+    void onSmartObjectRotate(int idx = -1);
+    void onSmartObjectResetTransform(int idx = -1);
+
     // P1.4.2: 4 slot 共用的 image/stack/idx 解析 (idx<0 → stack->selection())
     //   填 msg 给 statusBar 提示; 返 false 表示已发提示, 调用方直接 return
     bool resolveSmartObjectTarget(int idxIn,
