@@ -116,6 +116,11 @@ private slots:
     void onFilterMenuTriggered(filter::FilterKind kind);
     // P1.2.5+6+8 (2026-09-16): 启动 Liquify 交互式液化对话框
     void onLiquifyTriggered();
+    // P1.3.4/5/6/7 (2026-09-17): 图层蒙版入口
+    void onSwitchToMaskBrush();          // 切到 MaskBrushTool
+    void onAddPixelMaskFromSelection(); // 选区 -> 像素蒙版 (全 255)
+    void onRefineMaskEdge();            // Refine Edge 对话框
+    void onColorRangeMask();            // Color Range 对话框
 
     // Tab
     void onTabChanged(int index);

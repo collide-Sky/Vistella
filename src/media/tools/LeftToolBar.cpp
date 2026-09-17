@@ -6,21 +6,7 @@
 #include "ui_LeftToolBar.h"
 #include "ToolContext.h"
 #include "ToolState.h"
-#include "MoveTool.h"
-#include "RectSelect.h"
-#include "Lasso.h"
-#include "MagicWand.h"
-#include "Crop.h"
-#include "Text.h"
-#include "Brush.h"
-#include "EyedropperTool.h"
-// P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 个 button 集成
-#include "ShapeTool.h"
-#include "PenTool.h"
-#include "CloneTool.h"
-#include "HealTool.h"
-#include "PatchTool.h"
-#include "RedEyeTool.h"
+#include "ToolStateFactory.h"
 #include "logger.h"
 
 #include <QToolButton>
@@ -49,6 +35,8 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     m_buttons[mediators::ToolId::Heal]       = ui->btnHeal;
     m_buttons[mediators::ToolId::Patch]      = ui->btnPatch;
     m_buttons[mediators::ToolId::RedEye]     = ui->btnRedEye;
+    // P1.3.4 (2026-09-17): MaskBrush 按钮暂未加到 ui,
+    //   但 mediator.switchTool(ToolId::MaskBrush) 仍走 case 分支触发.
 }
 
 LeftToolBar::~LeftToolBar()
@@ -56,21 +44,21 @@ LeftToolBar::~LeftToolBar()
     delete ui;
 }
 
-ToolState* LeftToolBar::createMoveTool()       { return new MoveTool(); }
-ToolState* LeftToolBar::createRectSelectTool() { return new RectSelect(); }
-ToolState* LeftToolBar::createLassoTool()      { return new Lasso(); }
-ToolState* LeftToolBar::createMagicWandTool()  { return new MagicWand(); }
-ToolState* LeftToolBar::createCropTool()       { return new Crop(); }
-ToolState* LeftToolBar::createTextTool()       { return new Text(); }
-ToolState* LeftToolBar::createBrushTool()      { return new Brush(); }
-ToolState* LeftToolBar::createEyedropperTool() { return new EyedropperTool(); }
-// P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 个 factory
-ToolState* LeftToolBar::createShapeTool()      { return new ShapeTool(); }
-ToolState* LeftToolBar::createPenTool()        { return new PenTool(); }
-ToolState* LeftToolBar::createCloneTool()      { return new CloneTool(); }
-ToolState* LeftToolBar::createHealTool()       { return new HealTool(); }
-ToolState* LeftToolBar::createPatchTool()      { return new PatchTool(); }
-ToolState* LeftToolBar::createRedEyeTool()     { return new RedEyeTool(); }
+ToolState* LeftToolBar::createMoveTool()       { return createToolState(mediators::ToolId::Move); }
+ToolState* LeftToolBar::createRectSelectTool() { return createToolState(mediators::ToolId::RectSelect); }
+ToolState* LeftToolBar::createLassoTool()      { return createToolState(mediators::ToolId::Lasso); }
+ToolState* LeftToolBar::createMagicWandTool()  { return createToolState(mediators::ToolId::MagicWand); }
+ToolState* LeftToolBar::createCropTool()       { return createToolState(mediators::ToolId::Crop); }
+ToolState* LeftToolBar::createTextTool()       { return createToolState(mediators::ToolId::Text); }
+ToolState* LeftToolBar::createBrushTool()      { return createToolState(mediators::ToolId::Brush); }
+ToolState* LeftToolBar::createEyedropperTool() { return createToolState(mediators::ToolId::Eyedropper); }
+ToolState* LeftToolBar::createShapeTool()      { return createToolState(mediators::ToolId::Shape); }
+ToolState* LeftToolBar::createPenTool()        { return createToolState(mediators::ToolId::Pen); }
+ToolState* LeftToolBar::createCloneTool()      { return createToolState(mediators::ToolId::Clone); }
+ToolState* LeftToolBar::createHealTool()       { return createToolState(mediators::ToolId::Heal); }
+ToolState* LeftToolBar::createPatchTool()      { return createToolState(mediators::ToolId::Patch); }
+ToolState* LeftToolBar::createRedEyeTool()     { return createToolState(mediators::ToolId::RedEye); }
+ToolState* LeftToolBar::createMaskBrushTool()  { return createToolState(mediators::ToolId::MaskBrush); }
 
 void LeftToolBar::attach(mediators::ToolMediator* toolMed, ToolContext* ctx)
 {
@@ -161,6 +149,10 @@ void LeftToolBar::onToolMediatorSwitched(mediators::ToolId id)
             break;
         case mediators::ToolId::RedEye:
             m_ctx->setState(std::unique_ptr<ToolState>(createRedEyeTool()));
+            break;
+        // P1.3.4 (2026-09-17): MaskBrush (像素蒙版画笔)
+        case mediators::ToolId::MaskBrush:
+            m_ctx->setState(std::unique_ptr<ToolState>(createMaskBrushTool()));
             break;
         default:
             m_ctx->setState(nullptr);  // None / unknown -> 释放当前 tool

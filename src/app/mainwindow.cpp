@@ -12,6 +12,13 @@
 #include "../media/filters/FilterDialog.h"
 #include "../media/filters/liquify/LiquifyDialog.h"
 #include "../media/filters/liquify/LiquifyCommand.h"
+#include "../media/masks/RefineEdge.h"
+#include "../media/masks/ColorRange.h"
+#include "../media/mediators/ToolMediator.h"
+#include "../media/imageworker/layers/Layer.h"
+#include "../media/imageworker/layers/LayerMaskCommand.h"
+#include <opencv2/imgproc.hpp>
+#include <QInputDialog>
 #include "logger.h"
 #include "recentmanager.h"
 #include "settingsdialog.h"
@@ -501,6 +508,25 @@ void MainWindow::buildActions()
     connect(aLayerMerge, &QAction::triggered, this, notImpl(tr("图层"), tr("合并可见图层")));
     QAction *aLayerFlatten = mLayer->addAction(tr("拼合图像"));
     connect(aLayerFlatten, &QAction::triggered, this, notImpl(tr("图层"), tr("拼合图像")));
+
+    // P1.3.4/5/6/7 (2026-09-17): 图层蒙版 5 个真实操作
+    mLayer->addSeparator();
+    QAction *aMaskPaint = mLayer->addAction(tr("编辑像素蒙版 (Paint Mask)"));
+    connect(aMaskPaint, &QAction::triggered, this, [this]{
+        onSwitchToMaskBrush();
+    });
+    QAction *aMaskFromSelection = mLayer->addAction(tr("从选区添加像素蒙版"));
+    connect(aMaskFromSelection, &QAction::triggered, this, [this]{
+        onAddPixelMaskFromSelection();
+    });
+    QAction *aMaskRefine = mLayer->addAction(tr("调整蒙版边缘 (Refine Edge)..."));
+    connect(aMaskRefine, &QAction::triggered, this, [this]{
+        onRefineMaskEdge();
+    });
+    QAction *aMaskColorRange = mLayer->addAction(tr("颜色范围 (Color Range)..."));
+    connect(aMaskColorRange, &QAction::triggered, this, [this]{
+        onColorRangeMask();
+    });
 
     // ---- 文字 (Text) ----
     QMenu *mText = mb->addMenu(tr("文字"));
@@ -1714,6 +1740,201 @@ void MainWindow::onLiquifyTriggered()
         statusBar()->showMessage(tr("已应用 Liquify (入撤销栈)"), 2000);
     });
     dlg->show();
+}
+
+// =====================================================================
+//  P1.3.4/5/6/7 (2026-09-17): 图层蒙版入口实现
+// =====================================================================
+
+// P1.3.4: 切换到 MaskBrushTool (像素蒙版画笔).
+//   Mediator 通知 ImageWindow 的 ToolContext,后者通过 LeftToolBar 的
+//   switch 工厂创建 MaskBrushTool. ImageOptionBar 会自动显示 MaskOptionsPanel.
+void MainWindow::onSwitchToMaskBrush()
+{
+    auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!img) {
+        statusBar()->showMessage(tr("需要图像窗口才能编辑蒙版"), 2000);
+        return;
+    }
+    if (auto *med = img->toolMediator()) {
+        med->switchTool(mediators::ToolId::MaskBrush);
+        statusBar()->showMessage(tr("已切换到 Mask Brush 工具 (画笔编辑当前层像素蒙版)"), 3000);
+    } else {
+        statusBar()->showMessage(tr("ToolMediator 未初始化"), 2000);
+    }
+}
+
+// P1.3.5: 从选区添加像素蒙版 (全白=全显示, 后续可以用 MaskBrush 涂黑遮罩).
+//   当前没有复杂选区轮廓转换: 用整个图层尺寸 255 初始化 mask, 用户再编辑.
+void MainWindow::onAddPixelMaskFromSelection()
+{
+    auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!img) {
+        statusBar()->showMessage(tr("需要图像窗口"), 2000);
+        return;
+    }
+    auto *stack = img->layerStack();
+    if (!stack) {
+        statusBar()->showMessage(tr("LayerStack 未初始化"), 2000);
+        return;
+    }
+    const int idx = stack->selection();
+    if (idx < 0) {
+        statusBar()->showMessage(tr("请先选中图层"), 2000);
+        return;
+    }
+    auto l = stack->at(idx);
+    if (!l || l->image.empty()) {
+        statusBar()->showMessage(tr("图层无图像数据"), 2000);
+        return;
+    }
+    // 初始化全白 255 像素蒙版
+    cv::Mat whiteMask(l->image.rows, l->image.cols, CV_8UC1, cv::Scalar(255));
+    // 备份 before + 推 undo command
+    const auto beforeMask = l->mask;  // 拷贝当前 mask struct (含 pixel)
+    const auto beforeMaskPixel = (l->mask.kind == layers::LayerMask::Pixel)
+                                    ? l->mask.pixel.clone() : cv::Mat();
+    stack->addPixelMask(idx, whiteMask);
+    const auto afterMask = stack->maskAt(idx) ? *stack->maskAt(idx) : layers::LayerMask();
+
+    if (auto *undo = img->undoStack()) {
+        auto *cmd = new layers::LayerMaskCommand(stack, idx,
+                                                  beforeMask, afterMask,
+                                                  QStringLiteral("Add Pixel Mask"));
+        undo->push(cmd);
+    }
+    statusBar()->showMessage(tr("已添加像素蒙版 (全白, 现在用 Mask Brush 涂黑遮罩)"), 3000);
+}
+
+// P1.3.6: Refine Edge 对话框 - 4 sliders (smooth/feather/contrast/shift)
+//   应用到当前图层的像素蒙版 (没有则提示).
+void MainWindow::onRefineMaskEdge()
+{
+    auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!img) {
+        statusBar()->showMessage(tr("需要图像窗口"), 2000);
+        return;
+    }
+    auto *stack = img->layerStack();
+    if (!stack) {
+        statusBar()->showMessage(tr("LayerStack 未初始化"), 2000);
+        return;
+    }
+    const int idx = stack->selection();
+    if (idx < 0) {
+        statusBar()->showMessage(tr("请先选中图层"), 2000);
+        return;
+    }
+    auto l = stack->at(idx);
+    if (!l || l->mask.kind != layers::LayerMask::Pixel || l->mask.pixel.empty()) {
+        statusBar()->showMessage(tr("当前图层没有像素蒙版 (先添加像素蒙版)"), 3000);
+        return;
+    }
+
+    // 内嵌对话框: 用 QInputDialog 简化版 (4 sliders 用 4 个 getInt).
+    bool ok = false;
+    const int smooth = QInputDialog::getInt(this, tr("Refine Edge"),
+        tr("Smooth (0-100):"), 0, 0, 100, 1, &ok);
+    if (!ok) return;
+    const int feather = QInputDialog::getInt(this, tr("Refine Edge"),
+        tr("Feather (0-100):"), 0, 0, 100, 1, &ok);
+    if (!ok) return;
+    const int contrast = QInputDialog::getInt(this, tr("Refine Edge"),
+        tr("Contrast (-100..+100):"), 0, -100, 100, 1, &ok);
+    if (!ok) return;
+    const int shift = QInputDialog::getInt(this, tr("Refine Edge"),
+        tr("Shift (-100..+100, 收缩/扩展):"), 0, -100, 100, 1, &ok);
+    if (!ok) return;
+
+    masks::RefineEdgeParams params2;
+    params2.smooth = smooth;
+    params2.feather = feather;
+    params2.contrast = contrast;
+    params2.shift = shift;
+    const cv::Mat refined = masks::RefineEdge::apply(l->mask.pixel, params2);
+
+    // 备份 + 推 undo
+    const auto beforeMask = *stack->maskAt(idx);
+    stack->addPixelMask(idx, refined);  // 用新的 mask 替换
+    const auto afterMask = *stack->maskAt(idx);
+
+    if (auto *undo = img->undoStack()) {
+        auto *cmd = new layers::LayerMaskCommand(stack, idx,
+                                                  beforeMask, afterMask,
+                                                  QStringLiteral("Refine Edge"));
+        undo->push(cmd);
+    }
+    statusBar()->showMessage(
+        tr("已应用 Refine Edge (s=%1 f=%2 c=%3 s=%5)").arg(smooth).arg(feather)
+                                                        .arg(contrast).arg(shift),
+        3000);
+}
+
+// P1.3.7: Color Range 对话框 - 取当前鼠标位置颜色 + Fuzziness slider
+//   (简化版: 用一个 QInputDialog 链取样 + fuzziness, 不画完整预览).
+void MainWindow::onColorRangeMask()
+{
+    auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!img) {
+        statusBar()->showMessage(tr("需要图像窗口"), 2000);
+        return;
+    }
+    auto *stack = img->layerStack();
+    if (!stack) {
+        statusBar()->showMessage(tr("LayerStack 未初始化"), 2000);
+        return;
+    }
+    const int idx = stack->selection();
+    if (idx < 0) {
+        statusBar()->showMessage(tr("请先选中图层"), 2000);
+        return;
+    }
+    auto l = stack->at(idx);
+    if (!l || l->image.empty()) {
+        statusBar()->showMessage(tr("图层无图像数据"), 2000);
+        return;
+    }
+
+    // 简化: 用图层中心 3 个固定采样点 + fuzziness slider.
+    //   PS 同款会画预览 + 让用户吸管点选, 但完整 dialog 需要预览画布;
+    //   这里给可用的 v1 入口.
+    cv::Mat bgr = l->image.clone();
+    if (bgr.channels() == 4) cv::cvtColor(bgr, bgr, cv::COLOR_BGRA2BGR);
+    QVector<QPoint> samples;
+    const int w = bgr.cols, h = bgr.rows;
+    samples.append(QPoint(w / 4,     h / 4));
+    samples.append(QPoint(w / 2,     h / 2));
+    samples.append(QPoint(3 * w / 4, 3 * h / 4));
+
+    bool ok = false;
+    const int fuzziness = QInputDialog::getInt(this, tr("Color Range"),
+        tr("Fuzziness (0-255):"), 30, 0, 255, 1, &ok);
+    if (!ok) return;
+    const int invert = QInputDialog::getInt(this, tr("Color Range"),
+        tr("Invert (0/1):"), 0, 0, 1, 1, &ok);
+    if (!ok) return;
+
+    masks::ColorRangeParams params;
+    params.samplePoints = samples;
+    params.fuzziness = fuzziness;
+    params.invert = (invert != 0);
+
+    const QImage layerImg = img->layerStackAsQImage(idx);
+    cv::Mat newMask = masks::ColorRange::computeMask(layerImg, params);
+    if (newMask.empty()) return;
+
+    const auto beforeMask = *stack->maskAt(idx);
+    stack->addPixelMask(idx, newMask);
+    const auto afterMask = *stack->maskAt(idx);
+    if (auto *undo = img->undoStack()) {
+        auto *cmd = new layers::LayerMaskCommand(stack, idx,
+                                                  beforeMask, afterMask,
+                                                  QStringLiteral("Color Range"));
+        undo->push(cmd);
+    }
+    statusBar()->showMessage(
+        tr("已应用 Color Range (fuzziness=%1, invert=%2)").arg(fuzziness).arg(invert),
+        3000);
 }
 
 void MainWindow::onHomeOpenFolderRequested()

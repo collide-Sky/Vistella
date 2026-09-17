@@ -67,6 +67,8 @@ private:
     static ToolState* createHealTool();
     static ToolState* createPatchTool();
     static ToolState* createRedEyeTool();
+    // P1.3.4 (2026-09-17): MaskBrush factory (像素蒙版画笔)
+    static ToolState* createMaskBrushTool();
 
     QHash<mediators::ToolId, QToolButton*> m_buttons;
 

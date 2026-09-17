@@ -4,12 +4,14 @@
 //
 #include "ToolContext.h"
 #include "ToolState.h"
+#include "ToolStateFactory.h"
 #include "logger.h"
 
 #include "../imagewindow.h"
 
 #include <QMouseEvent>
 #include <QKeyEvent>
+#include <memory>
 
 namespace tools {
 
@@ -36,13 +38,24 @@ void ToolContext::attach(ImageWindow* host, mediators::ToolMediator* toolMed)
 {
     m_host = host;
     m_toolMed = toolMed;
-    // F-D stage: connect ToolMediator::toolSwitched -> setState
-    //   (F-C doesn't wire this, LeftToolBar will call setState directly)
-    (void)m_toolMed;
+    // P1.3.4 (2026-09-17): ToolContext listens to Mediator::toolSwitched so
+    //   menu / shortcut paths can switch tools without LeftToolBar being
+    //   present in the UI. Both LeftToolBar and ToolContext now call
+    //   setState; LeftToolBar keeps its button highlight sync.
+    if (m_toolMed) {
+        connect(m_toolMed, &mediators::ToolMediator::toolSwitched,
+                this, [this](mediators::ToolId id) {
+            auto* st = createToolState(id);
+            setState(std::unique_ptr<ToolState>(st));
+        });
+    }
 }
 
 void ToolContext::detach()
 {
+    if (m_toolMed) {
+        disconnect(m_toolMed, nullptr, this, nullptr);
+    }
     m_host = nullptr;
     m_toolMed = nullptr;
 }

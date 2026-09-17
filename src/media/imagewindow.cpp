@@ -2,6 +2,7 @@
 #include "ui_imagewindow.h"
 #include "graphicstextitem.h"
 #include "logger.h"
+#include "mediators/ToolMediator.h"
 
 #include "imageprocessor.h"
 // P0-1.4 (2026-09-07): recentmanager.h 移到 ImageIOController.cpp (open/save 段搬走)
@@ -342,11 +343,16 @@ ImageWindow::ImageWindow(QWidget *parent)
     addDockWidget(Qt::RightDockWidgetArea, m_rightDockContainer);
     resizeDocks({m_rightDockContainer}, {340}, Qt::Horizontal);
 
+    // P1.3.4 (2026-09-17): ToolMediator per-ImageWindow (parent = this)
+    //   Owns Mediator, hands raw pointer to ToolContext; both LeftToolBar and
+    //   MainWindow's menu actions can now reach it through toolMediator().
+    m_toolMed = std::make_unique<mediators::ToolMediator>(this);
+
     // F-N (2026-09-10): ToolContext 实例化 (state machine for 8 tools)
     //   m_ctx 在 ctor 创建, eventFilter 通过 m_ctx->onMouseXxx 转发给 current ToolState
     //   attach 后 LeftToolBar/ImageOptionBar 可以通过 toolContext() 拿到
     m_ctx = std::make_unique<tools::ToolContext>(this);
-    m_ctx->attach(this, nullptr);
+    m_ctx->attach(this, m_toolMed.get());
 
     // P0-4 (2026-09-10): SelectionModel 实例化
     //   ImageCanvas 拿 selection 引用, drawForeground 画 marching ants 边界
@@ -468,6 +474,34 @@ QImage ImageWindow::currentImageAsQImage() const
     default:
         return QImage();
     }
+}
+
+// P1.3.7 (2026-09-17): Layer-as-QImage accessor
+//   BGR cv::Mat -> QImage::Format_RGB888 (ColorRange consumes QImage).
+//   .copy() is required because QImage does not ref-count the borrowed
+//   buffer; without .copy() the temp Mat goes out of scope and the
+//   returned QImage points to freed memory.
+QImage ImageWindow::layerStackAsQImage(int index) const
+{
+    if (!m_layerStack) return QImage();
+    if (index < 0 || index >= m_layerStack->count()) return QImage();
+    auto l = m_layerStack->at(index);
+    if (!l || l->image.empty()) return QImage();
+    const cv::Mat& src = l->image;
+    const int W = src.cols;
+    const int H = src.rows;
+    if (W <= 0 || H <= 0) return QImage();
+    cv::Mat rgb;
+    if (src.channels() == 4) {
+        cv::cvtColor(src, rgb, cv::COLOR_BGRA2RGB);
+    } else if (src.channels() == 3) {
+        cv::cvtColor(src, rgb, cv::COLOR_BGR2RGB);
+    } else if (src.channels() == 1) {
+        return QImage(src.data, W, H, src.step, QImage::Format_Grayscale8).copy();
+    } else {
+        return QImage();
+    }
+    return QImage(rgb.data, W, H, rgb.step, QImage::Format_RGB888).copy();
 }
 
 // 公开: 给 ImageEditCommand (m_useImage 模式) 还原 m_current

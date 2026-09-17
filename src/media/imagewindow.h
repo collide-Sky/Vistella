@@ -57,6 +57,10 @@ class TextOverlayController;
 // F-G.3 Fix (2026-09-10): RightPanelDock forward decl (右侧 panel 1 widget 4+1 tab)
 namespace docks { class RightPanelDock; }
 namespace mediators { class WorkspaceMediator; }
+// P1.3.4 (2026-09-17): ToolMediator full include needed - m_toolMed member
+//   requires complete type for std::unique_ptr<mediators::ToolMediator>.
+//   WorkspaceMediator stays forward decl (only used by attachWorkspaceMed).
+#include "mediators/ToolMediator.h"
 // F-N (2026-09-10): ToolContext forward decl (state machine for tools)
 namespace tools { class ToolContext; }
 // P0-4 (2026-09-10): SelectionModel forward decl (selection state holder)
@@ -263,6 +267,19 @@ public:
     //   m_ctx is owned by ImageWindow (constructed in ctor, no need to inject from outside)
     tools::ToolContext* toolContext() const { return m_ctx.get(); }
 
+    // P1.3.4 (2026-09-17): ToolMediator accessor
+    //   MainWindow menu actions (e.g. onSwitchToMaskBrush) call
+    //   img->toolMediator()->switchTool(ToolId::MaskBrush) to drive the
+    //   tool state machine. m_toolMed is owned by ImageWindow and parented
+    //   to it so lifetime follows ImageWindow destruction.
+    mediators::ToolMediator* toolMediator() const { return m_toolMed.get(); }
+
+    // P1.3.7 (2026-09-17): Layer-as-QImage accessor
+    //   ColorRange algorithm takes a QImage input; this converts a layer's
+    //   cv::Mat BGR payload to QImage::Format_RGB888 for it. Returns an
+    //   empty QImage if the layer / stack is invalid or the image empty.
+    QImage layerStackAsQImage(int index) const;
+
     // P0-7.1 (2026-09-14): ImageCanvas accessor (Text 工具 hitTest scenePos 用)
     //   m_canvas 暴露给 tools::Text 走 QGraphicsScene::itemAt 找 GraphicsTextItem
     ImageCanvas* imageCanvas() const { return m_canvas.get(); }
@@ -376,6 +393,11 @@ private:
 
     // F-N (2026-09-10): Tool state context — owns current ToolState, receives eventFilter forwards
     std::unique_ptr<tools::ToolContext>     m_ctx;
+
+    // P1.3.4 (2026-09-17): ToolMediator owned per-ImageWindow (1 个 per image)
+    //   Parent = this, so destruction follows ImageWindow. Mediator signal
+    //   is wired to m_ctx by m_ctx->attach(this, m_toolMed.get()) below.
+    std::unique_ptr<mediators::ToolMediator> m_toolMed;
 
     // P0-4 (2026-09-10): Selection state (mask + bbox + mode). Owned by ImageWindow.
     std::unique_ptr<selection::SelectionModel> m_selection;

@@ -119,6 +119,10 @@ add_library(vistella_media STATIC
     tools/LeftToolBar.cpp
     # F-P.3 (2026-09-09): LeftToolBar 转 .ui (PS 风格 2 列图标)
     tools/LeftToolBar.ui
+    # P1.3.4 (2026-09-17): ToolStateFactory - 12 工具 switch 集中点
+    #   LeftToolBar + ToolContext 都调 createToolState(id) 拿 ToolState*
+    tools/ToolStateFactory.h
+    tools/ToolStateFactory.cpp
     # F-E (2026-09-09): ImageOptionBar 二级工具栏 QStackedWidget 8 工具 page
     tools/ImageOptionBar.h
     tools/ImageOptionBar.cpp
