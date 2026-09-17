@@ -25,6 +25,8 @@
 
 #include "imageworker/layers/LayerStack.h"
 #include "imageworker/layers/SmartObjectWatcher.h"
+// P1.4.3 (2026-09-17): LayerPanel accessor 返回 raw pointer, m_layerPanel unique_ptr 需要完整定义
+#include "imageworker/layers/LayerPanel.h"
 
 // P0-2 (2026-09-08): 接 ThreadPool v2 异步化入口
 //   EngineContext 是 src/core/ThreadPool/ 提供的 6 池 + GPU serial 包装
@@ -306,6 +308,14 @@ public:
     //   loadFile() has run.
     layers::SmartObjectWatcher* smartObjectWatcher() const { return m_smartWatcher.get(); }
 
+    // P1.4.3 (2026-09-17): LayerPanel 实例化 + 注入 LayersDock tab 0
+    //   P1.4.2 留了 LayerPanel 没 new 的 bug, 这里补上. LayerPanel::ctor 接受 raw
+    //   LayerStack* (parent = this), 装到 LayersDock tab 0 后所有权转移到 LayersDock
+    //   (LayersDock::setContentWidget 调用 w->setParent(tab) 后 LayersDock 负责析构).
+    //   这里 unique_ptr 仅在调用 setContentWidget 前有效, 调用 .release() 后置空,
+    //   避免重复 delete.
+    layers::LayerPanel* layerPanel() const { return m_layerPanel.get(); }
+
     // P0-2 (2026-09-08): EngineContext 公开访问 (供 ImageAdjustmentPanel 等组件用)
     //   raw pointer - lifetime 由 ImageWindow 持有 unique_ptr<m_engine> 保证
     //   ImageWindow 总是比组件晚析构 (QObject parent-child 关系), 不会悬空
@@ -432,6 +442,12 @@ private:
     //   receives layerAdded/Removed/Changed signals to keep watch state in sync
     //   with the stack; emits sourceFileChanged(idx, path) -> statusBar hint.
     std::unique_ptr<layers::SmartObjectWatcher> m_smartWatcher;
+
+    // P1.4.3 (2026-09-17): LayerPanel 实例化 + 注入 LayersDock tab 0
+    //   Created in loadFile() after m_layerStack; ownership transferred to
+    //   LayersDock via release() after setContentWidget. unique_ptr 默认空,
+    //   loadFile() 后置 nullptr (因为 setContentWidget 已经 reparent + 接管).
+    std::unique_ptr<layers::LayerPanel> m_layerPanel;
 
     QUndoStack *m_undoStack = nullptr;
     int         m_savedIndex = 0;   // 上次保存时的栈 index, 用于 isDirty

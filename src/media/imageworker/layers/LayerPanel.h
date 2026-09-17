@@ -22,7 +22,6 @@
 #include <QHash>
 #include <QPointer>
 #include <QImage>
-#include <QDockWidget>
 
 #include <opencv2/core.hpp>
 
@@ -46,7 +45,7 @@ namespace layers {
 
 class LayerStack;
 
-class LayerPanel : public QDockWidget
+class LayerPanel : public QWidget
 {
     Q_OBJECT
 public:

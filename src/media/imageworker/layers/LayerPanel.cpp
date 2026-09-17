@@ -32,7 +32,6 @@
 #include <QColorDialog>
 #include <QFileDialog>
 #include <QFontDatabase>
-#include <QDockWidget>
 
 #include <opencv2/imgproc.hpp>
 #include <cmath>
@@ -88,17 +87,20 @@ QIcon makeIcon(const QString &ch, const QColor &color = Qt::white)
 // =====================================================================
 
 LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
-    : QDockWidget(tr("图层"), parent), m_stack(stack)
+    : QWidget(parent), m_stack(stack)
 {
     setObjectName(QStringLiteral("layerPanel"));
-    // 阶段 1 W4.3 Phase 2 (2026-09-04): 显式最小宽度 240
+    // 阶段 1 W4.3 Phase 2 (2026-09-04): 显式最小宽度 240 (P1.4.3 改 base class 后仍保留, LayersDock tab 容器传 layout 自适配)
     setMinimumWidth(240);
 
-    // 阶段 1 W4.3 Phase 3 (2026-09-04) BUG FIX: 必须用 content widget + setWidget()
-    //   原代码 new QVBoxLayout(this) 直接装在 QDockWidget 上, Qt 6 忽略该 layout
-    //   导致所有子控件 (toolbar / list / property) 都堆在 (0,0) 看不见
-    //   根因: QDockWidget 内部用 setWidget() 装 content, 不接受外部 layout
+    // P1.4.3 (2026-09-17): base class 从 QDockWidget 换成 QWidget, ctor 改用 layout
+    //   根因: QDockWidget 是顶层 dock widget, 不能直接嵌入 LayersDock tab (QTabWidget 页)
+    //   改为 QWidget 后, LayersDock::setContentWidget(0, panel) 直接 reparent 到 tab
+    //   外层 outerLayout 把 content 包成 this 的 layout, 适配任意 parent container 边距
+    auto *outerLayout = new QVBoxLayout(this);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
     auto *content = new QWidget(this);
+    outerLayout->addWidget(content);
     auto *rootLayout = new QVBoxLayout(content);
     rootLayout->setContentsMargins(2, 2, 2, 2);
     rootLayout->setSpacing(2);
@@ -233,9 +235,8 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
     // 阶段 1 W4.3 (2026-09-04): 显式最小高度, 避免浮出 dock 后被压扁 (QToolButton 等被截)
     setMinimumHeight(400);
 
-    // 阶段 1 W4.3 Phase 3 BUG FIX (2026-09-04): setWidget(content) 关键!
-    //   QDockWidget 内部用 setWidget() 装 content, 不调 → 整个 dock 空白
-    setWidget(content);
+    // P1.4.3 (2026-09-17): 移除 QDockWidget::setWidget(content), 因为已改 base class
+    //   content 已通过 outerLayout->addWidget(content) 装入本 widget 的 layout
 
     // ---- 绑定 LayerStack ----
     if (m_stack) {

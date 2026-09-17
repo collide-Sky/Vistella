@@ -55,6 +55,9 @@ public:
     // P0-8.1 (2026-09-15): 历史 dock 暴露 (ImageWindow::ctor setUndoStack 注入)
     HistoryDock* historyDock() const { return m_historyDock; }
 
+    // P1.4.3 (2026-09-17): LayersDock 暴露 (ImageWindow::loadFile 实例化 LayerPanel + 注入 tab 0)
+    LayersDock* layersDock() const { return m_layersDock; }
+
     // 浮动位置 (imagewindow 右上角, 跟 m_rightPanel 同样模式)
     QSize sizeHint() const override { return QSize(340, 600); }
 

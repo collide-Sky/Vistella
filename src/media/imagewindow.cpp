@@ -22,6 +22,10 @@
 #include "docks/ChannelPathPanel.h"
 #include "docks/PropertiesDock.h"
 #include "docks/HistoryDock.h"
+// P1.4.3 (2026-09-17): LayerPanel 实例化 + 注入 LayersDock tab 0
+//   LayerPanel 信号接通需要完整 LayerPanel.h + LayerCommand.h 定义
+#include "imageworker/layers/LayerPanel.h"
+#include "imageworker/layers/LayerCommand.h"
 #include "../media/mediators/WorkspaceMediator.h"
 // P0-4 (2026-09-10): selection system
 #include "selection/SelectionModel.h"
@@ -42,6 +46,10 @@
 // P0-1.4 (2026-09-07): QFileDialog / QDir / QMessageBox 移到 ImageIOController.cpp
 //   (open / save / saveAs 段搬走, imagewindow.cpp 不再用)
 #include <QFileInfo>
+// P1.4.3 (2026-09-17): LayerPanel 信号接通需要 (EditSource 打开源 / Relink 选源 / URL 包装)
+#include <QDesktopServices>
+#include <QUrl>
+#include <QFileDialog>
 #include <QColorDialog>
 #include <QFont>
 #include <QFontComboBox>
@@ -583,6 +591,115 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     connect(m_layerStack.get(), &layers::LayerStack::selectionChanged,
             this, &ImageWindow::onLayerSelectionChanged);
     invalidateCurrentCache();   // 强制重算 m_current
+
+    // P1.4.3 (2026-09-17): 实例化 LayerPanel, 注入 LayersDock tab 0
+    //   P1.4.2 留了 LayerPanel 类定义完整但没 new 的 bug, 这一轮补上.
+    //   LayerPanel::ctor 需要 raw LayerStack*, parent = this (QObject parent-child 关系
+    //   保证 unique_ptr 释放前 LayerPanel 不会被 Qt 析构). 注入 LayersDock tab 0 用
+    //   setContentWidget + release() 转移, LayersDock reparent 后接管所有权.
+    m_layerPanel = std::make_unique<layers::LayerPanel>(m_layerStack.get());
+    layers::LayerPanel* rawPanel = m_layerPanel.get();   // release() 之后 unique_ptr 变 null, 先存 raw
+    if (m_rightDock) {
+        if (auto* layersDock = m_rightDock->layersDock()) {
+            // 转移所有权: LayersDock::setContentWidget 会 setParent 到自己 (m_layersDock 是其成员)
+            layersDock->setContentWidget(0, m_layerPanel.release());
+        }
+    }
+    // rawPanel 在 LayersDock 接管期间保持有效 (LayersDock 析构会 delete 它, 比 ImageWindow 早)
+
+    // P1.4.3 (2026-09-17): LayerPanel 用户操作信号 → ImageWindow API (数据层)
+    //   用 rawPanel (非 m_layerPanel.get()) 连接信号, 因为 release() 后 unique_ptr 为空
+    if (rawPanel) {
+        connect(rawPanel, &layers::LayerPanel::selectionChangedFromPanel,
+                this, [this](int idx) {
+            if (m_layerStack) m_layerStack->setSelection(idx);
+        });
+        // P1.4.3: 智能对象 Edit Source (复用 P1.4.2 主菜单的 QDesktopServices 路径, 不推 undoStack)
+        connect(rawPanel, &layers::LayerPanel::editSmartObjectSourceRequested,
+                this, [this](int idx) {
+            if (!m_layerStack || idx < 0 || idx >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(idx);
+            if (!l || l->kind != layers::Layer::SmartObject || l->sourceFilePath.isEmpty()) return;
+            QDesktopServices::openUrl(QUrl::fromLocalFile(l->sourceFilePath));
+            statusBar()->showMessage(tr("已在系统默认应用打开源文件"), 3000);
+        });
+        // P1.4.3: 智能对象 Refresh (重新加载源文件, embed/link 都生效)
+        connect(rawPanel, &layers::LayerPanel::refreshSmartObjectRequested,
+                this, [this](int idx) {
+            if (!m_layerStack) return;
+            m_layerStack->refreshSmartObject(idx);
+            invalidateCurrentCache();
+            statusBar()->showMessage(tr("智能对象已刷新"), 3000);
+        });
+        // P1.4.3: 智能对象 Toggle Embed (link <-> embed 切换, 不推 undoStack - 跟 P1.4.2 mainwindow 一致)
+        connect(rawPanel, &layers::LayerPanel::toggleSmartObjectEmbedRequested,
+                this, [this](int idx) {
+            if (!m_layerStack) return;
+            m_layerStack->toggleSmartObjectEmbed(idx);
+            invalidateCurrentCache();
+        });
+        // P1.4.3: 智能对象 Convert (Bitmap -> SmartObject, 嵌入模式) - 推 undoStack 走 makeConvertToSmartObject
+        connect(rawPanel, &layers::LayerPanel::convertToSmartObjectRequested,
+                this, [this](int idx) {
+            if (!m_layerStack || idx < 0 || idx >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(idx);
+            if (!l || l->kind != layers::Layer::Bitmap || l->image.empty()) return;
+            // 备份 before layer 完整状态 (LayerCommand 需要 before 还原)
+            const layers::Layer before = *l;
+            if (!m_layerStack->convertToSmartObject(idx, /*embed=*/true)) {
+                statusBar()->showMessage(tr("转换失败 (源文件不存在或无写入权限)"), 3000);
+                return;
+            }
+            if (m_undoStack) {
+                auto* cmd = layers::LayerCommand::makeConvertToSmartObject(
+                    m_layerStack.get(), idx, before);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            statusBar()->showMessage(tr("已转换为智能对象 (嵌入模式)"), 3000);
+        });
+        // P1.4.3: 智能对象 Rasterize (SmartObject -> Bitmap) - 推 undoStack 走 makeRasterizeSmartObject
+        connect(rawPanel, &layers::LayerPanel::rasterizeSmartObjectRequested,
+                this, [this](int idx) {
+            if (!m_layerStack || idx < 0 || idx >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(idx);
+            if (!l || l->kind != layers::Layer::SmartObject) return;
+            // 备份 before layer (含 sourceFilePath + sourceEmbedded)
+            const layers::Layer before = *l;
+            if (!m_layerStack->rasterizeSmartObject(idx)) {
+                statusBar()->showMessage(tr("栅格化失败 (源文件不存在)"), 3000);
+                return;
+            }
+            if (m_undoStack) {
+                auto* cmd = layers::LayerCommand::makeRasterizeSmartObject(
+                    m_layerStack.get(), idx, before);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            statusBar()->showMessage(tr("已栅格化智能对象"), 3000);
+        });
+        // P1.4.3: 智能对象 Relink (重新链接源文件) - 弹 QFileDialog 选文件, 推 undoStack 走 makeSetSmartObject
+        connect(rawPanel, &layers::LayerPanel::relinkSmartObjectRequested,
+                this, [this](int idx) {
+            if (!m_layerStack || idx < 0 || idx >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(idx);
+            if (!l || l->kind != layers::Layer::SmartObject) return;
+            const QString path = QFileDialog::getOpenFileName(this, tr("选择源文件"), QString(),
+                tr("图像 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;所有 (*.*)"));
+            if (path.isEmpty()) return;
+            // 备份旧 path + embed
+            const QString oldPath = l->sourceFilePath;
+            const bool oldEmbed = l->sourceEmbedded;
+            m_layerStack->setSmartObjectSource(idx, path, l->sourceEmbedded);
+            if (m_undoStack) {
+                auto* cmd = layers::LayerCommand::makeSetSmartObject(
+                    m_layerStack.get(), idx, oldPath, oldEmbed);
+                m_undoStack->push(cmd);
+            }
+            invalidateCurrentCache();
+            statusBar()->showMessage(tr("已重新链接源文件"), 3000);
+        });
+    }
 
     emit filePathChanged(m_filePath);
     // Stage F (2026-09-15): 补回 renderToView 触发
