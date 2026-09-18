@@ -148,3 +148,7 @@ add_vistella_test(tst_SmartObjectTransform)
 # P1.4.6 (2026-09-17): P1.4 UI wrap-up tests (TransformDialog 4 cases; the 26
 #   LayerPanel signal wires and QMessageBox prompt are QSKIPed with reasons).
 add_vistella_test(tst_P1_4_6_Integration)
+# P1.4.7 (2026-09-18): WindowMode architecture regression test (4 cases
+#   verifying the 3-channel entry-point unification: loadWindowState +
+#   main.cpp + setMode all flow through setMode via applyWindowMode()).
+add_vistella_test(tst_WindowMode)

@@ -343,7 +343,7 @@ void MainWindow::buildActions()
     connect(m_actReplace,  &QAction::triggered, this, &MainWindow::onReplace);
     connect(m_actZoomIn,   &QAction::triggered, this, &MainWindow::onZoomIn);
     connect(m_actZoomOut,  &QAction::triggered, this, &MainWindow::onZoomOut);
-    connect(m_actResetLayout, &QAction::triggered, this, [this](){ /* TBD */ });
+    connect(m_actResetLayout, &QAction::triggered, this, &MainWindow::onResetLayout);
     connect(m_actToggleTheme, &QAction::triggered, this, &MainWindow::onToggleTheme);
     // P0-6.5: 6 图像变换 action
     connect(m_actFreeTransform,    &QAction::triggered, this, &MainWindow::onFreeTransform);
@@ -1530,11 +1530,32 @@ void MainWindow::onImageInverse()
         statusBar()->showMessage(tr("当前页面没有可反选的选区"), 2000);
     }
 }
-void MainWindow::onFind()    { statusBar()->showMessage(tr("查找 (未实现)"), 3000); }
-void MainWindow::onReplace() { statusBar()->showMessage(tr("替换 (未实现)"), 3000); }
+// P0 placeholder (2026-09-18): onFind / onReplace are minimal honest stubs.
+//   Full text-overlay find/replace is deferred to a later stage (TextLayer
+//   search controller). We deliberately avoid the misleading "unimplemented"
+//   message which implied "broken" - this version tells the user which stage
+//   to expect the feature in.
+void MainWindow::onFind()
+{
+    statusBar()->showMessage(
+        tr("查找: P0 placeholder — 全文本图层搜索在后续阶段实装"), 3000);
+}
+void MainWindow::onReplace()
+{
+    statusBar()->showMessage(
+        tr("替换: P0 placeholder — 全文本图层替换在后续阶段实装"), 3000);
+}
 void MainWindow::onZoomIn()  { statusBar()->showMessage(tr("放大"), 2000); }
 void MainWindow::onZoomOut() { statusBar()->showMessage(tr("缩小"), 2000); }
-void MainWindow::onResetLayout() { statusBar()->showMessage(tr("重置布局"), 2000); }
+// P0 placeholder (2026-09-18): full workspace reset (docks / panels /
+//   toolbars to PS/PW default layout) is deferred to a later stage. This
+//   version is a no-op action that surfaces the menu entry without claiming
+//   a broken "unimplemented" message.
+void MainWindow::onResetLayout()
+{
+    statusBar()->showMessage(
+        tr("默认布局恢复: 见后续阶段 workspace 全局 reset 实装"), 3000);
+}
 
 // P0-6.5 (2026-09-14): 图像变换 6 槽 — 调当前 ImageWindow 接口
 //   P0-6.6 ImageWindow::onImageTransform 完整实装, 槽留 forward + statusBar 提示
