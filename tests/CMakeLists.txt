@@ -152,3 +152,6 @@ add_vistella_test(tst_P1_4_6_Integration)
 #   verifying the 3-channel entry-point unification: loadWindowState +
 #   main.cpp + setMode all flow through setMode via applyWindowMode()).
 add_vistella_test(tst_WindowMode)
+# P0-3.2 v2 (2026-09-18): 4 standalone PS-style adjust dialogs
+#   (Curves/Levels/B&W/ChannelMixer) + DialogFactory dispatch + apply flow
+add_vistella_test(tst_AdjustmentDialogs)

@@ -161,12 +161,21 @@ add_library(vistella_media STATIC
     docks/HistoryDock.cpp
 
     # F-K (2026-09-09): AdjustDialogBase + DialogFactory + 5 dialog (1 实装 + 4 stub)
+    # P0-3.2 v2 (2026-09-18): 4 stub 全部实装 (Curves/Levels/B&W/ChannelMixer)
     dialogs/AdjustDialogBase.h
     dialogs/AdjustDialogBase.cpp
     dialogs/DialogFactory.h
     dialogs/DialogFactory.cpp
     dialogs/HslAdjustDialog.h
     dialogs/HslAdjustDialog.cpp
+    dialogs/CurvesAdjustDialog.h
+    dialogs/CurvesAdjustDialog.cpp
+    dialogs/LevelsAdjustDialog.h
+    dialogs/LevelsAdjustDialog.cpp
+    dialogs/BlackWhiteAdjustDialog.h
+    dialogs/BlackWhiteAdjustDialog.cpp
+    dialogs/ChannelMixerAdjustDialog.h
+    dialogs/ChannelMixerAdjustDialog.cpp
     # P0-8.2 (2026-09-15): 多格式导出对话框 (PS 同款 Save For Web 风格)
     dialogs/ExportDialog.h
     dialogs/ExportDialog.cpp
