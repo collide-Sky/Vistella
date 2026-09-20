@@ -368,3 +368,14 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/_backup_archives/P1.5.1_commit.msg.bak31
+/_backup_archives/P1.3_wrap_commit.msg.bak29
+/_backup_archives
+/third_party/landmark/buffalo_l.zip
+/src/media/imageworker/layers/Layer.h.bak32
+/src/media/imageworker/layers/LayerCommand.cpp.bak32
+/src/media/imageworker/layers/LayerCommand.h.bak32
+/src/media/imageworker/layers/LayerStack.cpp.bak32
+/src/media/imageworker/layers/LayerStack.h.bak32
+/src/media/imagewindow/AdjustmentPanel.h.bak31
+/src/media/imagewindow/AdjustmentPanel.cpp.bak31
