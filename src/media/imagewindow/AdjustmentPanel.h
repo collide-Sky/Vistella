@@ -127,12 +127,17 @@ public:
     struct BlackWhiteParams {
         // 6 个颜色: Reds / Yellows / Greens / Cyans / Blues / Magentas
         QVector<double> rgbMixer;  // [0, 200]
+        // Tint (色调染色, PS 同款 B&W tint)
+        int tintHue = 0;          // [0, 360]
+        int tintSat = 0;          // [0, 100]
     };
     struct ChannelMixerParams {
         // 3x3 矩阵 RGB -> RGB, [0, 200] (200 = 100% 保留)
         int rR = 200, rG = 0,   rB = 0;
         int gR = 0,   gG = 200, gB = 0;
         int bR = 0,   bG = 0,   bB = 200;
+        // P1.5.1 (2026-09-18): Monochrome 输出 (PS 同款): 输出灰度
+        bool monochrome = false;
     };
 
     // 5 tab 参数 getter
@@ -161,6 +166,13 @@ signals:
     void tabChanged(int index);
     void paramChanged();         // 任何调值变化
 
+public slots:
+    // P1.5.1 (2026-09-18): Dispatcher for standalone DialogFactory dialogs.
+    //   CurvesAdjustDialog::applied -> AdjustmentPanel::setStandaloneParams("Curves", args)
+    //   Updates m_curves/m_levels/m_bw/m_cm, refreshes inline UI, calls applyCurrentTab().
+    //   dialogId in {"Curves", "Levels", "HSL", "B&W", "ChannelMixer"}.
+    void setStandaloneParams(const QString& dialogId, const QVariantMap& args);
+
 private:
     // 内部 helper
     void buildCurvesPage();
@@ -168,6 +180,12 @@ private:
     void buildHslPage();
     void buildBlackWhitePage();
     void buildChannelMixerPage();
+
+    // P1.5.1 (2026-09-18): per-tab dispatcher helpers, called by setStandaloneParams
+    void applyCurvesFromArgs(const QVariantMap& args);
+    void applyLevelsFromArgs(const QVariantMap& args);
+    void applyBnWFromArgs(const QVariantMap& args);
+    void applyChannelMixerFromArgs(const QVariantMap& args);
 
     // 当前 tab 的 LUT 构建
     cv::Mat buildCurrentTabLut() const;

@@ -6,6 +6,7 @@
 // P0-3.3 才升级为 LayerCommand
 //
 #include "AdjustmentPanel.h"
+#include "logger.h"
 
 #include "imageprocessor.h"
 #include "../imageworker/layers/LayerCommand.h"   // P0-3.3 (2026-09-08): LayerCommand::SetAdjustmentLut
@@ -806,4 +807,122 @@ void AdjustmentPanel::pushUndoCommand()
         m_commitTimer->stop();
     }
     commitUndoDebounced();
+}
+
+// =============================================================
+// P1.5.1 (2026-09-18): Standalone DialogFactory dispatcher
+//   CurvesAdjustDialog::applied(args) -> setStandaloneParams("Curves", args)
+//   路由到对应 applyXxxFromArgs, 更新 m_* struct + 刷 UI + applyCurrentTab
+// =============================================================
+void AdjustmentPanel::setStandaloneParams(const QString& dialogId, const QVariantMap& args)
+{
+    if (dialogId == "Curves") {
+        applyCurvesFromArgs(args);
+    } else if (dialogId == "Levels") {
+        applyLevelsFromArgs(args);
+    } else if (dialogId == "B&W") {
+        applyBnWFromArgs(args);
+    } else if (dialogId == "ChannelMixer") {
+        applyChannelMixerFromArgs(args);
+    } else if (dialogId == "HSL") {
+        // HSL standalone dialog not yet implemented (P0 only had inline).
+        // Treat as no-op for now; user must use inline HSL tab.
+        return;
+    } else {
+        LOG_WARN("[AdjustmentPanel] setStandaloneParams unknown dialogId: {}",
+                 dialogId.toStdString());
+        return;
+    }
+}
+
+void AdjustmentPanel::applyCurvesFromArgs(const QVariantMap& args)
+{
+    // {"channel": "RGB", "points": [{x,y}, ...]}
+    const QVariantList ptsVar = args.value("points").toList();
+    QPolygonF pts;
+    pts.reserve(ptsVar.size());
+    for (const QVariant& v : ptsVar) {
+        const QVariantMap pt = v.toMap();
+        pts << QPointF(pt.value("x").toDouble(), pt.value("y").toDouble());
+    }
+    if (pts.isEmpty()) pts = CurveEditor::defaultPoints();
+    m_curves.controlPoints = pts;
+    // Refresh inline UI
+    if (m_curvesEditor) m_curvesEditor->setControlPoints(pts);
+    // Switch to curves tab and apply
+    m_tabWidget->setCurrentIndex(kTabCurves);
+    emit paramChanged();
+    applyCurrentTab();
+}
+
+void AdjustmentPanel::applyLevelsFromArgs(const QVariantMap& args)
+{
+    // {"channel", "inLow", "inHigh", "gamma", "outLow", "outHigh"}
+    m_levels.inLow  = args.value("inLow", 0).toInt();
+    m_levels.inHigh = args.value("inHigh", 255).toInt();
+    m_levels.gamma  = args.value("gamma", 1.0).toDouble();
+    m_levels.outLow  = args.value("outLow", 0).toInt();
+    m_levels.outHigh = args.value("outHigh", 255).toInt();
+    // Cross-over guard: inLow < inHigh
+    if (m_levels.inLow >= m_levels.inHigh) m_levels.inLow = m_levels.inHigh - 1;
+    // Refresh 5 inline sliders if they exist (find them by index in m_levelsSliders if available;
+    // current AdjustmentPanel stores m_levelsSliders in m_levels, but inline sliders are stored
+    // in m_levelsInLow/m_levelsInHigh/m_levelsGamma/m_levelsOutLow/m_levelsOutHigh. Look those up.)
+    if (m_levelsInLow)   m_levelsInLow->setValue(m_levels.inLow);
+    if (m_levelsInHigh)  m_levelsInHigh->setValue(m_levels.inHigh);
+    if (m_levelsGamma)   m_levelsGamma->setValue(int(m_levels.gamma * 100));
+    if (m_levelsOutLow)  m_levelsOutLow->setValue(m_levels.outLow);
+    if (m_levelsOutHigh) m_levelsOutHigh->setValue(m_levels.outHigh);
+    // Refresh value labels
+    if (m_levelsInLowVal)   m_levelsInLowVal->setText(QString::number(m_levels.inLow));
+    if (m_levelsInHighVal)  m_levelsInHighVal->setText(QString::number(m_levels.inHigh));
+    if (m_levelsGammaVal)   m_levelsGammaVal->setText(QString::number(m_levels.gamma, 'f', 2));
+    if (m_levelsOutLowVal)  m_levelsOutLowVal->setText(QString::number(m_levels.outLow));
+    if (m_levelsOutHighVal) m_levelsOutHighVal->setText(QString::number(m_levels.outHigh));
+    m_tabWidget->setCurrentIndex(kTabLevels);
+    emit paramChanged();
+    applyCurrentTab();
+}
+
+void AdjustmentPanel::applyBnWFromArgs(const QVariantMap& args)
+{
+    // {"color0".."color5", "tintHue", "tintSat"}
+    if (m_bw.rgbMixer.size() != 6) m_bw.rgbMixer.resize(6, 100.0);
+    for (int i = 0; i < 6; ++i) {
+        const int v = args.value(QString("color%1").arg(i), 100).toInt();
+        m_bw.rgbMixer[i] = v;
+        if (i < m_bwSliders.size()) m_bwSliders[i]->setValue(v);
+    }
+    m_bw.tintHue = args.value("tintHue", 0).toInt();
+    m_bw.tintSat = args.value("tintSat", 0).toInt();
+    // Tint sliders are not in inline tab (buildBlackWhitePage doesn't add tint controls).
+    // Store values; LUT extension to apply tint is deferred to P0-3.x v2.
+    m_tabWidget->setCurrentIndex(kTabBlackWhite);
+    emit paramChanged();
+    applyCurrentTab();
+}
+
+void AdjustmentPanel::applyChannelMixerFromArgs(const QVariantMap& args)
+{
+    // {"m00".."m22", "monochrome"}
+    m_cm.rR = args.value("m00", 200).toInt();
+    m_cm.rG = args.value("m01", 0).toInt();
+    m_cm.rB = args.value("m02", 0).toInt();
+    m_cm.gR = args.value("m10", 0).toInt();
+    m_cm.gG = args.value("m11", 200).toInt();
+    m_cm.gB = args.value("m12", 0).toInt();
+    m_cm.bR = args.value("m20", 0).toInt();
+    m_cm.bG = args.value("m21", 0).toInt();
+    m_cm.bB = args.value("m22", 200).toInt();
+    m_cm.monochrome = args.value("monochrome", false).toBool();
+    // Refresh 9 inline sliders (m_cmSliders indexed row*3+col)
+    if (m_cmSliders.size() == 9) {
+        m_cmSliders[0]->setValue(m_cm.rR); m_cmSliders[1]->setValue(m_cm.rG); m_cmSliders[2]->setValue(m_cm.rB);
+        m_cmSliders[3]->setValue(m_cm.gR); m_cmSliders[4]->setValue(m_cm.gG); m_cmSliders[5]->setValue(m_cm.gB);
+        m_cmSliders[6]->setValue(m_cm.bR); m_cmSliders[7]->setValue(m_cm.bG); m_cmSliders[8]->setValue(m_cm.bB);
+    }
+    // Monochrome checkbox not in inline tab yet (deferred).
+    m_tabWidget->setCurrentIndex(kTabChannelMixer);
+    emit paramChanged();
+    applyCurrentTab();
 }

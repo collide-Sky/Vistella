@@ -4,137 +4,137 @@
 <context>
     <name>AdjustmentPanel</name>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="305"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="306"/>
         <source>拖动控制点调整曲线 (8 个) — 实时 buildCurvesLUT</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="314"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="315"/>
         <source>重置曲线</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="333"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="334"/>
         <source>曲线</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="346"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="347"/>
         <source>色阶: 输入范围 + Gamma + 输出范围</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="350"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="351"/>
         <source>输入</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="354"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="355"/>
         <source>暗部 (inLow)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="361"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="362"/>
         <source>亮部 (inHigh)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="368"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="369"/>
         <source>Gamma</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="378"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="379"/>
         <source>输出</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="382"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="383"/>
         <source>暗部 (outLow)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="389"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="390"/>
         <source>亮部 (outHigh)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="445"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="446"/>
         <source>色阶</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="458"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="459"/>
         <source>HSL: 8 色相 hue + 8 饱和度 sat + 1 明度 light</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="463"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="464"/>
         <source>色相 (Hue, -180..180)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="483"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="484"/>
         <source>饱和度 (Sat, -100..100)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="503"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="504"/>
         <source>明度 (Light, -100..100)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="505"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="506"/>
         <source>Lightness</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="519"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="520"/>
         <source>HSL</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="532"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="533"/>
         <source>黑白 (B&amp;W): 6 颜色混色 0..200 (100 = 中性)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="536"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="537"/>
         <source>颜色 mixer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="558"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="559"/>
         <source>黑白</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="571"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="572"/>
         <source>通道混合器: RGB -&gt; RGB 3x3 矩阵 (0..200, 200 = 100% 保留)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="575"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="576"/>
         <source>输出通道 = (R, G, B) · 3x3 矩阵</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="581"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="582"/>
         <source>R 输入</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="582"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="583"/>
         <source>G 输入</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="583"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="584"/>
         <source>B 输入</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="630"/>
+        <location filename="../src/media/imagewindow/AdjustmentPanel.cpp" line="631"/>
         <source>通道</source>
         <translation type="unfinished"></translation>
     </message>

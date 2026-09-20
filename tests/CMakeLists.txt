@@ -155,3 +155,7 @@ add_vistella_test(tst_WindowMode)
 # P0-3.2 v2 (2026-09-18): 4 standalone PS-style adjust dialogs
 #   (Curves/Levels/B&W/ChannelMixer) + DialogFactory dispatch + apply flow
 add_vistella_test(tst_AdjustmentDialogs)
+
+# P1.5.1 (2026-09-18): AdjustmentPanel::setStandaloneParams dispatcher
+#   Routing dialogId -> applyXxxFromArgs, params struct updates, UI slider refresh
+add_vistella_test(tst_AdjustmentDispatcher)
