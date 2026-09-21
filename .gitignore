@@ -101,6 +101,8 @@ StyleCopReport.xml
 *.scc
 *.bat
 *.cmd
+# scripts/ folder allowed for bootstrap utilities (download_models.ps1 etc.)
+# The bare *.ps1 rule below still blocks root .ps1 (build_all.ps1 etc.)
 *.ps1
 *.py
 *.bak
@@ -372,6 +374,16 @@ FodyWeavers.xsd
 /_backup_archives/P1.3_wrap_commit.msg.bak29
 /_backup_archives
 /third_party/landmark/buffalo_l.zip
+# P2 model bootstrap (2026-09-21): docs/MODELS.md describes the 2 ONNX weights
+#   (det_10g.onnx + 2d106det.onnx). Use scripts/download_models.ps1 to fetch.
+#   The heavier buffalo_l pack (w600k_r50.onnx + 1k3d68.onnx) is NOT used by
+#   current code; if you keep them locally, they stay untracked.
+/third_party/landmark/*.onnx
+/third_party/landmark/buffalo_l/
+# scripts/ folder allowed for bootstrap utilities (download_models.ps1 etc.)
+# The bare *.ps1 rule below still blocks root .ps1 (build_all.ps1 etc.)
+!scripts/
+!scripts/*.ps1
 /src/media/imageworker/layers/Layer.h.bak32
 /src/media/imageworker/layers/LayerCommand.cpp.bak32
 /src/media/imageworker/layers/LayerCommand.h.bak32
