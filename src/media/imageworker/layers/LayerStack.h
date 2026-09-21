@@ -87,7 +87,10 @@ public:
     //   new approach uses LayerKind::Group + per-stack m_groups storage.
     int  mergeIntoGroup(const QList<int>& indices);
     int  flattenGroup(int groupIdx);
-    const std::vector<LayerPtr>& groupChildrenOf(int groupIdx) const;
+    // P0 leftover 1 (2026-09-21): key by LayerId (stable pointer) not int index,
+    //   so render() can look up Group children without re-keying after every
+    //   m_layers mutation (moveUp / removeLayer / duplicateLayer / flattenGroup).
+    const std::vector<LayerPtr>& groupChildrenOf(LayerId groupId) const;
 
     bool removeLayer(int index);
     bool duplicateLayer(int index);
@@ -270,12 +273,13 @@ private:
     //   parentSmartIndex so the renderer knows to skip them as standalone.
     QHash<int, QList<int>> m_smartFilterChain;
 
-    // P1.5.2 (2026-09-21): Group children storage.
-    //   Keyed by Group layer index in m_layers. Value is the vector of
-    //   cloned child layers (LayerPtr = shared_ptr<Layer>).
-    //   Layer struct itself does NOT hold children (would break Layer's
-    //   copy semantics used throughout the codebase; see Layer.h comment).
-    QHash<int, std::vector<LayerPtr>> m_groups;
+    // P1.5.2 (2026-09-21): Group children storage. P0 leftover 1 (2026-09-21)
+    //   rekeyed by LayerId (stable LayerPtr.get()) instead of int layer index,
+    //   so mutations to m_layers (moveUp / removeLayer / duplicateLayer /
+    //   flattenGroup) do NOT invalidate m_groups lookups. Value is the vector
+    //   of cloned child layers. Layer struct itself does NOT hold children
+    //   (would break Layer's copy semantics; see Layer.h comment).
+    QHash<LayerId, std::vector<LayerPtr>> m_groups;
 
     void reassignZOrder();
     void disconnectLayer(LayerPtr l);

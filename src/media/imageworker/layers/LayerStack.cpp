@@ -291,22 +291,28 @@ int LayerStack::mergeIntoGroup(const QList<int>& indices)
     // Append Group at end
     const int groupIdx = addLayer(grp);
     if (groupIdx < 0) return -1;
-    m_groups.insert(groupIdx, std::move(clones));
+    // P0 leftover 1 (2026-09-21): key m_groups by LayerId, not int layer index,
+    //   so subsequent m_layers mutations (moveUp / removeLayer / flattenGroup)
+    //   don't invalidate this lookup.
+    m_groups.insert(idOf(groupIdx), std::move(clones));
     return groupIdx;
 }
 
 // P1.5.2 (2026-09-21): Replace Group at groupIdx with its children in order.
 //   1. Validate: index in range, kind == Group.
-//   2. Snapshot children (move m_groups[groupIdx] to local vector).
+//   2. Snapshot children (move m_groups[LayerId] to local vector).
 //   3. Rebuild m_layers: insert children at groupIdx, drop Group entry.
 //   4. emit countChanged + layerAdded signals.
+//   P0 leftover 1 (2026-09-21): m_groups keyed by LayerId (stable), so we
+//   look up by LayerId and DON'T need to re-key other entries after flatten.
 //   Returns number of children inserted, or -1 on failure.
 int LayerStack::flattenGroup(int groupIdx)
 {
     if (groupIdx < 0 || groupIdx >= m_layers.size()) return -1;
     auto grp = m_layers[groupIdx];
     if (!grp || grp->kind != Layer::Group) return -1;
-    auto it = m_groups.find(groupIdx);
+    const LayerId gid = idOf(groupIdx);
+    auto it = m_groups.find(gid);
     std::vector<LayerPtr> children;
     if (it != m_groups.end()) {
         children = std::move(it.value());
@@ -335,10 +341,10 @@ int LayerStack::flattenGroup(int groupIdx)
     return static_cast<int>(children.size());
 }
 
-const std::vector<LayerPtr>& LayerStack::groupChildrenOf(int groupIdx) const
+const std::vector<LayerPtr>& LayerStack::groupChildrenOf(LayerId groupId) const
 {
     static const std::vector<LayerPtr> kEmpty;
-    auto it = m_groups.find(groupIdx);
+    auto it = m_groups.find(groupId);
     if (it == m_groups.end()) return kEmpty;
     return it.value();
 }
@@ -1389,6 +1395,34 @@ cv::Mat LayerStack::render() const
         // P1.4.4 (2026-09-17): SmartFilter sub-layers render only as part of
         //   their parent SmartObject's chain; skip them in the main loop.
         if (l->kind == Layer::SmartFilter) continue;
+        // P0 leftover 1 (2026-09-21): Group recursive render.
+        //   PS-style: children blend with their own blendModes into a fresh
+        //   groupMat starting from current canvas, then groupMat composites
+        //   over canvas using Group.opacity (Normal blend). Group's own
+        //   blendMode is intentionally ignored (PS does the same).
+        if (l->kind == Layer::Group) {
+            const auto &children = groupChildrenOf(idOf(i));
+            if (children.empty()) continue;
+            cv::Mat groupMat = canvas.clone();
+            for (const auto &child : children) {
+                if (!child || !child->visible) continue;
+                cv::Mat cMat = rasterize(child);
+                if (cMat.empty()) continue;
+                if (child->maskEnabled && !child->layerMask.empty()) {
+                    cMat = applyMask(cMat, child->layerMask);
+                }
+                groupMat = applyBlend(child->blend, groupMat, cMat, child->opacity);
+            }
+            if (l->opacity < 1.0f) {
+                cv::Mat tmp;
+                cv::addWeighted(canvas, 1.0f - l->opacity,
+                                groupMat, l->opacity, 0, tmp);
+                canvas = tmp;
+            } else {
+                canvas = groupMat;
+            }
+            continue;
+        }
         if (i == baseIdx) {
             // base 层: 单独处理 opacity
             if (l->opacity < 1.0f) {
