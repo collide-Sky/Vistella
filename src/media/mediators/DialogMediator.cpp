@@ -1,19 +1,27 @@
 // SPDX-License-Identifier: MIT
 //
-// DialogMediator 实现 - F-B3 (2026-09-08)
+// DialogMediator 实现 - F-B3 (2026-09-08) / P0 leftover 4 (2026-09-21)
 //
 #include "DialogMediator.h"
+#include "../dialogs/DialogFactory.h"
+#include "../dialogs/AdjustDialogBase.h"
 #include "logger.h"
 
 #include <QDialog>
+#include <QApplication>
 
 namespace mediators {
 
 DialogMediator::DialogMediator(QObject* parent) : QObject(parent)
 {
-    // F-B3 阶段: 框架, 不主动创建 dialog 实例
-    //   F-K 阶段 DialogFactory 接 dialogShowRequested 后会创建
-    //   这里只做查询 / hide / 状态维护
+    // P0 leftover 4 (2026-09-21): self-wire to DialogFactory. The mediator
+    //   owns dialog lifecycle now: showDialog emits dialogShowRequested,
+    //   which we listen to internally via onShowDialogRequested, which
+    //   calls DialogFactory::create. This removes the F-B3 stub state
+    //   where the signal had no consumer and showDialog was effectively
+    //   dead code.
+    connect(this, &DialogMediator::dialogShowRequested,
+            this, &DialogMediator::onShowDialogRequested);
 }
 
 bool DialogMediator::isDialogOpen(const QString& dialogId) const
@@ -43,9 +51,28 @@ void DialogMediator::showDialog(const QString& dialogId, const QVariantMap& args
         LOG_DEBUG("[DialogMed] showDialog reuse: id={}", dialogId.toStdString());
         return;
     }
-    // 没实例: 转发给 DialogFactory (F-K 阶段连)
+    // 没实例: emit dialogShowRequested, 由 onShowDialogRequested 创建
     LOG_INFO("[DialogMed] showDialog request: id={} args={}", dialogId.toStdString(), args.size());
     emit dialogShowRequested(dialogId, args);
+}
+
+void DialogMediator::onShowDialogRequested(const QString& dialogId,
+                                            const QVariantMap& args)
+{
+    // P0 leftover 4 (2026-09-21): DialogFactory creates the dialog.
+    //   Parent it to the QApplication's active window so dialogs center
+    //   on the user's current ImageWindow. Store the pointer (QPointer
+    //   handles dialog destruction automatically).
+    QWidget* parent = QApplication::activeWindow();
+    dialogs::AdjustDialogBase* dlg = dialogs::DialogFactory::create(dialogId, args, parent);
+    if (!dlg) {
+        LOG_WARN("[DialogMed] create returned null: id={}", dialogId.toStdString());
+        return;
+    }
+    connect(dlg, &QObject::destroyed, this, &DialogMediator::onDialogDestroyed);
+    m_dialogs.insert(dialogId, dlg);
+    dlg->show();
+    LOG_DEBUG("[DialogMed] onShowDialogRequested created: id={}", dialogId.toStdString());
 }
 
 void DialogMediator::hideDialog(const QString& dialogId)
@@ -70,8 +97,7 @@ void DialogMediator::hideAllDialogs()
 
 void DialogMediator::onDialogDestroyed(QObject* obj)
 {
-    // F-K DialogFactory 创建 dialog 后会 connect destroyed 到这个 slot
-    //   dialog 销毁时, 自动从 m_dialogs 移除
+    // P0 leftover 4 (2026-09-21): dialog 销毁时, 自动从 m_dialogs 移除
     for (auto it = m_dialogs.begin(); it != m_dialogs.end(); ++it) {
         if (it.value().data() == obj) {
             LOG_DEBUG("[DialogMed] onDialogDestroyed: id={}", it.key().toStdString());

@@ -64,6 +64,10 @@ signals:
     void dialogHidden(const QString& dialogId);
 
 private slots:
+    // P0 leftover 4 (2026-09-21): internal self-wire. showDialog emits
+    //   dialogShowRequested; this slot calls DialogFactory to create
+    //   the dialog and registers it in m_dialogs.
+    void onShowDialogRequested(const QString& dialogId, const QVariantMap& args);
     // 监听 dialog destroyed 信号, 自动从 m_dialogs 移除
     void onDialogDestroyed(QObject* obj);
 
