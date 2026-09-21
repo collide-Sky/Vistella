@@ -49,7 +49,9 @@ struct Layer {
         Text,          // text + fontSize + color
         SmartObject,   // sourceFilePath
         Adjustment,    // adjustmentType + adjustmentLut
-        SmartFilter    // P1.4.4 (2026-09-17): SmartObject sub-filter (filterType + filterStrength)
+        SmartFilter,   // P1.4.4 (2026-09-17): SmartObject sub-filter (filterType + filterStrength)
+        Group          // P1.5.2 (2026-09-21): Container layer; children live in
+                      // LayerStack::m_groups keyed by Group layer index.
     };
     LayerKind kind = Bitmap;
 
@@ -145,6 +147,8 @@ struct Layer {
         case SmartFilter:
             return !image.empty() && image.depth() == CV_8U
                 && !filterType.isEmpty() && parentSmartIndex >= 0;
+        case Group:
+            return true;  // Empty group is valid; non-empty validated by LayerStack::m_groups entry.
         case Vector:
         case Adjustment:
         default:

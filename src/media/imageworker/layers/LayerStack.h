@@ -74,6 +74,21 @@ public:
     int  addAdjustmentLayer(const QString &name, const QString &adjustmentType,
                             const cv::Mat &lut = cv::Mat());
 
+    // P1.5.2 (2026-09-21): Group / Ungroup (LayerKind::Group based)
+    //   mergeIntoGroup: pack N adjacent layers (>= 2) into a new Group container
+    //     layer appended at end of stack. Returns new Group index or -1 on
+    //     failure (e.g. non-adjacent indices, < 2 layers).
+    //   flattenGroup: replace Group at `groupIdx` with its children in order.
+    //     Returns count of layers inserted, or -1 if `groupIdx` is not Group.
+    //   groupChildrenOf(groupIdx): read-only accessor for Group's children
+    //     (vector of LayerPtr, in order). Returns empty if idx is not a Group.
+    //   Note: these differ from the older createGroup/groupLayers/ungroupLayer
+    //   pair (P0-1 stubs at lines 200-204) which used external group ids; the
+    //   new approach uses LayerKind::Group + per-stack m_groups storage.
+    int  mergeIntoGroup(const QList<int>& indices);
+    int  flattenGroup(int groupIdx);
+    const std::vector<LayerPtr>& groupChildrenOf(int groupIdx) const;
+
     bool removeLayer(int index);
     bool duplicateLayer(int index);
     bool moveUp(int index);
@@ -254,6 +269,13 @@ private:
     //   entries in m_layers (so they show up in LayerPanel) but tagged with
     //   parentSmartIndex so the renderer knows to skip them as standalone.
     QHash<int, QList<int>> m_smartFilterChain;
+
+    // P1.5.2 (2026-09-21): Group children storage.
+    //   Keyed by Group layer index in m_layers. Value is the vector of
+    //   cloned child layers (LayerPtr = shared_ptr<Layer>).
+    //   Layer struct itself does NOT hold children (would break Layer's
+    //   copy semantics used throughout the codebase; see Layer.h comment).
+    QHash<int, std::vector<LayerPtr>> m_groups;
 
     void reassignZOrder();
     void disconnectLayer(LayerPtr l);

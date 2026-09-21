@@ -254,6 +254,95 @@ int LayerStack::addAdjustmentLayer(const QString &name, const QString &adjustmen
     return addLayer(l);
 }
 
+// P1.5.2 (2026-09-21): Group adjacent layers into a Group container.
+//   1. Validate: >= 2 indices, sorted ascending, contiguous.
+//   2. Capture each layer's full copy (LayerPtr deep clone via std::make_shared<Layer>).
+//   3. Remove originals (high idx to low idx to avoid index shift).
+//   4. Build Group layer at end (kind=Group) + store clones in m_groups[newGroupIdx].
+//   5. Return new Group index at end of stack.
+int LayerStack::mergeIntoGroup(const QList<int>& indices)
+{
+    if (indices.size() < 2) return -1;
+    // Validate bounds
+    for (int idx : indices) {
+        if (idx < 0 || idx >= m_layers.size()) return -1;
+    }
+    // Sort ascending for contiguity check + removal order
+    QList<int> sorted = indices;
+    std::sort(sorted.begin(), sorted.end());
+    // Contiguity: consecutive integers
+    for (int i = 1; i < sorted.size(); ++i) {
+        if (sorted[i] != sorted[i - 1] + 1) return -1;
+    }
+    // Capture clones BEFORE removing originals (so indices stay valid)
+    std::vector<LayerPtr> clones;
+    clones.reserve(sorted.size());
+    for (int idx : sorted) {
+        clones.push_back(std::make_shared<Layer>(*m_layers[idx]));
+    }
+    // Remove originals in reverse order (high -> low) to keep indices stable
+    for (int i = sorted.size() - 1; i >= 0; --i) {
+        if (!removeLayer(sorted[i])) return -1;   // shouldn't fail given validation
+    }
+    // Build Group layer
+    Layer grp;
+    grp.kind = Layer::Group;
+    grp.name = QStringLiteral("Group 1");
+    // Append Group at end
+    const int groupIdx = addLayer(grp);
+    if (groupIdx < 0) return -1;
+    m_groups.insert(groupIdx, std::move(clones));
+    return groupIdx;
+}
+
+// P1.5.2 (2026-09-21): Replace Group at groupIdx with its children in order.
+//   1. Validate: index in range, kind == Group.
+//   2. Snapshot children (move m_groups[groupIdx] to local vector).
+//   3. Rebuild m_layers: insert children at groupIdx, drop Group entry.
+//   4. emit countChanged + layerAdded signals.
+//   Returns number of children inserted, or -1 on failure.
+int LayerStack::flattenGroup(int groupIdx)
+{
+    if (groupIdx < 0 || groupIdx >= m_layers.size()) return -1;
+    auto grp = m_layers[groupIdx];
+    if (!grp || grp->kind != Layer::Group) return -1;
+    auto it = m_groups.find(groupIdx);
+    std::vector<LayerPtr> children;
+    if (it != m_groups.end()) {
+        children = std::move(it.value());
+        m_groups.erase(it);
+    }
+    if (children.empty()) {
+        if (!removeLayer(groupIdx)) return -1;
+        return 0;
+    }
+    // Rebuild m_layers: insert children at groupIdx, drop Group entry
+    QList<LayerPtr> rebuilt;
+    rebuilt.reserve(m_layers.size() - 1 + static_cast<int>(children.size()));
+    for (int i = 0; i < m_layers.size(); ++i) {
+        if (i < groupIdx) rebuilt.append(m_layers[i]);
+        else if (i == groupIdx) {
+            for (auto& ch : children) rebuilt.append(ch);
+        } else {
+            rebuilt.append(m_layers[i]);
+        }
+    }
+    m_layers = rebuilt;
+    emit countChanged();
+    for (size_t i = 0; i < children.size(); ++i) {
+        emit layerAdded(groupIdx + static_cast<int>(i));
+    }
+    return static_cast<int>(children.size());
+}
+
+const std::vector<LayerPtr>& LayerStack::groupChildrenOf(int groupIdx) const
+{
+    static const std::vector<LayerPtr> kEmpty;
+    auto it = m_groups.find(groupIdx);
+    if (it == m_groups.end()) return kEmpty;
+    return it.value();
+}
+
 bool LayerStack::removeLayer(int index)
 {
     if (index < 0 || index >= m_layers.size()) return false;
