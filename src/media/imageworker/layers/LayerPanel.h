@@ -18,16 +18,18 @@
 // =============================================================
 
 #include <QWidget>
-#include <QListWidget>
+#include <QTreeWidget>
 #include <QHash>
 #include <QPointer>
 #include <QImage>
 
 #include <opencv2/core.hpp>
 
+#include "LayerStack.h"  // P0 leftover 2: LayerId used by Group child item ids (LayerStack::m_groups)
+
 QT_BEGIN_NAMESPACE
-class QListWidget;
-class QListWidgetItem;
+class QTreeWidget;
+class QTreeWidgetItem;
 class QToolBar;
 class QDoubleSpinBox;
 class QToolButton;
@@ -106,6 +108,12 @@ signals:
     void rasterizeSmartObjectRequested(int index);    // SmartObject -> Bitmap
     void relinkSmartObjectRequested(int index);       // 重新链接源文件
     void selectionChangedFromPanel(int index);
+    // P0 leftover 2 (2026-09-21): emitted when a Group's child item is
+    //   activated in the tree. groupId is the parent Group's LayerId (stable
+    //   across m_layers mutations; see LayerStack::m_groups rekey). childIdx
+    //   is the index within groupChildrenOf(groupId). Layer operations on
+    //   group children are wired up in P0 leftover 3 (LayerCommand Group/Ungroup).
+    void selectionChangedFromPanelChild(LayerId groupId, int childIdx);
     // P1.4.4 (2026-09-17): SmartFilter sub-layer entry (SmartObject right-click)
     //   Routed to MainWindow: pops filter picker dialog + calls appendSmartFilter
     //   + pushes undo command.
@@ -135,7 +143,7 @@ private slots:
     void onFlattenClicked();
     void onGroupClicked();
     void onUngroupClicked();
-    void onListCurrentRowChanged(int row);
+    void onTreeCurrentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous);
     void onOpacityChanged(double v);
     void onBlendChanged(int idx);
 
@@ -179,14 +187,25 @@ private:
     // 阶段 1 W4.4 Phase 4 (2026-09-04): 同步 mask 控件到当前 layer
     void   syncMaskProps(int index);
 
+    // P0 leftover 2 (2026-09-21): tree helpers. Top-level items hold
+    //   layer index in Qt::UserRole. Group child items hold a QString
+    //   "child:<groupLayerIdHex>:<childIdx>" so selection routing can
+    //   distinguish top-layer vs group-child clicks.
+    static QString childItemId(LayerId groupId, int childIdx);
+    static bool    isChildItemId(const QString &s);
+    static LayerId childItemGroupId(const QString &s);
+    static int     childItemChildIdx(const QString &s);
+    QTreeWidgetItem *findTopLevelItemByLayerIndex(int layerIndex) const;
+    QTreeWidgetItem *findGroupChildItem(LayerId groupId, int childIdx) const;
+
     QPointer<LayerStack> m_stack;
 
     // 阶段 1 W4.3 Phase 2 (2026-09-04): blend menu 缓存
     //   持有指针用于在 onSelectionChanged 同步 checked 状态
     QMenu *m_blendMenu = nullptr;
 
-    // 列表
-    QListWidget *m_list = nullptr;
+    // 列表 (P0 leftover 2: QListWidget -> QTreeWidget for Group children)
+    QTreeWidget *m_tree = nullptr;
 
     // 工具栏按钮
     QToolButton *m_btnAdd = nullptr;

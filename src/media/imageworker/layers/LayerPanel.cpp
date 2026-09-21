@@ -10,8 +10,8 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QToolButton>
-#include <QListWidget>
-#include <QListWidgetItem>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QDoubleSpinBox>
 #include <QSlider>
 #include <QLabel>
@@ -158,18 +158,18 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
     toolbar2->addWidget(m_btnUngroup);
     rootLayout->addLayout(toolbar2);
 
-    // ---- 列表 ----
-    m_list = new QListWidget(content);
-    m_list->setViewMode(QListView::ListMode);
-    m_list->setIconSize(QSize(kThumbSize, kThumbSize));
-    m_list->setMovement(QListView::Static);
-    m_list->setResizeMode(QListView::Adjust);
-    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(m_list, &QListWidget::customContextMenuRequested,
+    // ---- 列表 (P0 leftover 2: QListWidget -> QTreeWidget for Group children) ----
+    m_tree = new QTreeWidget(content);
+    m_tree->setColumnCount(1);
+    m_tree->setHeaderHidden(true);
+    m_tree->setIconSize(QSize(kThumbSize, kThumbSize));
+    m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
+    connect(m_tree, &QTreeWidget::customContextMenuRequested,
             this, &LayerPanel::onContextMenu);
-    connect(m_list, &QListWidget::currentRowChanged,
-            this, &LayerPanel::onListCurrentRowChanged);
-    rootLayout->addWidget(m_list, /*stretch*/1);
+    connect(m_tree, &QTreeWidget::currentItemChanged,
+            this, &LayerPanel::onTreeCurrentItemChanged);
+    rootLayout->addWidget(m_tree, /*stretch*/1);
 
     // ---- 属性面板 ----
     auto *propLayout = new QVBoxLayout;
@@ -574,50 +574,84 @@ void LayerPanel::syncMaskProps(int index)
 
 void LayerPanel::rebuildList()
 {
-    if (!m_list) return;
+    if (!m_tree) return;
     m_rebuilding = true;
-    m_list->clear();
+    m_tree->clear();
     m_thumbs.clear();
     if (m_stack) {
-        // 列表按 zOrder desc 展示 (顶层在上, 跟 Photoshop 一致)
+        // Top-level items by zOrder desc (top-most layer on top, PS-style).
+        //   Group items get their children attached below with indentation.
+        // P0 leftover 2 (2026-09-21): Group children rendered as QTreeWidgetItem
+        //   children of the Group's top-level item.
         for (int i = m_stack->count() - 1; i >= 0; --i) {
             auto l = m_stack->at(i);
             if (!l) continue;
-            QListWidgetItem *item = new QListWidgetItem(m_list);
-            // 缩略图
+            QTreeWidgetItem *item = new QTreeWidgetItem(m_tree);
+            // Icon: Bitmap thumbnail, or kind letter, or folder for Group
             if (l->kind == Layer::Bitmap && !l->image.empty()) {
                 QImage thumb = makeThumbnail(l->image);
                 m_thumbs[i] = thumb;
-                item->setIcon(QIcon(QPixmap::fromImage(thumb)));
+                item->setIcon(0, QIcon(QPixmap::fromImage(thumb)));
+            } else if (l->kind == Layer::Group) {
+                item->setIcon(0, makeIcon(QStringLiteral("F")));
             } else {
-                item->setIcon(makeIcon(l->kind == Layer::Text ? QStringLiteral("T")
+                item->setIcon(0, makeIcon(l->kind == Layer::Text ? QStringLiteral("T")
                                          : l->kind == Layer::SmartObject ? QStringLiteral("S")
                                          : l->kind == Layer::Adjustment ? QStringLiteral("A")
                                          : QStringLiteral("?")));
             }
-            // 文字: 名字 + 状态 (锁/链)
             QString label = l->name;
             if (l->locked)  label.prepend(QStringLiteral("🔒 "));
             if (l->isLinked) label.prepend(QStringLiteral("🔗 "));
             if (!l->visible) label.prepend(QStringLiteral("✗ "));
-            item->setText(label);
-            // 内部数据: 存 layer index (列表是倒序, 列表 row 0 = zOrder 最大)
-            item->setData(Qt::UserRole, i);
+            item->setText(0, label);
+            item->setData(0, Qt::UserRole, i);
+            // P0 leftover 2: expand Group children. Children stored in
+            //   LayerStack::m_groups keyed by parent Group's LayerId.
+            if (l->kind == Layer::Group) {
+                const LayerId gid = m_stack->idOf(i);
+                const auto &children = m_stack->groupChildrenOf(gid);
+                for (size_t ci = 0; ci < children.size(); ++ci) {
+                    const auto &child = children[ci];
+                    if (!child) continue;
+                    auto *cItem = new QTreeWidgetItem(item);
+                    if (child->kind == Layer::Bitmap && !child->image.empty()) {
+                        // P0 leftover 2: don't cache child thumbnails in
+                        //   m_thumbs (which is keyed by int layer index).
+                        //   Group children live in m_groups, not m_layers,
+                        //   so the int index key doesn't apply. Regenerate
+                        //   on each populate; rebuildList is the only call
+                        //   path that paints thumbs so this is cheap.
+                        const QImage thumb = makeThumbnail(child->image);
+                        cItem->setIcon(0, QIcon(QPixmap::fromImage(thumb)));
+                    } else {
+                        cItem->setIcon(0, makeIcon(child->kind == Layer::Text
+                                                   ? QStringLiteral("T")
+                                                   : child->kind == Layer::SmartObject
+                                                   ? QStringLiteral("S")
+                                                   : child->kind == Layer::Adjustment
+                                                   ? QStringLiteral("A")
+                                                   : QStringLiteral("?")));
+                    }
+                    QString cLabel = child->name;
+                    if (child->locked)  cLabel.prepend(QStringLiteral("🔒 "));
+                    if (child->isLinked) cLabel.prepend(QStringLiteral("🔗 "));
+                    if (!child->visible) cLabel.prepend(QStringLiteral("✗ "));
+                    cItem->setText(0, cLabel);
+                    cItem->setData(0, Qt::UserRole, childItemId(gid,
+                                                                 static_cast<int>(ci)));
+                }
+                item->setExpanded(true);   // PS: groups default-expanded
+            }
         }
     }
-    // 阶段 1 Step A Bug 1 修法 (2026-09-04):
-    //   m_rebuilding 必须保持 true 直到所有 setCurrentRow 触发的 currentRowChanged 处理完
-    //   原代码 607 行先 false, 614 行 setCurrentRow 期间如果有 selectionChanged 信号
-    //   进入 onSelectionChanged / onListCurrentRowChanged 会被 m_rebuilding 守卫吞掉
-    //   修法: 把 false 移到 setCurrentRow 之后, 保证同步选中期间不再吃信号
+    // m_rebuilding must stay true until setCurrentItem triggers are processed
+    // (mirrors P1 Step A Bug 1 fix from QListWidget era).
     if (m_stack) {
         const int sel = m_stack->selection();
         if (sel >= 0) {
-            for (int row = 0; row < m_list->count(); ++row) {
-                if (m_list->item(row)->data(Qt::UserRole).toInt() == sel) {
-                    m_list->setCurrentRow(row);
-                    break;
-                }
+            if (auto *topItem = findTopLevelItemByLayerIndex(sel)) {
+                m_tree->setCurrentItem(topItem);
             }
         }
     }
@@ -626,26 +660,21 @@ void LayerPanel::rebuildList()
 
 void LayerPanel::refreshRow(int index)
 {
-    if (!m_list || !m_stack) return;
+    if (!m_tree || !m_stack) return;
     auto l = m_stack->at(index);
     if (!l) return;
-    // 找列表 row
-    int row = -1;
-    for (int i = 0; i < m_list->count(); ++i) {
-        if (m_list->item(i)->data(Qt::UserRole).toInt() == index) { row = i; break; }
-    }
-    if (row < 0) return;
-    QListWidgetItem *item = m_list->item(row);
+    auto *item = findTopLevelItemByLayerIndex(index);
+    if (!item) return;
     if (l->kind == Layer::Bitmap && !l->image.empty()) {
         QImage thumb = makeThumbnail(l->image);
         m_thumbs[index] = thumb;
-        item->setIcon(QIcon(QPixmap::fromImage(thumb)));
+        item->setIcon(0, QIcon(QPixmap::fromImage(thumb)));
     }
     QString label = l->name;
     if (l->locked)  label.prepend(QStringLiteral("🔒 "));
     if (l->isLinked) label.prepend(QStringLiteral("🔗 "));
     if (!l->visible) label.prepend(QStringLiteral("✗ "));
-    item->setText(label);
+    item->setText(0, label);
 }
 
 // =====================================================================
@@ -674,13 +703,10 @@ void LayerPanel::onCountChanged()
 
 void LayerPanel::onSelectionChanged(int index)
 {
-    if (!m_list) return;
+    if (!m_tree) return;
     if (m_rebuilding) return;
-    for (int row = 0; row < m_list->count(); ++row) {
-        if (m_list->item(row)->data(Qt::UserRole).toInt() == index) {
-            m_list->setCurrentRow(row);
-            break;
-        }
+    if (auto *topItem = findTopLevelItemByLayerIndex(index)) {
+        m_tree->setCurrentItem(topItem);
     }
     // 同步属性面板
     if (m_stack) {
@@ -708,13 +734,28 @@ void LayerPanel::onSelectionChanged(int index)
     syncMaskProps(index);
 }
 
-void LayerPanel::onListCurrentRowChanged(int row)
+void LayerPanel::onTreeCurrentItemChanged(QTreeWidgetItem *current,
+                                          QTreeWidgetItem * /*previous*/)
 {
     if (m_rebuilding) return;
-    if (row < 0) return;
-    int index = m_list->item(row)->data(Qt::UserRole).toInt();
-    if (m_stack) m_stack->setSelection(index);
-    emit selectionChangedFromPanel(index);
+    if (!current) return;
+    const QVariant data = current->data(0, Qt::UserRole);
+    if (data.type() == QVariant::Int) {
+        // Top-level item: UserRole is the layer index.
+        const int index = data.toInt();
+        if (m_stack) m_stack->setSelection(index);
+        emit selectionChangedFromPanel(index);
+    } else if (data.type() == QVariant::String) {
+        // Group child item: UserRole is "child:<groupLayerIdHex>:<childIdx>"
+        const QString s = data.toString();
+        if (isChildItemId(s)) {
+            const LayerId gid = childItemGroupId(s);
+            const int childIdx = childItemChildIdx(s);
+            // P0 leftover 2 only handles display; LayerCommand wiring for
+            //   child operations lands in P0 leftover 3.
+            emit selectionChangedFromPanelChild(gid, childIdx);
+        }
+    }
 }
 
 // =====================================================================
@@ -831,12 +872,19 @@ void LayerPanel::onBlendChanged(int idx)
 
 void LayerPanel::onContextMenu(const QPoint &pos)
 {
-    if (!m_list) return;
-    QListWidgetItem *item = m_list->itemAt(pos);
+    if (!m_tree) return;
+    QTreeWidgetItem *item = m_tree->itemAt(pos);
     if (!item) return;
-    int index = item->data(Qt::UserRole).toInt();
+    // P0 leftover 2: only top-level items get a full context menu. Group
+    //   child items are display-only this round; the right-click surface
+    //   for child operations lands in P0 leftover 3 (LayerCommand wiring).
+    const QVariant data = item->data(0, Qt::UserRole);
+    if (data.type() != QVariant::Int) return;
+    int index = data.toInt();
     if (!m_stack || index < 0) return;
-    m_list->setCurrentRow(m_list->row(item));
+    if (auto *topItem = findTopLevelItemByLayerIndex(index)) {
+        m_tree->setCurrentItem(topItem);
+    }
     auto l = m_stack->at(index);
     if (!l) return;
 
@@ -889,7 +937,7 @@ void LayerPanel::onContextMenu(const QPoint &pos)
         actSmartResetTransform = menu.addAction(tr("重置变换"));
     }
 
-    QAction *chosen = menu.exec(m_list->mapToGlobal(pos));
+    QAction *chosen = menu.exec(m_tree->mapToGlobal(pos));
     if (!chosen) return;
     if (chosen == actRename) {
         QString newName = QInputDialog::getText(this, tr("重命名图层"),
@@ -1064,6 +1112,68 @@ void LayerPanel::onSmartObjectToggleEmbedClicked()
     const int idx = m_stack->selection();
     if (idx < 0) return;
     emit toggleSmartObjectEmbedRequested(idx);
+}
+
+// =====================================================================
+//  P0 leftover 2 (2026-09-21): tree helpers for Group child item IDs.
+//   Group children don't live in m_layers, so a flat int layer index
+//   cannot address them. Encode (groupLayerId, childIdx) into a QString
+//   stored in Qt::UserRole. The format is intentionally simple and
+//   parseable so LayerCommand wiring (P0 leftover 3) can re-decode it.
+// =====================================================================
+
+QString LayerPanel::childItemId(LayerId groupId, int childIdx)
+{
+    return QStringLiteral("child:%1:%2")
+        .arg(quintptr(groupId), 0, 16)
+        .arg(childIdx);
+}
+
+bool LayerPanel::isChildItemId(const QString &s)
+{
+    return s.startsWith(QStringLiteral("child:"));
+}
+
+LayerId LayerPanel::childItemGroupId(const QString &s)
+{
+    // "child:<hex>:<childIdx>" -> split on ":" and parse middle as hex.
+    const QStringList parts = s.split(QLatin1Char(':'));
+    if (parts.size() != 3) return 0;
+    bool ok = false;
+    const quintptr gid = parts[1].toULongLong(&ok, 16);
+    return ok ? static_cast<LayerId>(gid) : 0;
+}
+
+int LayerPanel::childItemChildIdx(const QString &s)
+{
+    const QStringList parts = s.split(QLatin1Char(':'));
+    if (parts.size() != 3) return -1;
+    return parts[2].toInt();
+}
+
+QTreeWidgetItem *LayerPanel::findTopLevelItemByLayerIndex(int layerIndex) const
+{
+    if (!m_tree) return nullptr;
+    for (int i = 0; i < m_tree->topLevelItemCount(); ++i) {
+        auto *top = m_tree->topLevelItem(i);
+        if (top && top->data(0, Qt::UserRole).toInt() == layerIndex) return top;
+    }
+    return nullptr;
+}
+
+QTreeWidgetItem *LayerPanel::findGroupChildItem(LayerId groupId, int childIdx) const
+{
+    if (!m_tree) return nullptr;
+    const QString id = childItemId(groupId, childIdx);
+    for (int i = 0; i < m_tree->topLevelItemCount(); ++i) {
+        auto *top = m_tree->topLevelItem(i);
+        if (!top) continue;
+        for (int j = 0; j < top->childCount(); ++j) {
+            auto *child = top->child(j);
+            if (child && child->data(0, Qt::UserRole).toString() == id) return child;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace layers

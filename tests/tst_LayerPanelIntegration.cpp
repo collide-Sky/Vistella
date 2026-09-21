@@ -1,10 +1,18 @@
 // =============================================================================
 //  tst_LayerPanelIntegration - P1.4.3 (2026-09-17) LayerPanel 实例化 + 信号接通
+//                              P0 leftover 2 (2026-09-21) Group children 显示
 //
 //  覆盖 P1.4.3 的 3 个核心路径:
 //    1. LayerPanel 创建不崩 (P1.4.2 类定义完整但没 new; P1.4.3 改成 QWidget base)
 //    2. selectionChangedFromPanel signal (P1.4.3 接通到 LayerStack::setSelection)
 //    3. m_kindProps 当前 index = 3 (SmartObject 页面), 选 SmartObject layer 同步
+//
+//  P0 leftover 2 (2026-09-21) 新增:
+//    4. QTreeWidget 取代 QListWidget (Group children 用 child item 表示)
+//    5. Group items expanded by default, children indented under parent
+//    6. selectionChangedFromPanelChild(LayerId, int) 路由 group child clicks
+//    7. Top-level items keep emitting selectionChangedFromPanel(int) for
+//       backward compatibility
 //
 //  注: 不构造 ImageWindow (单测不能 new ImageWindow - 需要 QApplication +
 //  大量 UI 依赖, 见 tst_LayerCommand.cpp:554). 这里直接验证 LayerPanel 的 UI 行为,
@@ -38,6 +46,16 @@ private slots:
     void test_layerPanel_selection_signal();
     // P1.4.3: SmartObject layer -> m_kindProps 当前 index = 3
     void test_layerPanel_kindPropsSmartObject();
+    // P0 leftover 2 (2026-09-21): Group items appear in tree, expanded by
+    //   default with their children rendered as child items under the parent.
+    void test_layerPanel_group_appears_with_children();
+    // P0 leftover 2 (2026-09-21): clicking a Group child item emits
+    //   selectionChangedFromPanelChild with the encoded (groupLayerId,
+    //   childIdx); top-level clicks still emit selectionChangedFromPanel(int).
+    void test_layerPanel_child_selection_signal();
+    // P0 leftover 2 (2026-09-21): Group survives multiple rebuildList calls
+    //   (e.g. on layerAdded signal); children count and order are stable.
+    void test_layerPanel_group_survives_rebuild();
 
 private:
     // 通过 friend 或访问器暴露内部 widget 给测试
@@ -61,14 +79,14 @@ void tst_LayerPanelIntegration::test_layerPanel_creation_doesnt_crash()
     QCOMPARE(stack.count(), 1);
 
     // LayerPanel ctor (P1.4.3 改 QWidget 后): 不再调 setWidget(content), 改用 outerLayout 包 content
+    // P0 leftover 2 (2026-09-21): m_list (QListWidget) -> m_tree (QTreeWidget).
     LayerPanel panel(&stack);
-    QVERIFY(panel.findChild<QListWidget*>() != nullptr);
+    QVERIFY(panel.findChild<QTreeWidget*>() != nullptr);
     QVERIFY(panel.findChild<QStackedWidget*>() != nullptr);
 
-    // m_list 应有 1 项
-    auto* list = panel.findChild<QListWidget*>();
-    QCOMPARE(list->count(), 1);
-    QCOMPARE(list->item(0)->data(Qt::UserRole).toInt(), 0);
+    auto* tree = panel.findChild<QTreeWidget*>();
+    QCOMPARE(tree->topLevelItemCount(), 1);
+    QCOMPARE(tree->topLevelItem(0)->data(0, Qt::UserRole).toInt(), 0);
 }
 
 // =====================================================================
@@ -91,24 +109,27 @@ void tst_LayerPanelIntegration::test_layerPanel_selection_signal()
     QCOMPARE(stack.count(), 2);
 
     LayerPanel panel(&stack);
-    auto* list = panel.findChild<QListWidget*>();
-    QVERIFY(list != nullptr);
-    QCOMPARE(list->count(), 2);
+    auto* tree = panel.findChild<QTreeWidget*>();
+    QVERIFY(tree != nullptr);
+    QCOMPARE(tree->topLevelItemCount(), 2);
 
-    // 确认列表是倒序 (zOrder desc): row 0 -> index 1 (top layer "B"), row 1 -> index 0 (bottom "A")
-    QCOMPARE(list->item(0)->data(Qt::UserRole).toInt(), 1);
-    QCOMPARE(list->item(1)->data(Qt::UserRole).toInt(), 0);
+    // Confirm tree is in zOrder-desc order: top-level 0 -> index 1 ("B"),
+    // top-level 1 -> index 0 ("A"). UserRole stores layer index (not row).
+    QCOMPARE(tree->topLevelItem(0)->data(0, Qt::UserRole).toInt(), 1);
+    QCOMPARE(tree->topLevelItem(1)->data(0, Qt::UserRole).toInt(), 0);
 
-    // QSignalSpy 监听 signal
+    // QSignalSpy listens to the legacy int-index signal (still emitted for
+    // top-level clicks; child clicks land on selectionChangedFromPanelChild).
     QSignalSpy spy(&panel, &LayerPanel::selectionChangedFromPanel);
 
-    // setCurrentRow(1) -> row 1 -> data = 0 -> emit signal(0) (底层 layer A)
-    list->setCurrentRow(1);
+    // setCurrentItem(topItemForIndex0) -> emit signal(0) (bottom layer "A").
+    // Use the item that stores UserRole=0 (which is top-level position 1).
+    tree->setCurrentItem(tree->topLevelItem(1));
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).at(0).toInt(), 0);
 
-    // 再选 row 0 -> data = 1 -> emit signal(1) (顶层 layer B)
-    list->setCurrentRow(0);
+    // Re-select top-level position 0 (UserRole=1, top layer "B").
+    tree->setCurrentItem(tree->topLevelItem(0));
     QCOMPARE(spy.count(), 2);
     QCOMPARE(spy.at(1).at(0).toInt(), 1);
 }
@@ -140,6 +161,120 @@ void tst_LayerPanelIntegration::test_layerPanel_kindPropsSmartObject()
     // setSelection(0) 触发 selectionChanged(0) -> syncKindProps(0) -> page 3 (SmartObject)
     stack.setSelection(0);
     QCOMPARE(kindProps->currentIndex(), 3);
+}
+
+// =====================================================================
+//  P0 leftover 2 (2026-09-21): Group tree rendering
+//   - Group layer renders as a top-level tree item with an "F" icon
+//   - Group's children render as QTreeWidgetItem children under the parent
+//   - Group items default to expanded (PS-style)
+//   - rebuildList() called by layerAdded signal must re-render correctly
+// =====================================================================
+
+void tst_LayerPanelIntegration::test_layerPanel_group_appears_with_children()
+{
+    LayerStack stack;
+    cv::Mat img(16, 16, CV_8UC3, cv::Scalar(40, 80, 120));
+    stack.addLayer(QStringLiteral("A"), img);   // idx 0
+    stack.addLayer(QStringLiteral("B"), img);   // idx 1
+    stack.addLayer(QStringLiteral("C"), img);   // idx 2
+    const int gIdx = stack.mergeIntoGroup({1, 2});
+    QVERIFY(gIdx >= 0);
+    QCOMPARE(stack.count(), 2);   // [A, Group(B,C)]
+
+    LayerPanel panel(&stack);
+    auto* tree = panel.findChild<QTreeWidget*>();
+    QVERIFY(tree != nullptr);
+    QCOMPARE(tree->topLevelItemCount(), 2);   // A + Group(B,C)
+
+    // Tree is zOrder desc: top-level 0 = Group(B,C) (newer), top-level 1 = A.
+    auto* topGroup = tree->topLevelItem(0);
+    auto* topA     = tree->topLevelItem(1);
+    QCOMPARE(topGroup->data(0, Qt::UserRole).toInt(), gIdx);
+    QCOMPARE(topA->data(0, Qt::UserRole).toInt(), 0);
+    QCOMPARE(topGroup->childCount(), 2);   // B + C as children
+    QCOMPARE(topGroup->isExpanded(), true);   // PS: default-expanded
+
+    // Verify children names are preserved in order.
+    QCOMPARE(topGroup->child(0)->text(0).contains(QStringLiteral("B")), true);
+    QCOMPARE(topGroup->child(1)->text(0).contains(QStringLiteral("C")), true);
+    QCOMPARE(topA->childCount(), 0);   // A is not a group, no children
+}
+
+void tst_LayerPanelIntegration::test_layerPanel_child_selection_signal()
+{
+    LayerStack stack;
+    cv::Mat img(16, 16, CV_8UC3, cv::Scalar(40, 80, 120));
+    stack.addLayer(QStringLiteral("A"), img);
+    stack.addLayer(QStringLiteral("B"), img);
+    stack.addLayer(QStringLiteral("C"), img);
+    const int gIdx = stack.mergeIntoGroup({1, 2});
+    QVERIFY(gIdx >= 0);
+    const LayerId gId = stack.idOf(gIdx);
+    QVERIFY(gId != 0);
+
+    LayerPanel panel(&stack);
+    auto* tree = panel.findChild<QTreeWidget*>();
+    QVERIFY(tree != nullptr);
+
+    QSignalSpy spyTop(&panel, &LayerPanel::selectionChangedFromPanel);
+    QSignalSpy spyChild(&panel, &LayerPanel::selectionChangedFromPanelChild);
+
+    // Activate top-level group item -> selectionChangedFromPanel(gIdx)
+    tree->setCurrentItem(tree->topLevelItem(0));
+    QCOMPARE(spyTop.count(), 1);
+    QCOMPARE(spyTop.at(0).at(0).toInt(), gIdx);
+    QCOMPARE(spyChild.count(), 0);   // top-level must NOT emit child signal
+
+    // Activate group child item 0 (B) -> selectionChangedFromPanelChild(gId, 0)
+    auto* childB = tree->topLevelItem(0)->child(0);
+    tree->setCurrentItem(childB);
+    QCOMPARE(spyChild.count(), 1);
+    QCOMPARE(spyChild.at(0).at(0).value<LayerId>(), gId);
+    QCOMPARE(spyChild.at(0).at(1).toInt(), 0);
+    QCOMPARE(spyTop.count(), 1);   // child must NOT emit int-index signal
+
+    // Activate group child item 1 (C) -> selectionChangedFromPanelChild(gId, 1)
+    tree->setCurrentItem(tree->topLevelItem(0)->child(1));
+    QCOMPARE(spyChild.count(), 2);
+    QCOMPARE(spyChild.at(1).at(0).value<LayerId>(), gId);
+    QCOMPARE(spyChild.at(1).at(1).toInt(), 1);
+}
+
+void tst_LayerPanelIntegration::test_layerPanel_group_survives_rebuild()
+{
+    LayerStack stack;
+    cv::Mat img(16, 16, CV_8UC3, cv::Scalar(40, 80, 120));
+    stack.addLayer(QStringLiteral("A"), img);
+    stack.addLayer(QStringLiteral("B"), img);
+    stack.addLayer(QStringLiteral("C"), img);
+    const int gIdx = stack.mergeIntoGroup({1, 2});
+    QVERIFY(gIdx >= 0);
+
+    LayerPanel panel(&stack);
+    auto* tree = panel.findChild<QTreeWidget*>();
+    QVERIFY(tree != nullptr);
+    QCOMPARE(tree->topLevelItem(0)->childCount(), 2);
+
+    // Trigger a rebuild by adding another layer (LayerStack::layerAdded ->
+    // LayerPanel::onLayerAdded -> rebuildList).
+    stack.addLayer(QStringLiteral("D"), img);
+    QCOMPARE(stack.count(), 3);   // [A, Group(B,C), D]
+    QCOMPARE(tree->topLevelItemCount(), 3);
+
+    // After rebuild the Group should still be present and expanded with 2 children.
+    // Find the top-level item that holds gIdx in UserRole (positions shifted
+    // because D was added; zOrder-desc puts D at top-level 0).
+    QTreeWidgetItem *groupItem = nullptr;
+    for (int i = 0; i < tree->topLevelItemCount(); ++i) {
+        if (tree->topLevelItem(i)->data(0, Qt::UserRole).toInt() == gIdx) {
+            groupItem = tree->topLevelItem(i);
+            break;
+        }
+    }
+    QVERIFY(groupItem != nullptr);
+    QCOMPARE(groupItem->childCount(), 2);
+    QCOMPARE(groupItem->isExpanded(), true);
 }
 
 QTEST_MAIN(tst_LayerPanelIntegration)
