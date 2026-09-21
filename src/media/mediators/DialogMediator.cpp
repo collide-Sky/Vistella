@@ -71,6 +71,11 @@ void DialogMediator::onShowDialogRequested(const QString& dialogId,
     }
     connect(dlg, &QObject::destroyed, this, &DialogMediator::onDialogDestroyed);
     m_dialogs.insert(dialogId, dlg);
+    // P0 leftover 5 (2026-09-21): notify subscribers (ImageWindow) so they
+    //   can wire per-dialog signals (applied -> AdjustmentPanel). The
+    //   signal fires before show() so subscribers can connect before the
+    //   user interacts.
+    emit dialogCreated(dialogId, dlg);
     dlg->show();
     LOG_DEBUG("[DialogMed] onShowDialogRequested created: id={}", dialogId.toStdString());
 }

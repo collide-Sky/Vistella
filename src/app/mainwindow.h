@@ -120,6 +120,10 @@ private slots:
 
     // P0-5 (2026-09-10): 滤镜菜单 4 action 弹 FilterDialog
     void onFilterMenuTriggered(filter::FilterKind kind);
+    // P0 leftover 5 (2026-09-21): Curves / Levels / B&W / ChannelMixer
+    //   standalone dialog trigger (routes through active ImageWindow's
+    //   DialogMediator).
+    void onAdjustDialogTriggered(const QString& dialogId);
     // P1.2.5+6+8 (2026-09-16): 启动 Liquify 交互式液化对话框
     void onLiquifyTriggered();
     // P1.3.4/5/6/7 (2026-09-17): 图层蒙版入口

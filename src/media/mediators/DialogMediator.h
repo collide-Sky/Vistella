@@ -60,6 +60,10 @@ signals:
     //   DialogFactory (F-K 阶段实装): 收到 showDialog 信号后创建 dialog 实例
     //   其他 Mediator (切换工作区时关掉无关 dialog)
     void dialogShowRequested(const QString& dialogId, const QVariantMap& args);
+    // P0 leftover 5 (2026-09-21): emitted after DialogFactory creates the
+    //   dialog (and registers it in m_dialogs). Subscribers (ImageWindow)
+    //   wire per-dialog signals here (applied -> AdjustmentPanel).
+    void dialogCreated(const QString& dialogId, QObject* dialog);
     // dialog 关闭/隐藏通知 (供订阅方清理 UI 状态)
     void dialogHidden(const QString& dialogId);
 

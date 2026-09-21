@@ -630,6 +630,27 @@ void MainWindow::buildActions()
     connect(aFilterColorAdjust, &QAction::triggered, this, [this]{
         onFilterMenuTriggered(filter::FilterKind::PhotoFilter);
     });
+    // P0 leftover 5 (2026-09-21): Curves / Levels / B&W / ChannelMixer
+    //   standalone dialogs. Each entry pops a non-modal dialog via the
+    //   active ImageWindow's DialogMediator. dialog->applied is routed to
+    //   AdjustmentPanel::setStandaloneParams inside ImageWindow.
+    mFilter->addSeparator();
+    QAction *aAdjustCurves = mFilter->addAction(tr("曲线 (Curves)..."));
+    connect(aAdjustCurves, &QAction::triggered, this, [this]{
+        onAdjustDialogTriggered("Curves");
+    });
+    QAction *aAdjustLevels = mFilter->addAction(tr("色阶 (Levels)..."));
+    connect(aAdjustLevels, &QAction::triggered, this, [this]{
+        onAdjustDialogTriggered("Levels");
+    });
+    QAction *aAdjustBnW = mFilter->addAction(tr("黑白 (B&W)..."));
+    connect(aAdjustBnW, &QAction::triggered, this, [this]{
+        onAdjustDialogTriggered("B&W");
+    });
+    QAction *aAdjustChannelMixer = mFilter->addAction(tr("通道混合器 (Channel Mixer)..."));
+    connect(aAdjustChannelMixer, &QAction::triggered, this, [this]{
+        onAdjustDialogTriggered("ChannelMixer");
+    });
     mFilter->addSeparator();
     // P1.2.5+6+8 (2026-09-16): Liquify 滤镜 (交互式液化: 6 工具 + 网格 + 冻结 + 撤销)
     QAction *aFilterLiquify = mFilter->addAction(tr("液化..."));
@@ -1760,6 +1781,24 @@ void MainWindow::onFilterMenuTriggered(filter::FilterKind kind)
 // P1.2.5+6+8 (2026-09-16): 启动 Liquify 交互式液化对话框
 //   - 拿当前图像 -> 开 LiquifyDialog (modal)
 //   - OK: 拿 resultImage, push LiquifyCommand (入撤销栈)
+// P0 leftover 5 (2026-09-21): 触发 Curves / Levels / B&W / ChannelMixer
+//   standalone dialog. Routes through the active ImageWindow's
+//   DialogMediator. DialogMediator (P0 leftover 4) self-wires to
+//   DialogFactory to instantiate + parent + show the dialog. Its
+//   applied() signal is connected to AdjustmentPanel::setStandaloneParams
+//   inside ImageWindow, so the args land in the AdjustmentPanel state
+//   and refresh the UI + apply.
+void MainWindow::onAdjustDialogTriggered(const QString& dialogId)
+{
+    auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!img) {
+        statusBar()->showMessage(tr("当前页面不可用 (需要图像窗口)"), 2000);
+        return;
+    }
+    img->showAdjustDialog(dialogId);
+    statusBar()->showMessage(tr("已打开 %1 对话框").arg(dialogId), 2000);
+}
+
 void MainWindow::onLiquifyTriggered()
 {
     auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()));

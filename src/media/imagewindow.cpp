@@ -15,6 +15,8 @@
 #include "imagewindow/ImageCanvas.h"
 // P0-3.2 (2026-09-08): 新组件 AdjustmentPanel (5 tab 色彩调整)
 #include "imagewindow/AdjustmentPanel.h"
+#include "mediators/DialogMediator.h"
+#include "dialogs/AdjustDialogBase.h"
 // F-G.3 (2026-09-09): RightPanelStack 3 dock (颜色/属性/图层) — 浮动在 imagewindow 右上角
 #include "docks/RightPanelStack.h"
 #include "docks/RightPanelDock.h"
@@ -332,6 +334,24 @@ ImageWindow::ImageWindow(QWidget *parent)
     // P0-3.2 (2026-09-08): PS 风格色彩调整 UI (5 tab Curves/Levels/HSL/B&W/ChannelMixer)
     m_adjustmentPanel = std::make_unique<AdjustmentPanel>(this);
     m_adjustmentPanel->setHost(this);
+
+    // P0 leftover 5 (2026-09-21): Per-window DialogMediator. Hosts the
+    //   standalone Curves / Levels / B&W / ChannelMixer dialogs. The
+    //   mediator self-wires to DialogFactory (P0 leftover 4); we add
+    //   the applied() -> AdjustmentPanel::setStandaloneParams routing
+    //   here so dialog results land in the per-window state.
+    m_dialogMed = std::make_unique<mediators::DialogMediator>(this);
+    connect(m_dialogMed.get(), &mediators::DialogMediator::dialogCreated,
+            this, [this](const QString& dialogId, QObject* dlgObj) {
+        auto* dlg = qobject_cast<dialogs::AdjustDialogBase*>(dlgObj);
+        if (!dlg) return;
+        connect(dlg, &dialogs::AdjustDialogBase::applied, this,
+                [this, dialogId](const QVariantMap& args) {
+            if (m_adjustmentPanel) {
+                m_adjustmentPanel->setStandaloneParams(dialogId, args);
+            }
+        });
+    });
 
     // F-G.3 Fix (2026-09-10): PS 风格右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
     //   撤销原 3 个分离 dock (RightPanelStack + adjDock + infoDock) + addDockWidget 抢画布位置
@@ -1585,6 +1605,23 @@ void ImageWindow::onLayerSelectionChanged(int /*index*/)
 // P0-5 (2026-09-10): 滤镜应用 (主菜单 4 action 接真)
 //   流程: FilterFactory::createFilter + strategy->apply + push FilterCommand
 //   FilterCommand 内部 ctor 时 apply 一次, undo/redo 复用
+// P0 leftover 5 (2026-09-21): pop a standalone adjust dialog via the
+//   per-window DialogMediator. dialogId is one of {"Curves","Levels",
+//   "B&W","ChannelMixer"}. DialogMediator (P0 leftover 4) self-wires
+//   to DialogFactory. dialog->applied is routed to
+//   AdjustmentPanel::setStandaloneParams via the dialogCreated signal
+//   connection set up in the ctor.
+void ImageWindow::showAdjustDialog(const QString& dialogId)
+{
+    if (!m_dialogMed) return;
+    if (m_current.empty()) {
+        LOG_WARN("[ImageWindow] showAdjustDialog: no image loaded, id={}",
+                 dialogId.toStdString());
+        return;
+    }
+    m_dialogMed->showDialog(dialogId);
+}
+
 void ImageWindow::applyFilter(filter::FilterKind kind)
 {
     if (m_current.empty()) {

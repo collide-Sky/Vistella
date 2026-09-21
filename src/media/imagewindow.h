@@ -59,7 +59,8 @@ class MosaicTool;
 class TextOverlayController;
 // F-G.3 Fix (2026-09-10): RightPanelDock forward decl (右侧 panel 1 widget 4+1 tab)
 namespace docks { class RightPanelDock; }
-namespace mediators { class WorkspaceMediator; }
+namespace mediators { class WorkspaceMediator; class DialogMediator; }
+namespace dialogs { class AdjustDialogBase; }
 // P1.3.4 (2026-09-17): ToolMediator full include needed - m_toolMed member
 //   requires complete type for std::unique_ptr<mediators::ToolMediator>.
 //   WorkspaceMediator stays forward decl (only used by attachWorkspaceMed).
@@ -229,6 +230,13 @@ public:
 
     // P0-3.2 (2026-09-08): AdjustmentPanel 公开访问 (供 MainWindow 等)
     class AdjustmentPanel* adjustmentPanel() { return m_adjustmentPanel.get(); }
+    // P0 leftover 5 (2026-09-21): Per-window DialogMediator access.
+    class mediators::DialogMediator* dialogMediator() { return m_dialogMed.get(); }
+    // P0 leftover 5 (2026-09-21): Convenience to pop a standalone adjust
+    //   dialog via the per-window DialogMediator. MainWindow menu
+    //   actions call this with dialogId in {"Curves","Levels","B&W",
+    //   "ChannelMixer"}.
+    void showAdjustDialog(const QString& dialogId);
     // P0-1.2 (2026-09-07): 公开 (MosaicTool 调, 触发 refreshAll)
     //   主流做法: 内部 clone m_current, 同步 base layer, invalidate cache, refreshAll
     void setCurrentImage(const cv::Mat &img);
@@ -407,6 +415,7 @@ private:
     // P0-3.2 (2026-09-08): PS 风格色彩调整 UI (5 tab Curves/Levels/HSL/B&W/ChannelMixer)
     //   跟 m_adjustment (旧 5 toggle + 10 slider) 共存, 各管各的
     std::unique_ptr<AdjustmentPanel>        m_adjustmentPanel;  // P0-3.2 (F-G.3: parent = m_rightDock->tabWidget(), 析构时 m_rightDock 负责 delete, unique_ptr 不持有所有权)
+    std::unique_ptr<mediators::DialogMediator> m_dialogMed;       // P0 leftover 5 (2026-09-21): per-window dialog dispatcher
 
     // F-G.3 Fix (2026-09-10): 右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
     //   替代原来 3 个分离 dock (RightPanelStack + adjDock + infoDock) + addDockWidget 抢画布位置
