@@ -48,8 +48,15 @@ private slots:
 
     // ---- Merge / Group / Ungroup ----
     void test_merge();
+    // P0 leftover 3 (2026-09-21): Group/Ungroup rewired to P1.5.2
+    //   LayerKind::Group + mergeIntoGroup / flattenGroup. The P0-1 link-flag
+    //   stubs are gone; these tests verify LayerCommand::makeMergeIntoGroup
+    //   / makeFlattenGroup roundtrip through undo/redo.
     void test_group();
     void test_ungroup();
+    void test_group_redo();
+    void test_ungroup_undo_preserves_children();
+    void test_group_then_ungroup_roundtrip();
 
     // ---- Phase 3 (2026-09-04): per-kind undo ----
     void test_setText();
@@ -325,44 +332,159 @@ void tst_LayerCommand::test_merge()
 
 void tst_LayerCommand::test_group()
 {
+    // P0 leftover 3 (2026-09-21): Group via makeMergeIntoGroup.
+    //   Factory applies mergeIntoGroup itself; push redo is a no-op.
+    //   undo -> flattenGroup -> back to 3 layers.
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("A"), makeMat());
+    stack.addLayer(QStringLiteral("B"), makeMat());
+    stack.addLayer(QStringLiteral("C"), makeMat());
+    QCOMPARE(stack.count(), 3);
+
+    QUndoStack undoStack;
+    undoStack.push(LayerCommand::makeMergeIntoGroup(&stack, {1, 2}));
+    // After push, factory merged: stack has 2 layers, last is Group.
+    QCOMPARE(stack.count(), 2);
+    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
+    const auto &kids = stack.groupChildrenOf(stack.idOf(stack.count() - 1));
+    QCOMPARE(int(kids.size()), 2);
+    QCOMPARE(kids[0]->name, QStringLiteral("B"));
+    QCOMPARE(kids[1]->name, QStringLiteral("C"));
+
+    // Undo -> flattenGroup restores 3 layers.
+    undoStack.undo();
+    QCOMPARE(stack.count(), 3);
+    for (int i = 0; i < stack.count(); ++i) {
+        QCOMPARE(int(stack.at(i)->kind), int(Layer::Bitmap));
+    }
+
+    // Redo -> no-op (factory already merged). Stack stays at 3.
+    // Caller would re-apply merge externally (UI flow) to get back to 2.
+    undoStack.redo();
+    QCOMPARE(stack.count(), 3);
+}
+
+void tst_LayerCommand::test_ungroup()
+{
+    // P0 leftover 3 (2026-09-21): Ungroup via makeFlattenGroup.
+    //   Factory applies flattenGroup + captures children; push redo no-op.
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("A"), makeMat());
+    stack.addLayer(QStringLiteral("B"), makeMat());
+    stack.addLayer(QStringLiteral("C"), makeMat());
+    const int gIdx = stack.mergeIntoGroup({1, 2});
+    QVERIFY(gIdx >= 0);
+    QCOMPARE(stack.count(), 2);
+
+    QUndoStack undoStack;
+    undoStack.push(LayerCommand::makeFlattenGroup(&stack, gIdx));
+    // After push, factory flattened: stack has 3 layers, all Bitmap.
+    QCOMPARE(stack.count(), 3);
+    for (int i = 0; i < stack.count(); ++i) {
+        QCOMPARE(int(stack.at(i)->kind), int(Layer::Bitmap));
+    }
+
+    // Undo -> reinsertGroup restores Group + children.
+    undoStack.undo();
+    QCOMPARE(stack.count(), 2);
+    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
+    const auto &restored = stack.groupChildrenOf(stack.idOf(stack.count() - 1));
+    QCOMPARE(int(restored.size()), 2);
+    QCOMPARE(restored[0]->name, QStringLiteral("B"));
+    QCOMPARE(restored[1]->name, QStringLiteral("C"));
+
+    // Redo -> no-op (factory already flattened). Stack stays at 2.
+    undoStack.redo();
+    QCOMPARE(stack.count(), 2);
+}
+
+void tst_LayerCommand::test_group_redo()
+{
+    // P0 leftover 3 (2026-09-21): mergeIntoGroup({0,1}) packs A,B into
+    //   Group at end (C stays at idx 0). Undo flattens -> A,B reinserted
+    //   after C (PS-style: flatten restores pre-merge layout).
     LayerStack stack;
     stack.addLayer(QStringLiteral("A"), makeMat());
     stack.addLayer(QStringLiteral("B"), makeMat());
     stack.addLayer(QStringLiteral("C"), makeMat());
 
     QUndoStack undoStack;
-    int gid = stack.createGroup(QStringLiteral("Group1"));
-    undoStack.push(new LayerCommand(&stack, 0, 2, gid));
-    // groupLayers(0, 2) 标记 A/B/C 为 link
-    QVERIFY(stack.at(0)->isLinked);
-    QVERIFY(stack.at(1)->isLinked);
-    QVERIFY(stack.at(2)->isLinked);
+    undoStack.push(LayerCommand::makeMergeIntoGroup(&stack, {0, 1}));
+    QCOMPARE(stack.count(), 2);
+    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
 
     undoStack.undo();
-    // 恢复: 全部不 link
-    QVERIFY(!stack.at(0)->isLinked);
-    QVERIFY(!stack.at(1)->isLinked);
-    QVERIFY(!stack.at(2)->isLinked);
+    QCOMPARE(stack.count(), 3);
+    for (int i = 0; i < stack.count(); ++i) {
+        QCOMPARE(int(stack.at(i)->kind), int(Layer::Bitmap));
+    }
+    // After flatten: [C, A, B] — flattenGroup reinserts children at the
+    // Group's former m_layers position (idx 1), pushing C to idx 0.
+    QCOMPARE(stack.at(0)->name, QStringLiteral("C"));
+    QCOMPARE(stack.at(1)->name, QStringLiteral("A"));
+    QCOMPARE(stack.at(2)->name, QStringLiteral("B"));
 }
 
-void tst_LayerCommand::test_ungroup()
+void tst_LayerCommand::test_ungroup_undo_preserves_children()
 {
+    // P0 leftover 3 (2026-09-21): After flatten + push, undo restores the
+    //   Group AND the children with their cv::Mat data intact.
+    LayerStack stack;
+    cv::Mat red(8, 8, CV_8UC3, cv::Scalar(0, 0, 255));
+    cv::Mat blue(8, 8, CV_8UC3, cv::Scalar(255, 0, 0));
+    stack.addLayer(QStringLiteral("Base"), makeMat());
+    stack.addLayer(QStringLiteral("Red"), red.clone());
+    stack.addLayer(QStringLiteral("Blue"), blue.clone());
+    const int gIdx = stack.mergeIntoGroup({1, 2});
+    QVERIFY(gIdx >= 0);
+
+    QUndoStack undoStack;
+    undoStack.push(LayerCommand::makeFlattenGroup(&stack, gIdx));
+    QCOMPARE(stack.count(), 3);
+
+    undoStack.undo();
+    QCOMPARE(stack.count(), 2);
+    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
+    const auto &restored = stack.groupChildrenOf(stack.idOf(stack.count() - 1));
+    QCOMPARE(int(restored.size()), 2);
+    QCOMPARE(restored[0]->name, QStringLiteral("Red"));
+    QCOMPARE(restored[1]->name, QStringLiteral("Blue"));
+    // cv::Mat data preserved.
+    QCOMPARE(restored[0]->image.rows, 8);
+    QCOMPARE(restored[0]->image.cols, 8);
+    QCOMPARE(int(restored[0]->image.at<cv::Vec3b>(4, 4)[2]), 255);  // BGR red
+    QCOMPARE(int(restored[1]->image.at<cv::Vec3b>(4, 4)[0]), 255);  // BGR blue
+}
+
+void tst_LayerCommand::test_group_then_ungroup_roundtrip()
+{
+    // P0 leftover 3 (2026-09-21): Full cycle.
     LayerStack stack;
     stack.addLayer(QStringLiteral("A"), makeMat());
     stack.addLayer(QStringLiteral("B"), makeMat());
-    stack.setLinked(0, true);
-    stack.setLinked(1, true);
+    stack.addLayer(QStringLiteral("C"), makeMat());
+    stack.addLayer(QStringLiteral("D"), makeMat());
+    QCOMPARE(stack.count(), 4);
 
     QUndoStack undoStack;
-    undoStack.push(new LayerCommand(&stack, LayerCommand::Ungroup));
-    // Ungroup: 全部不 link
-    QVERIFY(!stack.at(0)->isLinked);
-    QVERIFY(!stack.at(1)->isLinked);
+    undoStack.push(LayerCommand::makeMergeIntoGroup(&stack, {1, 2}));
+    QCOMPARE(stack.count(), 3);
+    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
+    const int gIdx = stack.count() - 1;
+
+    undoStack.push(LayerCommand::makeFlattenGroup(&stack, gIdx));
+    QCOMPARE(stack.count(), 4);
+
+    // Walk back.
+    undoStack.undo();
+    QCOMPARE(stack.count(), 3);
+    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
 
     undoStack.undo();
-    // 恢复: 全部 link
-    QVERIFY(stack.at(0)->isLinked);
-    QVERIFY(stack.at(1)->isLinked);
+    QCOMPARE(stack.count(), 4);
+    for (int i = 0; i < stack.count(); ++i) {
+        QCOMPARE(int(stack.at(i)->kind), int(Layer::Bitmap));
+    }
 }
 
 // =====================================================================

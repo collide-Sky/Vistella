@@ -91,26 +91,45 @@ LayerCommand::LayerCommand(LayerStack *stack, int mergeIndex, QUndoCommand *pare
     }
 }
 
-LayerCommand::LayerCommand(LayerStack *stack, int first, int last, int groupId, QUndoCommand *parent)
-    : QUndoCommand(parent), m_stack(stack), m_op(Group), m_index(first), m_index2(last), m_intVal(groupId)
+// P0 leftover 3 (2026-09-21): Phase 1 simplified Group/Ungroup constructors
+//   (link flag based, lines 94-114 in the original file) removed. The new
+//   factories below integrate with P1.5.2 LayerKind::Group + m_groups.
+//
+//   Pattern matches existing SmartFilter factories: factory performs the
+//   initial state change itself; redo() is a no-op; undo() reverses via
+//   flattenGroup / reinsertGroup. Caller does not need to call mergeIntoGroup
+//   or flattenGroup separately.
+//
+//   makeMergeIntoGroup: factory applies mergeIntoGroup, captures groupIdx
+//     and the indices used. undo() flattens the resulting Group.
+//
+//   makeFlattenGroup: factory applies flattenGroup, captures groupIdx +
+//     children snapshot + atIndex. undo() restores via reinsertGroup.
+
+LayerCommand* LayerCommand::makeMergeIntoGroup(LayerStack *stack,
+                                                QList<int> indices)
 {
-    setText(QStringLiteral("Group Layers"));
-    if (!m_stack) return;
-    for (int i = first; i <= last; ++i) {
-        auto l = m_stack->at(i);
-        m_groupBefore << (l && l->isLinked);
-    }
+    auto *cmd = new LayerCommand(stack, Group, -1);
+    cmd->setText(QStringLiteral("Group Layers"));
+    cmd->m_groupIndices = indices;
+    // Apply merge now so the caller doesn't have to.
+    cmd->m_index = stack ? stack->mergeIntoGroup(indices) : -1;
+    return cmd;
 }
 
-LayerCommand::LayerCommand(LayerStack *stack, Op op, QUndoCommand *parent)
-    : QUndoCommand(parent), m_stack(stack), m_op(op)
+LayerCommand* LayerCommand::makeFlattenGroup(LayerStack *stack, int groupIdx)
 {
-    if (op == Ungroup) setText(QStringLiteral("Ungroup"));
-    if (!m_stack) return;
-    for (int i = 0; i < m_stack->count(); ++i) {
-        auto l = m_stack->at(i);
-        m_ungroupBefore << (l && l->isLinked);
+    auto *cmd = new LayerCommand(stack, Ungroup, -1);
+    cmd->setText(QStringLiteral("Ungroup"));
+    cmd->m_index = groupIdx;
+    cmd->m_flattenAtIndex = groupIdx;
+    // Apply flatten now + capture children snapshot for undo.
+    if (stack && groupIdx >= 0 && groupIdx < stack->count()) {
+        const LayerId gid = stack->idOf(groupIdx);
+        cmd->m_flattenChildren = stack->groupChildrenOf(gid);  // deep copy
+        stack->flattenGroup(groupIdx);
     }
+    return cmd;
 }
 
 // 阶段 1 W4.3 Phase 3 (2026-09-04): 3 参 (stack, op, index) 专用构造器
@@ -414,20 +433,30 @@ void LayerCommand::undo()
         break;
     }
     case Group: {
-        // 恢复 link 状态
-        for (int i = 0; i < m_groupBefore.size(); ++i) {
-            if (auto l = m_stack->at(m_index + i)) {
-                l->isLinked = m_groupBefore[i];
+        // P0 leftover 3 (2026-09-21): undo mergeIntoGroup = flattenGroup.
+        if (m_stack && m_index >= 0 && m_index < m_stack->count()) {
+            if (auto l = m_stack->at(m_index); l && l->kind == Layer::Group) {
+                m_stack->flattenGroup(m_index);
             }
         }
         break;
     }
     case Ungroup: {
-        // 恢复 link 状态
-        for (int i = 0; i < m_ungroupBefore.size(); ++i) {
-            if (auto l = m_stack->at(i)) {
-                l->isLinked = m_ungroupBefore[i];
+        // P0 leftover 3 (2026-09-21): undo flattenGroup = remove the
+        //   N children currently in m_layers at [atIndex, atIndex+N) and
+        //   reinsertGroup a fresh Group container there. flattenGroup
+        //   left the children in m_layers; we must remove them before
+        //   reinsertGroup (which inserts rather than replaces) so the
+        //   final stack matches pre-flatten state.
+        if (m_stack && !m_flattenChildren.empty() && m_flattenAtIndex >= 0
+            && m_flattenAtIndex <= m_stack->count()) {
+            const int n = static_cast<int>(m_flattenChildren.size());
+            for (int i = 0; i < n; ++i) {
+                if (m_flattenAtIndex >= m_stack->count()) break;
+                m_stack->removeLayer(m_flattenAtIndex);
             }
+            m_stack->reinsertGroup(m_flattenAtIndex, std::move(m_flattenChildren));
+            m_flattenChildren.clear();   // moved-from guard for repeat undo
         }
         break;
     }
@@ -651,14 +680,13 @@ void LayerCommand::redo()
         break;
     }
     case Group: {
-        m_stack->groupLayers(m_index, m_index2, m_intVal);
+        // P0 leftover 3 (2026-09-21): redo is a no-op because the factory
+        //   already applied mergeIntoGroup. Matches SmartFilter pattern.
         break;
     }
     case Ungroup: {
-        // 简化: 全部 unlink
-        for (int i = 0; i < m_stack->count(); ++i) {
-            if (auto l = m_stack->at(i)) l->isLinked = false;
-        }
+        // P0 leftover 3 (2026-09-21): redo is a no-op because the factory
+        //   already applied flattenGroup. Matches SmartFilter pattern.
         break;
     }
     case SetText:

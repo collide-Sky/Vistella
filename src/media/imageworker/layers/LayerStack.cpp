@@ -349,6 +349,27 @@ const std::vector<LayerPtr>& LayerStack::groupChildrenOf(LayerId groupId) const
     return it.value();
 }
 
+// P0 leftover 3 (2026-09-21): inverse of flattenGroup, used by LayerCommand
+//   to undo a flatten. Builds a fresh Group layer, inserts it at atIndex,
+//   and registers the cloned children under the new Group's LayerId.
+//   Caller is responsible for capturing the children snapshot before
+//   calling flattenGroup (typically via std::move on groupChildrenOf).
+int LayerStack::reinsertGroup(int atIndex, std::vector<LayerPtr> children)
+{
+    if (atIndex < 0 || atIndex > m_layers.size()) return -1;
+    Layer grp;
+    grp.kind = Layer::Group;
+    grp.name = QStringLiteral("Group 1");
+    // Insert Group at atIndex (push children forward).
+    m_layers.insert(atIndex, std::make_shared<Layer>(grp));
+    const int newGroupIdx = atIndex;
+    // Wire children into m_groups keyed by new Group's LayerId.
+    m_groups.insert(idOf(newGroupIdx), std::move(children));
+    emit layerAdded(newGroupIdx);
+    emit countChanged();
+    return newGroupIdx;
+}
+
 bool LayerStack::removeLayer(int index)
 {
     if (index < 0 || index >= m_layers.size()) return false;

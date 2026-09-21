@@ -89,10 +89,23 @@ public:
     LayerCommand(LayerStack *stack, Op op, int index, const QString &strVal, QUndoCommand *parent = nullptr);  // rename
     // Merge: mergeDown index, undo 拆分 (Phase 1 简化: 用 m_beforeMerge / m_afterMerge 存两个 layer)
     LayerCommand(LayerStack *stack, int mergeIndex, QUndoCommand *parent = nullptr);
-    // Group: [first, last] 编组 (Phase 1 简化: link 标记)
-    LayerCommand(LayerStack *stack, int first, int last, int groupId, QUndoCommand *parent = nullptr);
-    // Ungroup: 全 unlink
-    LayerCommand(LayerStack *stack, Op op, QUndoCommand *parent = nullptr);
+    // P0 leftover 3 (2026-09-21): Phase 1 simplified Group/Ungroup (link flag)
+    //   is REMOVED. Use makeMergeIntoGroup / makeFlattenGroup factories below
+    //   which integrate with P1.5.2 LayerKind::Group + m_groups storage.
+    //
+    //   Pattern matches existing SmartFilter factories: factory performs
+    //   the initial state change itself. redo() is a no-op; undo()
+    //   reverses via flattenGroup / reinsertGroup.
+    //
+    // makeMergeIntoGroup: packs the given adjacent indices into a new
+    //   Group container via LayerStack::mergeIntoGroup. Caller passes only
+    //   the indices; no need to call mergeIntoGroup separately.
+    static LayerCommand* makeMergeIntoGroup(LayerStack *stack,
+                                            QList<int> indices);
+    // makeFlattenGroup: dissolves the Group at groupIdx via
+    //   LayerStack::flattenGroup (factory captures a children snapshot
+    //   internally for undo).
+    static LayerCommand* makeFlattenGroup(LayerStack *stack, int groupIdx);
     // 阶段 1 W4.3 Phase 3 (2026-09-04): per-kind 编辑专用
     //   3 参 (stack, op, index) 避免跟 (stack, index, direction) 歧义
     explicit LayerCommand(LayerStack *stack, Op op, int index);
@@ -202,6 +215,13 @@ private:
     //   AppendSmartFilter / RemoveSmartFilter reuse m_layer (full clone).
     //   MoveSmartFilter stores old/new slot in m_intVal (current) / m_index2 (old).
     int         m_oldSlot = -1;      // MoveSmartFilter: slot before move
+    // P0 leftover 3 (2026-09-21): Group/Ungroup undo state. The Group /
+    //   Ungroup Op enum values are kept (for forward compatibility with
+    //   any UI strings already constructed), but the storage below drives
+    //   P1.5.2 LayerKind::Group redo/undo rather than the P0-1 link flag.
+    QList<int>             m_groupIndices;    // makeMergeIntoGroup: indices passed to mergeIntoGroup
+    std::vector<LayerPtr>  m_flattenChildren; // makeFlattenGroup:  captured children snapshot
+    int                    m_flattenAtIndex = -1;  // makeFlattenGroup: index that held the Group pre-flatten
 };
 
 } // namespace layers

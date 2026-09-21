@@ -92,6 +92,14 @@ public:
     //   m_layers mutation (moveUp / removeLayer / duplicateLayer / flattenGroup).
     const std::vector<LayerPtr>& groupChildrenOf(LayerId groupId) const;
 
+    // P0 leftover 3 (2026-09-21): inverse of flattenGroup. Used by
+    //   LayerCommand::makeFlattenGroup's undo path to restore a Group
+    //   from a captured children snapshot without depending on the now-
+    //   shifted m_layers indices. Replaces the Group at `atIndex` in
+    //   m_layers with a new Group container holding the supplied cloned
+    //   children. Returns new Group index or -1 on failure.
+    int reinsertGroup(int atIndex, std::vector<LayerPtr> children);
+
     bool removeLayer(int index);
     bool duplicateLayer(int index);
     bool moveUp(int index);
