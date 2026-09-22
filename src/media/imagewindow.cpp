@@ -1021,23 +1021,59 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                 tr("已合并所有可见图层到 base (仅 base 保留)"), 3000);
         });
 
-        // groupRequested: complex operation (LayerStack has no group API),
-        //   left as TBD.
-        // P1.4.6 stage: emit a status bar hint, do not ship a half-baked impl.
+        // P0 leftover review (2026-09-21): wire group/ungroup tool buttons
+        //   to the P1.5.2 LayerCommand factories (mergeIntoGroup /
+        //   flattenGroup). Previously emitted "TBD" statusBar hint.
+        // groupRequested: caller passes [first, last] range (toolbar emits
+        //   full stack [0, count-1]). Build the indices list and push
+        //   makeMergeIntoGroup onto the undo stack.
         connect(rawPanel, &layers::LayerPanel::groupRequested,
                 this, [this](int first, int last) {
             if (!m_layerStack) return;
+            if (last < first || last >= m_layerStack->count()
+                || first < 0 || m_layerStack->count() < 2) {
+                statusBar()->showMessage(
+                    tr("编组失败: 至少需要 2 个图层"), 3000);
+                return;
+            }
+            QList<int> indices;
+            for (int i = first; i <= last; ++i) indices << i;
+            if (m_undoStack) {
+                m_undoStack->push(layers::LayerCommand::makeMergeIntoGroup(
+                    m_layerStack.get(), indices));
+            } else {
+                m_layerStack->mergeIntoGroup(indices);
+            }
             statusBar()->showMessage(
-                tr("编组 [TBD %1..%2]: 已记入待办, 见 P1.5+ 编组重做")
-                    .arg(first).arg(last), 5000);
+                tr("已编组 [%1..%2] (入撤销栈)").arg(first).arg(last), 3000);
         });
 
-        // ungroupRequested: same as above, TBD.
+        // ungroupRequested: locate the current selection's Group and
+        //   flatten it. If selection is not a Group, status-bar hint.
         connect(rawPanel, &layers::LayerPanel::ungroupRequested,
                 this, [this]() {
             if (!m_layerStack) return;
+            const int sel = m_layerStack->selection();
+            if (sel < 0 || sel >= m_layerStack->count()) {
+                statusBar()->showMessage(
+                    tr("解组失败: 请先选中一个组"), 3000);
+                return;
+            }
+            auto l = m_layerStack->at(sel);
+            if (!l || l->kind != layers::Layer::Group) {
+                statusBar()->showMessage(
+                    tr("解组失败: 当前选中不是组 (kind=%1)")
+                        .arg(int(l ? l->kind : -1)), 3000);
+                return;
+            }
+            if (m_undoStack) {
+                m_undoStack->push(layers::LayerCommand::makeFlattenGroup(
+                    m_layerStack.get(), sel));
+            } else {
+                m_layerStack->flattenGroup(sel);
+            }
             statusBar()->showMessage(
-                tr("解组 [TBD]: 已记入待办, 见 P1.5+ 编组重做"), 5000);
+                tr("已解组 (入撤销栈)"), 3000);
         });
 
         // ---- Layer property -------------------------------------------
