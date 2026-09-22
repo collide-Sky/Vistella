@@ -79,17 +79,16 @@ void MosaicTool::setSize(int radius) {
     //      防止 -1 / 0 / 65535 这类野值导致 setRect 出负数 / 0 大小
     //   3) m_host QPointer 检查: 之前 raw pointer 可能在 ImageWindow 析构后野指针,
     //      现在 QPointer 自动置 null, 这里早 return
-    //   4) brushCursor() != null 检查
-    //   5) bc->scene() 野指针 guard: m_canvas 销毁后 scene 销毁, item 野指针但非 null
-    //      (QGraphicsItem::~QGraphicsItem 后指针不会被自动置 null, Qt 内部 d-pointer 设计)
+    //   4) brushCursor() != null 检查 (P2.5: 已升级为 QPointer<QGraphicsEllipseItem>,
+    //      ImageCanvas scene 析构时 item 被 delete, QPointer 自动 null, 这里 bc.isNull()
+    //      就是完整检查, 不再需要二次 bc->scene() 这种本身不安全的 dereference)
     //   不引入 QObject connect/disconnect 路径避免递归, 全部 early return
     m_size = radius;
     if (m_size < 1)   m_size = 1;
     if (m_size > 200) m_size = 200;
     if (m_host.isNull()) return;                       // 3) ImageWindow 已销毁
-    QGraphicsEllipseItem* bc = m_host->brushCursor();
-    if (!bc) return;                                   // 4) brush cursor 字段 null
-    if (!bc->scene()) return;                          // 5) item 已被 scene 析构 (野指针)
+    QGraphicsEllipseItem* bc = m_host->brushCursor(); // returns QPointer::data()
+    if (!bc) return;                                   // 4) brush cursor null 或 scene 已析构
     const int r = m_size / 2;
     bc->setRect(-r, -r, m_size, m_size);
 }

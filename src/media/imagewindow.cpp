@@ -462,6 +462,14 @@ ImageWindow::ImageWindow(QWidget *parent)
 
 ImageWindow::~ImageWindow()
 {
+    // P2.5 bug fix (2026-09-22): reset m_brushCursor FIRST, before delete ui.
+    //   delete ui destroys m_canvas (a child widget), whose scene owns the
+    //   ellipse item and deletes it in ~QGraphicsScene. If m_brushCursor is
+    //   not reset before that, any subsequent access (especially
+    //   MosaicTool::setSize calling bc->scene()) hits a use-after-free
+    //   SEGFAULT. Reset here while dtor body is still valid context.
+    m_brushCursor = nullptr;
+
     // 关键: 先 clear undoStack, 触发 ~ImageEditCommand
     // 这样 QPointer<ImageWindow> m_w 在 ImageWindow 还没半析构时变 null
     // 避免 close 时 "class destructor may have already run" ASSERT

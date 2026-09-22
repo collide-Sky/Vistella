@@ -253,6 +253,13 @@ public:
     //   brushCursor(): brush cursor 控件 (P0-1.2 这一刻**不动**控件位置)
     //   renderToViewPublic(): 涂抹 in-place 修改后触发重绘
     class TextOverlayController* textOverlay() { return m_textCtrl.get(); }
+    // P2.5 (2026-09-22): returns raw pointer. Safe to use only when checked
+    //   immediately before dereferencing (see MosaicTool::setSize pattern).
+    //   The pointer becomes dangling when ImageCanvas->scene() deletes the
+    //   ellipse item, but ~ImageWindow resets m_brushCursor to nullptr
+    //   BEFORE delete ui (see MosaicTool::setSize comment for the bug
+    //   history; originally we tried QPointer<QObject> + reinterpret_cast but
+    //   the multi-level inheritance defeated Qt 6.11's QPointer<T>).
     QGraphicsEllipseItem* brushCursor() { return m_brushCursor; }
     void renderToViewPublic() { renderToView(); }
 
@@ -497,7 +504,19 @@ private:
     // ===== 交互式马赛克 (P0-1.2 2026-09-07: 状态迁到 MosaicTool) =====
     //   涂抹模式开关 / 涂抹开始时的 snapshot / 4 种类型 enum 都搬到 m_mosaicTool
     //   这里只保留 m_brushCursor 控件 (P0-1.2 这一轮**不动** brush cursor 控件位置)
-    QGraphicsEllipseItem *m_brushCursor = nullptr;  // 笔刷圆圈光标
+    // P2.5 bug fix (2026-09-22): raw pointer with explicit reset in ~ImageWindow
+    //   before delete ui. Original raw pointer caused SEGFAULT in MosaicTool::setSize
+    //   because ImageCanvas->scene() destructor deletes the ellipse item but
+    //   m_brushCursor field doesn't reset — subsequent access (especially
+    //   bc->scene() dereference) was a use-after-free.
+    //
+    //   Qt 6.11's QPointer<T> doesn't work for multi-level inheritance like
+    //   QObject->QGraphicsItem->QGraphicsEllipseItem (static_cast<T*>(QObject*)
+    //   fails across the QGraphicsItem boundary). So we explicitly reset
+    //   m_brushCursor = nullptr at the START of ~ImageWindow, before delete ui
+    //   destroys m_canvas (and its scene). See imagewindow.cpp ~ImageWindow
+    //   for the reset.
+    QGraphicsEllipseItem *m_brushCursor = nullptr;
 
     friend class ImageEditCommand;
     friend class TextItemCommand;
