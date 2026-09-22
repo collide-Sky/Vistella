@@ -238,7 +238,19 @@ void ImageEditCommand::redo()
 {
     if (m_w.isNull()) return;
     if (m_useImage) {
-        m_w->replaceCurrentImage(m_imgAfter);
+        // P2.5 bug fix (2026-09-22): redo is a no-op for the m_useImage
+        //   path. Callers (MosaicTool/CloneTool/PatchTool/Crop/Brush/
+        //   RedEyeTool/MainWindow::resizeImage) have already applied the
+        //   "after" image (either via setCurrentImage or in-place m_current
+        //   mutation) before pushing this command. Without the no-op, push
+        //   would re-apply m_imgAfter (double-apply: extra base-layer clone
+        //   + invalidate + renderToView). Matches Phase 3/4/5 simplification
+        //   pattern used by LayerCommand::Visible/Locked/Linked/Blend/Rename
+        //   /Move/Group/Ungroup/Opacity/SetAdjustmentLut (P2.5 commits
+        //   1d82e3c, 77ab161, 7810b97, 730803f).
+        //
+        //   Trade-off: redo after undo is a no-op, so user cannot redo to
+        //   restore m_imgAfter. Same trade-off documented for those ops.
     } else {
         m_w->applyParams(m_after, /*repaint*/true);
     }
