@@ -825,9 +825,9 @@ void AdjustmentPanel::setStandaloneParams(const QString& dialogId, const QVarian
     } else if (dialogId == "ChannelMixer") {
         applyChannelMixerFromArgs(args);
     } else if (dialogId == "HSL") {
-        // HSL standalone dialog not yet implemented (P0 only had inline).
-        // Treat as no-op for now; user must use inline HSL tab.
-        return;
+        // P0 leftover review (2026-09-21): HslAdjustDialog rewritten to use
+        //   8 hue + 8 sat + 1 lightness (PS-compatible). Args land here.
+        applyHslFromArgs(args);
     } else {
         LOG_WARN("[AdjustmentPanel] setStandaloneParams unknown dialogId: {}",
                  dialogId.toStdString());
@@ -923,6 +923,33 @@ void AdjustmentPanel::applyChannelMixerFromArgs(const QVariantMap& args)
     }
     // Monochrome checkbox not in inline tab yet (deferred).
     m_tabWidget->setCurrentIndex(kTabChannelMixer);
+    emit paramChanged();
+    applyCurrentTab();
+}
+
+// P0 leftover review (2026-09-21): HSL standalone dialog args land
+//   here. 8 hue + 8 sat + 1 lightness (PS-compatible band layout:
+//   master + R, Y, G, C, B, M).
+void AdjustmentPanel::applyHslFromArgs(const QVariantMap& args)
+{
+    // m_hsl.hueShifts / m_hsl.satShifts default to 8 zeros in ctor.
+    if (m_hsl.hueShifts.size() != 8) m_hsl.hueShifts.resize(8);
+    if (m_hsl.satShifts.size() != 8) m_hsl.satShifts.resize(8);
+    const QVariantList hueList = args.value("hueShifts").toList();
+    const QVariantList satList = args.value("satShifts").toList();
+    for (int i = 0; i < 8; ++i) {
+        if (i < hueList.size()) m_hsl.hueShifts[i] = hueList[i].toInt();
+        if (i < m_hslHueSliders.size() && m_hslHueSliders[i]) {
+            m_hslHueSliders[i]->setValue(m_hsl.hueShifts[i]);
+        }
+        if (i < satList.size()) m_hsl.satShifts[i] = satList[i].toInt();
+        if (i < m_hslSatSliders.size() && m_hslSatSliders[i]) {
+            m_hslSatSliders[i]->setValue(m_hsl.satShifts[i]);
+        }
+    }
+    m_hsl.lightness = args.value("lightness", 0).toInt();
+    if (m_hslLightness) m_hslLightness->setValue(m_hsl.lightness);
+    m_tabWidget->setCurrentIndex(kTabHsl);
     emit paramChanged();
     applyCurrentTab();
 }

@@ -62,40 +62,57 @@ void tst_F_K_AdjustDialog::base_applyDisabledByDefault()
 
 void tst_F_K_AdjustDialog::hsl_sliderValueChangesArgs()
 {
-    // Cast to AdjustDialogBase (no HslAdjustDialog-specific access)
+    // P0 leftover review (2026-09-21): HSL uses PS-compatible 8-band
+    //   layout (master + 7 hues). Each slider change emits preview()
+    //   with the full hueShifts/satShifts/lightness payload.
     AdjustDialogBase* dlg = DialogFactory::create("HSL", QVariantMap());
     QVERIFY(dlg != nullptr);
     QSignalSpy previewSpy(dlg, &AdjustDialogBase::preview);
     QList<QSlider*> sliders = dlg->findChildren<QSlider*>();
-    QVERIFY(!sliders.isEmpty());
-    QSlider* hueSlider = sliders.first();
-    // 改 hue slider: 0 -> 30
-    hueSlider->setValue(30);
-    // preview 应 emit
+    // 8 hue + 8 sat + 1 lightness = 17 sliders.
+    QCOMPARE(sliders.size(), 17);   // 8 hue + 8 sat + 1 light
+    // Modify the first hue slider (master band).
+    sliders.first()->setValue(30);
     QVERIFY(previewSpy.count() >= 1);
-    // currentArgs 含 hue
     const QVariantMap args = dlg->currentArgs();
-    QCOMPARE(args.value("hue").toInt(), 30);
+    const QVariantList hueList = args.value("hueShifts").toList();
+    QCOMPARE(hueList.size(), 8);
+    QCOMPARE(hueList.first().toInt(), 30);
+    QCOMPARE(args.value("lightness").toInt(), 0);
     delete dlg;
 }
 
 void tst_F_K_AdjustDialog::hsl_applyEmitsSignal()
 {
-    AdjustDialogBase* dlg = DialogFactory::create("HSL", QVariantMap({{"hue", 0}}));
+    // P0 leftover review (2026-09-21): 8-band args round-trip through Apply.
+    QVariantList initialHues;
+    for (int i = 0; i < 8; ++i) initialHues << 0;
+    QVariantList initialSats;
+    for (int i = 0; i < 8; ++i) initialSats << 0;
+    AdjustDialogBase* dlg = DialogFactory::create("HSL",
+        QVariantMap{{"hueShifts", initialHues},
+                    {"satShifts", initialSats},
+                    {"lightness", 0}});
     QVERIFY(dlg != nullptr);
     QSignalSpy appliedSpy(dlg, &AdjustDialogBase::applied);
+    // Modify band 2 (Yellows) sat: -25
     QList<QSlider*> sliders = dlg->findChildren<QSlider*>();
     QVERIFY(!sliders.isEmpty());
-    QSlider* hue = sliders.first();
-    hue->setValue(45);
-    // 点 Apply
+    // Layout per setupUi loop: hue row, sat row interleaved.
+    //   sliders[0..15] = hue0..hue7, sat0..sat7 interleaved as
+    //   hue[i] = sliders[2*i], sat[i] = sliders[2*i+1].
+    //   sliders[16] = light.
+    QSlider* yellowsSat = sliders[2 * 2 + 1];   // sat band 2 (Yellows)
+    yellowsSat->setValue(-25);
     QDialogButtonBox* box = dlg->findChild<QDialogButtonBox*>();
     QVERIFY(box != nullptr);
     box->button(QDialogButtonBox::Apply)->click();
     QCOMPARE(appliedSpy.count(), 1);
-    // args 含 hue=45
     const QVariantMap args = appliedSpy.takeFirst().at(0).toMap();
-    QCOMPARE(args.value("hue").toInt(), 45);
+    const QVariantList satList = args.value("satShifts").toList();
+    QCOMPARE(satList.size(), 8);
+    QCOMPARE(satList[2].toInt(), -25);   // band 2 sat changed
+    QCOMPARE(satList[0].toInt(), 0);     // band 0 sat untouched
     delete dlg;
 }
 

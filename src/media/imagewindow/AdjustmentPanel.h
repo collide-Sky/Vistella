@@ -186,6 +186,9 @@ private:
     void applyLevelsFromArgs(const QVariantMap& args);
     void applyBnWFromArgs(const QVariantMap& args);
     void applyChannelMixerFromArgs(const QVariantMap& args);
+    // P0 leftover review (2026-09-21): HSL standalone dialog args land
+    //   here (QList<int> hueShifts (8) + QList<int> satShifts (8) + int lightness).
+    void applyHslFromArgs(const QVariantMap& args);
 
     // 当前 tab 的 LUT 构建
     cv::Mat buildCurrentTabLut() const;
