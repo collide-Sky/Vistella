@@ -324,6 +324,20 @@ public:
     //   避免重复 delete.
     layers::LayerPanel* layerPanel() const { return m_layerPanel.get(); }
 
+    // P2.5 (2026-09-22): selected layer index from LayerPanel's QTreeWidget
+    //   current row (or -1 if none selected). Used by MainWindow layer menu
+    //   actions (Duplicate / Delete / MoveUp / MoveDown / Merge Down) to know
+    //   which layer the action targets.
+    int selectedLayerIndex() const;
+
+    // P2.5 (2026-09-22): layer menu operation enum + helper.
+    //   Encapsulates the layerStack + undoStack + invalidateCurrentCache
+    //   + renderToView sequence that MainWindow menu actions need.
+    //   Returns true if operation was applied, false if no selection / no stack.
+    enum class LayerOp { NewBitmap, Duplicate, Remove, MoveUp, MoveDown,
+                         MergeDown, FlattenVisible };
+    bool applyLayerOp(LayerOp op);
+
     // P0-2 (2026-09-08): EngineContext 公开访问 (供 ImageAdjustmentPanel 等组件用)
     //   raw pointer - lifetime 由 ImageWindow 持有 unique_ptr<m_engine> 保证
     //   ImageWindow 总是比组件晚析构 (QObject parent-child 关系), 不会悬空

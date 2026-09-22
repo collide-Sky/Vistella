@@ -57,6 +57,11 @@ private slots:
     //   (e.g. on layerAdded signal); children count and order are stable.
     void test_layerPanel_group_survives_rebuild();
 
+    // P2.5 (2026-09-22): selectedRowForTest returns current top-level layer
+    //   index, or -1 if none / group child selected.
+    void test_layerPanel_selectedRow_returnsCurrentIndex();
+    void test_layerPanel_selectedRow_returnsMinusOneWhenNoSelection();
+
 private:
     // 通过 friend 或访问器暴露内部 widget 给测试
     //   LayerPanel 没暴露 list/kindProps 访问器, 这里用 findChild 找
@@ -275,6 +280,59 @@ void tst_LayerPanelIntegration::test_layerPanel_group_survives_rebuild()
     QVERIFY(groupItem != nullptr);
     QCOMPARE(groupItem->childCount(), 2);
     QCOMPARE(groupItem->isExpanded(), true);
+}
+
+// =====================================================================
+//  P2.5 (2026-09-22): selectedRowForTest accessor for MainWindow menu
+// =====================================================================
+
+void tst_LayerPanelIntegration::test_layerPanel_selectedRow_returnsCurrentIndex()
+{
+    LayerStack stack;
+    cv::Mat img(16, 16, CV_8UC3, cv::Scalar(40, 80, 120));
+    stack.addLayer(QStringLiteral("A"), img);
+    stack.addLayer(QStringLiteral("B"), img);
+    stack.addLayer(QStringLiteral("C"), img);
+
+    LayerPanel panel(&stack);
+    auto* tree = panel.findChild<QTreeWidget*>();
+    QVERIFY(tree != nullptr);
+
+    // Activate top-level item 1 ("B") — should return 1
+    tree->setCurrentItem(tree->topLevelItem(1));
+    QCOMPARE(panel.selectedRowForTest(), 1);
+
+    // Activate top-level item 0 ("C") — zOrder-desc puts C at top, B at 1, A at 2
+    //   but selectedRowForTest reads UserRole int = layer index, not visible row.
+    //   Verify by clicking top-level item 0 and reading the role int.
+    tree->setCurrentItem(tree->topLevelItem(0));
+    const int roleInt = tree->currentItem()->data(0, Qt::UserRole).toInt();
+    QCOMPARE(panel.selectedRowForTest(), roleInt);
+}
+
+void tst_LayerPanelIntegration::test_layerPanel_selectedRow_returnsMinusOneWhenNoSelection()
+{
+    LayerStack stack;
+    cv::Mat img(16, 16, CV_8UC3, cv::Scalar(40, 80, 120));
+    stack.addLayer(QStringLiteral("A"), img);
+
+    LayerPanel panel(&stack);
+    auto* tree = panel.findChild<QTreeWidget*>();
+    QVERIFY(tree != nullptr);
+
+    // No selection -> -1
+    tree->clearSelection();
+    QCOMPARE(panel.selectedRowForTest(), -1);
+
+    // Group child selected -> -1 (selectedRowForTest only returns top-level Int)
+    stack.addLayer(QStringLiteral("B"), img);
+    stack.addLayer(QStringLiteral("C"), img);
+    const int gIdx = stack.mergeIntoGroup({1, 2});
+    QVERIFY(gIdx >= 0);
+    auto* groupItem = tree->topLevelItem(0);   // zOrder-desc puts group at top
+    QVERIFY(groupItem != nullptr);
+    tree->setCurrentItem(groupItem->child(0));
+    QCOMPARE(panel.selectedRowForTest(), -1);    // child UserRole is QString, not Int
 }
 
 QTEST_MAIN(tst_LayerPanelIntegration)

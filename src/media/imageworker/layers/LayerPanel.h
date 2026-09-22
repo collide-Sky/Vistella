@@ -57,6 +57,12 @@ public:
     // 绑定到新的 LayerStack (e.g. 切换 tab 时)
     void bindStack(LayerStack *stack);
 
+    // P2.5 (2026-09-22): top-level selected layer index (matches LayerStack
+    //   index 1:1) or -1 if none selected / group-child is selected.
+    //   Used by MainWindow menu actions that need a layer index but don't
+    //   know about QTreeWidget internals.
+    int selectedRowForTest() const;
+
     // 外部通知: 撤销栈 index 变化 (更新按钮 enabled 状态)
     void setUndoStackIndex(int currentIndex, int savedIndex);
 

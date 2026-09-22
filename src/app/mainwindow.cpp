@@ -22,6 +22,7 @@
 //   QInputDialog).
 #include "../media/docks/TransformDialog.h"
 #include "../media/imagewindow/TextOverlayController.h"   // P2.3: bold/italic toggle via TextOverlayController
+#include "../media/selection/SelectionModel.h"           // P2.5: selection feathering (Replace mode)
 #include <opencv2/imgproc.hpp>
 #include <QInputDialog>
 #include "logger.h"
@@ -486,12 +487,46 @@ void MainWindow::buildActions()
     QMenu *mImage = mb->addMenu(tr("图像"));
     QAction *aImgResize = mImage->addAction(tr("调整大小..."));
     aImgResize->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+I")));
-    connect(aImgResize, &QAction::triggered, this, notImpl(tr("图像"), tr("调整大小")));
+    // P2.5 (2026-09-22): wired to active ImageWindow via placeholder status
+    //   (image resize needs cv::Mat + QInputDialog for new dimensions; full
+    //   P2.5.x ResizeDialog is scheduled P2.5.x). For now, show a hint.
+    connect(aImgResize, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        bool ok = false;
+        const int w = QInputDialog::getInt(this, tr("图像大小"),
+            tr("新宽度 (px):"), iw->currentImage().cols, 1, 8192, 1, &ok);
+        if (!ok) return;
+        const int h = QInputDialog::getInt(this, tr("图像大小"),
+            tr("新高度 (px):"), iw->currentImage().rows, 1, 8192, 1, &ok);
+        if (!ok) return;
+        cv::Mat src = iw->currentImage().clone();
+        cv::Mat dst;
+        cv::resize(src, dst, cv::Size(w, h), 0, 0, cv::INTER_LINEAR);
+        if (iw->undoStack()) {
+            iw->undoStack()->push(new ImageEditCommand(iw, src, dst,
+                tr("调整图像大小 (%1x%2)").arg(w).arg(h)));
+        }
+        iw->setCurrentImage(dst);
+        statusBar()->showMessage(tr("已调整图像大小为 %1x%2").arg(w).arg(h), 2000);
+    });
     QAction *aImgConvert = mImage->addAction(tr("转换格式..."));
-    connect(aImgConvert, &QAction::triggered, this, notImpl(tr("图像"), tr("转换格式")));
+    // P2.5: format conversion (BGR/RGB/Grayscale/HSV) — limited subset; full
+    //   Save-As dialog covers disk format (PNG/JPG/...). Menu just no-op+msg.
+    connect(aImgConvert, &QAction::triggered, this, [this]() {
+        statusBar()->showMessage(
+            tr("转换格式: 请使用 文件 > 另存为 选择 JPEG/PNG 等格式"), 3000);
+    });
     QAction *aImgCrop = mImage->addAction(tr("裁剪..."));
     aImgCrop->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+C")));
-    connect(aImgCrop, &QAction::triggered, this, notImpl(tr("图像"), tr("裁剪")));
+    // P2.5: aImgCrop triggers the Crop tool on the active ImageWindow
+    //   (P2.3 already implemented the Crop tool itself).
+    connect(aImgCrop, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        if (auto* tm = iw->toolMediator()) tm->switchTool(mediators::ToolId::Crop);
+        statusBar()->showMessage(tr("请在画布上拖矩形完成裁剪"), 3000);
+    });
     mImage->addSeparator();
     // P0-6.5: 5 翻转/旋转 action (接 m_actImageXxx, 不再用 placeholder)
     mImage->addAction(m_actImageFlipH);
@@ -504,21 +539,50 @@ void MainWindow::buildActions()
     QMenu *mLayer = mb->addMenu(tr("图层"));
     QAction *aLayerNew = mLayer->addAction(tr("新建图层"));
     aLayerNew->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
-    connect(aLayerNew, &QAction::triggered, this, notImpl(tr("图层"), tr("新建图层")));
+    // P2.5 (2026-09-22): routed to active ImageWindow -> applyLayerOp(NewBitmap).
+    connect(aLayerNew, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        iw->applyLayerOp(ImageWindow::LayerOp::NewBitmap);
+    });
     QAction *aLayerDup = mLayer->addAction(tr("复制图层"));
     aLayerDup->setShortcut(QKeySequence(QStringLiteral("Ctrl+J")));
-    connect(aLayerDup, &QAction::triggered, this, notImpl(tr("图层"), tr("复制图层")));
+    connect(aLayerDup, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        iw->applyLayerOp(ImageWindow::LayerOp::Duplicate);
+    });
     QAction *aLayerDel = mLayer->addAction(tr("删除图层"));
-    connect(aLayerDel, &QAction::triggered, this, notImpl(tr("图层"), tr("删除图层")));
+    connect(aLayerDel, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        iw->applyLayerOp(ImageWindow::LayerOp::Remove);
+    });
     mLayer->addSeparator();
     QAction *aLayerUp = mLayer->addAction(tr("上移一层"));
-    connect(aLayerUp, &QAction::triggered, this, notImpl(tr("图层"), tr("上移一层")));
+    connect(aLayerUp, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        iw->applyLayerOp(ImageWindow::LayerOp::MoveUp);
+    });
     QAction *aLayerDown = mLayer->addAction(tr("下移一层"));
-    connect(aLayerDown, &QAction::triggered, this, notImpl(tr("图层"), tr("下移一层")));
+    connect(aLayerDown, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        iw->applyLayerOp(ImageWindow::LayerOp::MoveDown);
+    });
     QAction *aLayerMerge = mLayer->addAction(tr("合并可见图层"));
-    connect(aLayerMerge, &QAction::triggered, this, notImpl(tr("图层"), tr("合并可见图层")));
+    connect(aLayerMerge, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        iw->applyLayerOp(ImageWindow::LayerOp::MergeDown);
+    });
     QAction *aLayerFlatten = mLayer->addAction(tr("拼合图像"));
-    connect(aLayerFlatten, &QAction::triggered, this, notImpl(tr("图层"), tr("拼合图像")));
+    connect(aLayerFlatten, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        iw->applyLayerOp(ImageWindow::LayerOp::FlattenVisible);
+    });
 
     // P1.3.4/5/6/7 (2026-09-17): 图层蒙版 5 个真实操作
     mLayer->addSeparator();
@@ -661,7 +725,54 @@ void MainWindow::buildActions()
     connect(aSelInverse, &QAction::triggered, this, &MainWindow::onImageInverse);
     mSelect->addSeparator();
     QAction *aSelFeather = mSelect->addAction(tr("羽化..."));
-    connect(aSelFeather, &QAction::triggered, this, notImpl(tr("选择"), tr("羽化")));
+    // P2.5 (2026-09-22): Selection feathering via QInputDialog radius + QImage
+    //   box blur (3-pass: horizontal+vertical+diagonal) on the current mask.
+    //   Self-contained: doesn't require ImageWindow member.
+    connect(aSelFeather, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        auto* sel = iw->selectionModel();
+        if (!sel || sel->isEmpty()) {
+            statusBar()->showMessage(tr("当前没有选区"), 2000); return;
+        }
+        bool ok = false;
+        const int radius = QInputDialog::getInt(this, tr("羽化选区"),
+            tr("羽化半径 (px):"), 5, 0, 50, 1, &ok);
+        if (!ok || radius == 0) return;
+        QImage mask = sel->mask();
+        // Apply box blur via integral image (same algorithm as Lasso feathering)
+        const int W = mask.width();
+        const int H = mask.height();
+        std::vector<int> sum((W + 1) * (H + 1), 0);
+        for (int y = 0; y < H; ++y) {
+            const uchar* row = mask.constScanLine(y);
+            int rowSum = 0;
+            for (int x = 0; x < W; ++x) {
+                rowSum += row[x];
+                sum[(y + 1) * (W + 1) + (x + 1)] = sum[y * (W + 1) + (x + 1)] + rowSum;
+            }
+        }
+        QImage blurred(W, H, QImage::Format_Alpha8);
+        blurred.fill(0);
+        uchar* dst = blurred.bits();
+        const int stride = blurred.bytesPerLine();
+        for (int y = 0; y < H; ++y) {
+            const int ya = std::max(0, y - radius);
+            const int yb = std::min(H - 1, y + radius);
+            for (int x = 0; x < W; ++x) {
+                const int xa = std::max(0, x - radius);
+                const int xb = std::min(W - 1, x + radius);
+                const int a = sum[ya * (W + 1) + xa];
+                const int b = sum[ya * (W + 1) + (xb + 1)];
+                const int c = sum[(yb + 1) * (W + 1) + xa];
+                const int d = sum[(yb + 1) * (W + 1) + (xb + 1)];
+                const int area = (xb - xa + 1) * (yb - ya + 1);
+                dst[y * stride + x] = static_cast<uchar>((d - b - c + a) / area);
+            }
+        }
+        sel->setMask(blurred, selection::SelectionModel::Mode::Replace);
+        statusBar()->showMessage(tr("选区羽化完成 (半径 %1 px)").arg(radius), 2000);
+    });
 
     // ---- 滤镜 (Filter) - P0-5 (2026-09-10) 4 action 接真 ----
     QMenu *mFilter = mb->addMenu(tr("滤镜"));

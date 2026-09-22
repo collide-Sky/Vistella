@@ -251,6 +251,24 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
 
 LayerPanel::~LayerPanel() = default;
 
+// P2.5 (2026-09-22): public accessor for MainWindow layer menu actions
+//   (Duplicate/Delete/MoveUp/MoveDown/Merge Down). Returns the top-level
+//   QTreeWidget current item's layer index, or -1 if:
+//     - no selection
+//     - m_tree is null
+//     - current item is a Group child (which has QString "child:<gid>:<idx>"
+//       in UserRole, not Int). Group children cannot be top-level menu
+//       action targets — caller should fall back or warn the user.
+int LayerPanel::selectedRowForTest() const
+{
+    if (!m_tree) return -1;
+    auto* cur = m_tree->currentItem();
+    if (!cur) return -1;
+    const QVariant data = cur->data(0, Qt::UserRole);
+    if (data.type() != QVariant::Int) return -1;     // group child or empty
+    return data.toInt();
+}
+
 void LayerPanel::bindStack(LayerStack *stack)
 {
     if (m_stack == stack) return;

@@ -469,6 +469,7 @@ ImageWindow::~ImageWindow()
         m_undoStack->disconnect();
         m_undoStack->clear();
     }
+
     // P0-1.2 (2026-09-07): 清空文字 item 列表 (避免 scene 析构时 item 还在 scene 里)
     //   委托给 m_textCtrl (TextOverlayController)
     if (m_textCtrl) {
@@ -480,6 +481,162 @@ ImageWindow::~ImageWindow()
     // P0-4 (2026-09-10): m_selection 析构时 ImageCanvas::m_sel 弱引用自动失效
     m_selection.reset();
     delete ui;
+}
+
+// P2.5 (2026-09-22): selectedLayerIndex public getter
+//
+//   Returns the visible row index of LayerPanel's QTreeWidget current item.
+//   Matches LayerStack index 1:1 (m_tree is flat-ordered). Group child items
+//   hold a QString "child:<gid>:<idx>" in UserRole which we cannot return
+//   as a top-level index — caller gets -1 in that case.
+//
+//   Used by MainWindow layer menu actions (Duplicate / Delete / MoveUp /
+//   MoveDown / Merge Down) that target a single layer.
+int ImageWindow::selectedLayerIndex() const
+{
+    if (!m_layerPanel) return -1;
+    return m_layerPanel->selectedRowForTest();
+}
+
+// P2.5 (2026-09-22): applyLayerOp — MainWindow menu action dispatcher.
+//
+//   Wraps the layerStack + undoStack + invalidateCurrentCache + renderToView
+//   sequence so MainWindow menu handlers don't need to know ImageWindow's
+//   internal repaint lifecycle.
+//
+//   Returns true if the op was applied (or attempted), false if the
+//   ImageWindow has no layer stack / undo stack / valid selection.
+//
+//   Pattern (MosaicTool-style): for ops that mutate the layer set, push a
+//   LayerCommand to undoStack BEFORE invoking the mutating call (LayerCommand
+//   stores the before-state; undo restores it).
+//
+bool ImageWindow::applyLayerOp(LayerOp op)
+{
+    if (!m_layerStack) return false;
+    const int totalLayers = m_layerStack->count();
+    const int sel = selectedLayerIndex();
+
+    auto pushImageEdit = [this](const QString& cmdText) {
+        if (!m_undoStack) return;
+        cv::Mat backup = m_current.clone();
+        cv::Mat current = m_current.clone();    // same content; kept for symmetry
+        m_undoStack->push(new ImageEditCommand(this, backup, current, cmdText));
+    };
+
+    switch (op) {
+    case LayerOp::NewBitmap: {
+        // New blank bitmap layer, push LayerCommand(Add, *l) for undo.
+        const int newIdx = m_layerStack->addLayer(
+            QStringLiteral("Layer %1").arg(totalLayers + 1), cv::Mat());
+        if (newIdx < 0) return false;
+        if (m_undoStack) {
+            auto l = m_layerStack->at(newIdx);
+            if (l) m_undoStack->push(new layers::LayerCommand(
+                m_layerStack.get(), layers::LayerCommand::Add, *l));
+        }
+        invalidateCurrentCache();
+        renderToView();
+        statusBar()->showMessage(tr("已新建图层"), 2000);
+        return true;
+    }
+    case LayerOp::Duplicate: {
+        if (sel < 0 || sel >= totalLayers) {
+            statusBar()->showMessage(tr("未选中图层"), 2000); return false;
+        }
+        if (!m_layerStack->duplicateLayer(sel)) return false;
+        const int newIdx = m_layerStack->count() - 1;
+        if (m_undoStack) {
+            auto l = m_layerStack->at(newIdx);
+            if (l) m_undoStack->push(new layers::LayerCommand(
+                m_layerStack.get(), layers::LayerCommand::Add, *l));
+        }
+        invalidateCurrentCache();
+        renderToView();
+        statusBar()->showMessage(tr("已复制图层"), 2000);
+        return true;
+    }
+    case LayerOp::Remove: {
+        if (sel < 0 || sel >= totalLayers) {
+            statusBar()->showMessage(tr("未选中图层"), 2000); return false;
+        }
+        if (m_undoStack) {
+            auto* cmd = layers::LayerCommand::makeRemove(m_layerStack.get(), sel);
+            if (cmd) m_undoStack->push(cmd);
+            else m_layerStack->removeLayer(sel);
+        } else {
+            m_layerStack->removeLayer(sel);
+        }
+        invalidateCurrentCache();
+        renderToView();
+        statusBar()->showMessage(tr("已删除图层"), 2000);
+        return true;
+    }
+    case LayerOp::MoveUp: {
+        if (sel < 0 || sel >= totalLayers) return false;
+        if (m_undoStack) {
+            m_undoStack->push(new layers::LayerCommand(
+                m_layerStack.get(), sel, +1));
+        }
+        m_layerStack->moveUp(sel);
+        invalidateCurrentCache();
+        renderToView();
+        statusBar()->showMessage(tr("上移图层"), 2000);
+        return true;
+    }
+    case LayerOp::MoveDown: {
+        if (sel < 0 || sel >= totalLayers) return false;
+        if (m_undoStack) {
+            m_undoStack->push(new layers::LayerCommand(
+                m_layerStack.get(), sel, -1));
+        }
+        m_layerStack->moveDown(sel);
+        invalidateCurrentCache();
+        renderToView();
+        statusBar()->showMessage(tr("下移图层"), 2000);
+        return true;
+    }
+    case LayerOp::MergeDown: {
+        if (sel <= 0 || sel >= totalLayers) {
+            statusBar()->showMessage(tr("无法合并 (已在最底层)"), 2000); return false;
+        }
+        if (m_undoStack) {
+            m_undoStack->push(new layers::LayerCommand(
+                m_layerStack.get(), sel));
+        } else {
+            m_layerStack->mergeDown(sel);
+        }
+        invalidateCurrentCache();
+        renderToView();
+        statusBar()->showMessage(tr("已向下合并"), 2000);
+        return true;
+    }
+    case LayerOp::FlattenVisible: {
+        if (totalLayers <= 1) {
+            statusBar()->showMessage(tr("无需拼合 (图层数 ≤ 1)"), 2000); return false;
+        }
+        // Flatten: compose all visible layers and replace base layer.
+        //   The full undo entry includes both the layer mutation (m_layerStack
+        //   is restored from LayerCommand::Flatten cmd) and the image mutation
+        //   (ImageEditCommand before/after).
+        cv::Mat backup = m_current.clone();
+        cv::Mat m = m_layerStack->flattenVisible();
+        if (m.empty()) return false;
+        m_layerStack->setBaseLayer(m);
+        invalidateCurrentCache();
+        renderToView();
+        // We pushed the image backup before mutation; mirror after with the
+        //   flattened m_current so undo restores the old image.
+        if (m_undoStack) {
+            m_undoStack->push(new ImageEditCommand(this, backup, m_current.clone(),
+                tr("拼合图像")));
+        }
+        statusBar()->showMessage(tr("已拼合图像"), 2000);
+        return true;
+    }
+    }
+    Q_UNUSED(pushImageEdit);  // silence unused warning (kept for future ops)
+    return false;
 }
 
 // P0-4 (2026-09-10): cv::Mat -> QImage (BGRA8888 / BGR888 / Gray) for selection strategies
