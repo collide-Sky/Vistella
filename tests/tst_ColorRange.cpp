@@ -14,8 +14,10 @@
 #include <QtMath>
 
 #include "../src/media/masks/ColorRange.h"
+#include "../src/media/selection/SelectionStrategy.h"
 
 using namespace masks;
+using namespace selection;
 
 class TestColorRange : public QObject {
     Q_OBJECT
@@ -42,6 +44,11 @@ private slots:
     void invertFlipsAlpha();
     void outOfBoundsSampleIgnored();
     void resultMaskDimensions();
+
+    // P2.4 (2026-09-22): SelectionStrategy wrapper
+    void strategy_setterDefaults();
+    void strategy_emptySamples_returnsEmptyMask();
+    void strategy_singleSample_selectsMatchingPixels();
 };
 
 void TestColorRange::emptySourceReturnsEmpty() {
@@ -127,6 +134,54 @@ void TestColorRange::resultMaskDimensions() {
     QCOMPARE(m.rows, 100);
     QCOMPARE(m.cols, 100);
     QCOMPARE(m.type(), CV_8UC1);
+}
+
+// ============================================================================
+// P2.4 (2026-09-22): selection::ColorRangeSelectionStrategy wrapper tests
+// ============================================================================
+//
+// Verify SelectionStrategy interface integration with masks::ColorRange.
+//   - setter defaults
+//   - empty samples -> empty mask
+//   - single sample -> mask matches sample color region (QImage Format_Alpha8)
+//
+
+void TestColorRange::strategy_setterDefaults()
+{
+    selection::ColorRangeSelectionStrategy s;
+    QCOMPARE(s.fuzziness(), 30);             // matches ColorRangeParams default
+    QVERIFY(!s.invert());
+    QCOMPARE(s.samplePoints().size(), 0);
+    QCOMPARE(static_cast<int>(s.kind()),
+             static_cast<int>(SelectionStrategy::Kind::ColorRange));
+}
+
+void TestColorRange::strategy_emptySamples_returnsEmptyMask()
+{
+    ColorRangeSelectionStrategy s;
+    s.setSamplePoints({});                    // explicit empty
+    const QImage img = makeBlueSquare();
+    const QImage mask = s.end(img);
+    QVERIFY(mask.isNull());
+}
+
+void TestColorRange::strategy_singleSample_selectsMatchingPixels()
+{
+    ColorRangeSelectionStrategy s;
+    s.setFuzziness(50);                        // broad enough to capture blue square
+    s.begin(QPointF(50, 50));                  // sample inside blue square
+    const QImage img = makeBlueSquare();
+    const QImage mask = s.end(img);
+    QCOMPARE(mask.size(), img.size());
+    QCOMPARE(mask.format(), QImage::Format_Alpha8);
+
+    // Verify: center pixel (50, 50) is in mask (>= 1 = blue match)
+    const uchar* bits = mask.constBits();
+    const int stride = mask.bytesPerLine();
+    QVERIFY(bits[50 * stride + 50] > 0);
+
+    // Verify: gray corner (5, 5) is NOT in mask (gray far from blue)
+    QCOMPARE(bits[5 * stride + 5], uchar(0));
 }
 
 QTEST_MAIN(TestColorRange)

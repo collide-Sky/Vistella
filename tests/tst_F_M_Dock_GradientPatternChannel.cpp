@@ -134,14 +134,15 @@ void tst_F_M_Dock_GradientPatternChannel::channelPathPanel_listsAndSignals()
     QCOMPARE(ch->count(), 6);
     QCOMPARE(pa->count(), 1);
 
-    // 验证 6 通道名
+    // 验证 6 通道名 (P2.4: ChannelPathPanel uses QCoreApplication::translate;
+    //   fallback English when no .qm loaded. Chinese localization will replace.)
     const QStringList expectedChannels = {
         QString("RGB"),
         QString("Red"),
         QString("Green"),
         QString("Blue"),
         QString("Alpha"),
-        QString("快速蒙版"),
+        QString("Quick Mask"),
     };
     QStringList actualChannels;
     for (int i = 0; i < ch->count(); ++i) {
@@ -149,12 +150,12 @@ void tst_F_M_Dock_GradientPatternChannel::channelPathPanel_listsAndSignals()
     }
     QCOMPARE(actualChannels, expectedChannels);
 
-    // 验证路径: 工作路径
-    QCOMPARE(pa->item(0)->text(), QString("工作路径"));
+    // 验证路径 (P2.4: translated "Work Path")
+    QCOMPARE(pa->item(0)->text(), QString("Work Path"));
 
     // 默认 selection: RGB
     QCOMPARE(panel.selectedChannel(), QString("RGB"));
-    QCOMPARE(panel.selectedPath(), QString("工作路径"));
+    QCOMPARE(panel.selectedPath(), QString("Work Path"));
 
     // channelSelected 信号
     QSignalSpy chSpy(&panel, &ChannelPathPanel::channelSelected);
@@ -164,7 +165,7 @@ void tst_F_M_Dock_GradientPatternChannel::channelPathPanel_listsAndSignals()
 
     // pathSelected 信号 (路径只有 1 项, 改用 setSelectedPath)
     QSignalSpy paSpy(&panel, &ChannelPathPanel::pathSelected);
-    panel.setSelectedPath("工作路径");
+    panel.setSelectedPath("Work Path");
     // selection 没变 (已选中), 不发信号
     QCOMPARE(paSpy.count(), 0);
 }

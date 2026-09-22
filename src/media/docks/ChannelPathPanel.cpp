@@ -6,6 +6,7 @@
 #include "ui_ChannelPathPanel.h"
 #include "logger.h"
 
+#include <QCoreApplication>
 #include <QListWidget>
 #include <QListWidgetItem>
 
@@ -87,26 +88,23 @@ void ChannelPathPanel::setupChannels()
 {
     if (!ui || !ui->channelList) return;
     // PS standard channel list (composite + 3 color + alpha + quickmask)
-    static const char* kChannels[] = {
-        "RGB",          // 0
-        "Red",          // 1
-        "Green",        // 2
-        "Blue",         // 3
-        "Alpha",        // 4
-        "快速蒙版",     // 5
+    // P2.4 (2026-09-22): all channel names go through QCoreApplication::translate
+    //   (baselines are English, but Chinese localization will replace at runtime)
+    struct ChannelEntry { const char* tag; const char* fallback; ChannelKind k; };
+    static const ChannelEntry kChannels[] = {
+        { "RGB",         "RGB",            ChannelKind::Composite },
+        { "Red",         "Red",            ChannelKind::Color     },
+        { "Green",       "Green",          ChannelKind::Color     },
+        { "Blue",        "Blue",           ChannelKind::Color     },
+        { "Alpha",       "Alpha",          ChannelKind::Alpha     },
+        { "QuickMask",   "Quick Mask",     ChannelKind::QuickMask },
     };
-    for (const char* name : kChannels) {
-        auto* item = new QListWidgetItem(QString::fromUtf8(name), ui->channelList);
-        // Tag kind for future API (P0)
-        if (qstrcmp(name, "RGB") == 0) {
-            item->setData(Qt::UserRole, static_cast<int>(ChannelKind::Composite));
-        } else if (qstrcmp(name, "Alpha") == 0) {
-            item->setData(Qt::UserRole, static_cast<int>(ChannelKind::Alpha));
-        } else if (qstrcmp(name, "快速蒙版") == 0) {
-            item->setData(Qt::UserRole, static_cast<int>(ChannelKind::QuickMask));
-        } else {
-            item->setData(Qt::UserRole, static_cast<int>(ChannelKind::Color));
-        }
+    for (const auto& entry : kChannels) {
+        QString label = QCoreApplication::translate("docks::ChannelPathPanel", entry.fallback);
+        auto* item = new QListWidgetItem(label, ui->channelList);
+        // Store original tag for setSelectedChannel lookup
+        item->setData(Qt::UserRole + 1, QString::fromUtf8(entry.tag));
+        item->setData(Qt::UserRole, static_cast<int>(entry.k));
     }
     // Default selection: RGB
     if (ui->channelList->count() > 0) {
@@ -118,9 +116,12 @@ void ChannelPathPanel::setupPaths()
 {
     if (!ui || !ui->pathList) return;
     // PS standard path list
-    auto* workPath = new QListWidgetItem(QString::fromUtf8("工作路径"), ui->pathList);
+    auto* workPath = new QListWidgetItem(
+        QCoreApplication::translate("docks::ChannelPathPanel", "Work Path"),
+        ui->pathList);
+    workPath->setData(Qt::UserRole + 1, QStringLiteral("WorkPath"));
     (void)workPath;   // reserved for future role data
-    // Default selection: 工作路径
+    // Default selection: work path
     if (ui->pathList->count() > 0) {
         ui->pathList->setCurrentRow(0);
     }

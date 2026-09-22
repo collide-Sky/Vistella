@@ -3,6 +3,7 @@
 // SelectionStrategy implementations - P0-4.2 (2026-09-10)
 //
 #include "SelectionStrategy.h"
+#include "../masks/ColorRange.h"
 #include "logger.h"
 
 #include <QPainter>
@@ -240,11 +241,83 @@ void MagicWandSelectionStrategy::cancel()
     m_seed = QPointF();
 }
 
-// ===== ColorRange (P1 stub) =====
+// ===== ColorRange (P2.4 2026-09-22) =====
+//
+// PS-style Color Range selection: user drops 1+ sample points, mask = pixels
+//   within fuzziness (HSV distance) of any sample. Implemented via
+//   masks::ColorRange::computeMask (P1.3.7 already covers HSV distance math).
+//
+// Strategy lifecycle:
+//   - begin(p)   records first sample point
+//   - update(p)  appends additional sample points (PS-style — multi-sample)
+//   - end(image) runs computeMask and returns Format_Alpha8 QImage
+//
+// SelectionModel::setMask compositing (Replace/Add/Subtract/Intersect) is
+// applied by the caller (tool layer) — same as MagicWand/Lasso.
+//
+void ColorRangeSelectionStrategy::setSamplePoints(const QVector<QPointF>& pts)
+{
+    m_samplePoints = pts;
+}
+
+void ColorRangeSelectionStrategy::begin(const QPointF& p)
+{
+    m_samplePoints.clear();
+    m_samplePoints.append(p);
+}
+
+void ColorRangeSelectionStrategy::update(const QPointF& p)
+{
+    // PS allows multi-sample: each click adds a new sample point.
+    // Skip if last point is identical (avoid duplicates from same click event).
+    if (!m_samplePoints.isEmpty() && m_samplePoints.last() == p) return;
+    m_samplePoints.append(p);
+}
+
+void ColorRangeSelectionStrategy::cancel()
+{
+    m_samplePoints.clear();
+}
+
 QImage ColorRangeSelectionStrategy::end(const QImage& image)
 {
-    // P1: implement via HSV range selection
-    return QImage();
+    if (image.isNull()) return QImage();
+    if (m_samplePoints.isEmpty()) return QImage();
+
+    // Build ColorRangeParams from current state.
+    masks::ColorRangeParams params;
+    params.fuzziness = m_fuzziness;
+    params.invert    = m_invert;
+    params.samplePoints.reserve(m_samplePoints.size());
+    for (const QPointF& p : m_samplePoints) {
+        params.samplePoints.append(QPoint(int(p.x()), int(p.y())));
+    }
+
+    // Delegate HSV-distance computation to masks::ColorRange (P1.3.7).
+    const cv::Mat cvMask = masks::ColorRange::computeMask(image, params);
+    if (cvMask.empty()) return QImage();
+
+    // Convert cv::Mat (CV_8UC1) -> QImage (Format_Alpha8).
+    // masks::ColorRange guarantees same size as input image.
+    QImage mask(cvMask.cols, cvMask.rows, QImage::Format_Alpha8);
+    if (mask.size() != image.size()) {
+        // size mismatch — should not happen, but guard
+        LOG_WARN("[ColorRange] mask size {}x{} != image {}x{}",
+                 mask.width(), mask.height(), image.width(), image.height());
+        return QImage();
+    }
+    uchar* dst = mask.bits();
+    const int dstStride = mask.bytesPerLine();
+    const uchar* src = cvMask.data;
+    const int srcStride = static_cast<int>(cvMask.step);
+    for (int y = 0; y < cvMask.rows; ++y) {
+        std::memcpy(dst + y * dstStride, src + y * srcStride, cvMask.cols);
+    }
+
+    LOG_DEBUG("[ColorRange] mask {}x{}, fuzziness={}, invert={}, samples={}",
+              mask.width(), mask.height(), m_fuzziness, m_invert,
+              int(m_samplePoints.size()));
+    return mask;
 }
 
 } // namespace selection

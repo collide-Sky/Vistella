@@ -3014,6 +3014,14 @@ Selected: %1</source>
     </message>
 </context>
 <context>
+    <name>docks::ChannelPathPanel</name>
+    <message>
+        <location filename="../src/media/docks/ChannelPathPanel.cpp" line="120"/>
+        <source>Work Path</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>docks::ColorDock</name>
     <message>
         <location filename="../src/media/docks/ColorDock.cpp" line="127"/>

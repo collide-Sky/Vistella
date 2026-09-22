@@ -120,15 +120,30 @@ private:
     bool    m_contiguous = true;
 };
 
-// ===== ColorRange: P1 placeholder (returns empty mask) =====
+// ===== ColorRange: PS-style sample-points + HSV distance =====
 class ColorRangeSelectionStrategy : public SelectionStrategy
 {
 public:
     Kind kind() const override { return Kind::ColorRange; }
-    void begin(const QPointF&) override {}
-    void update(const QPointF&) override {}
+
+    // P2.4 (2026-09-22): sample points (image-pixel coords), fuzziness (0..255),
+    //   invert flag — all driven by optionPage UI.
+    void setSamplePoints(const QVector<QPointF>& pts);
+    void setFuzziness(int f) { m_fuzziness = std::clamp(f, 0, 255); }
+    void setInvert(bool b)   { m_invert = b; }
+    int  fuzziness() const  { return m_fuzziness; }
+    bool invert() const     { return m_invert; }
+    const QVector<QPointF>& samplePoints() const { return m_samplePoints; }
+
+    void begin(const QPointF& p) override;
+    void update(const QPointF& p) override;
     QImage end(const QImage& image) override;
-    void cancel() override {}
+    void cancel() override;
+
+private:
+    QVector<QPointF> m_samplePoints;
+    int  m_fuzziness = 30;
+    bool m_invert = false;
 };
 
 } // namespace selection
