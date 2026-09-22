@@ -212,33 +212,48 @@ void tst_LayerCommand::test_removeUndo()
 
 void tst_LayerCommand::test_moveUp()
 {
+    // P2.5 (2026-09-22): LayerCommand::Move follows the factory pattern
+    //   (makeMoveUp applies moveUp itself, redo is a no-op). Direct push of
+    //   new LayerCommand(stack, idx, +1) is now a no-op too.
     LayerStack stack;
     stack.addLayer(QStringLiteral("A"), makeMat());
     stack.addLayer(QStringLiteral("B"), makeMat());
 
     QUndoStack undoStack;
-    undoStack.push(new LayerCommand(&stack, 0, +1));   // A 上移
+    undoStack.push(LayerCommand::makeMoveUp(&stack, 0));   // A 上移
     QCOMPARE(stack.at(0)->name, QStringLiteral("B"));
     QCOMPARE(stack.at(1)->name, QStringLiteral("A"));
 }
 
 void tst_LayerCommand::test_moveDown()
 {
+    // P2.5 (2026-09-22): makeMoveDown factory pattern.
     LayerStack stack;
     stack.addLayer(QStringLiteral("A"), makeMat());
     stack.addLayer(QStringLiteral("B"), makeMat());
 
     QUndoStack undoStack;
-    undoStack.push(new LayerCommand(&stack, 1, -1));   // B 下移
+    undoStack.push(LayerCommand::makeMoveDown(&stack, 1));   // B 下移
     QCOMPARE(stack.at(0)->name, QStringLiteral("B"));
     QCOMPARE(stack.at(1)->name, QStringLiteral("A"));
 }
 
 void tst_LayerCommand::test_moveUndo()
 {
-    // Phase 1 简化: LayerCommand::Move undo 是 no-op (避免越界 + 复杂的 index 转换)
-    //   Phase 3 加完整的 undo 逻辑
-    QSKIP("Phase 1 简化: Move undo 越界, 留 Phase 3");
+    // P2.5 (2026-09-22): undo reverses the factory-applied move. Re-enable
+    //   this test now that the undo path uses moveDown / moveUp with the
+    //   shifted index (m_index + 1 for moveUp, m_index - 1 for moveDown).
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("A"), makeMat());
+    stack.addLayer(QStringLiteral("B"), makeMat());
+
+    QUndoStack undoStack;
+    undoStack.push(LayerCommand::makeMoveUp(&stack, 0));   // A 上移 → B,A
+    QCOMPARE(stack.at(0)->name, QStringLiteral("B"));
+    QCOMPARE(stack.at(1)->name, QStringLiteral("A"));
+    undoStack.undo();                                       // 还原 → A,B
+    QCOMPARE(stack.at(0)->name, QStringLiteral("A"));
+    QCOMPARE(stack.at(1)->name, QStringLiteral("B"));
 }
 
 // =====================================================================

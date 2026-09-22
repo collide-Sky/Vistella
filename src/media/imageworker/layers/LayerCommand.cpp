@@ -132,6 +132,36 @@ LayerCommand* LayerCommand::makeFlattenGroup(LayerStack *stack, int groupIdx)
     return cmd;
 }
 
+// P2.5 bug fix (2026-09-22): Move factory pattern. Previously callers did
+//   push(new LayerCommand(stack, sel, +1)) + m_layerStack->moveUp(sel)
+//   which double-moved (push's redo() called moveUp, then caller called
+//   moveUp again). The factories below apply the move themselves; redo()
+//   is a no-op; undo() reverses. Matches Group/Ungroup factories above.
+//
+//   m_index holds the pre-move index (where the layer sat before
+//   moveUp/moveDown moved it). undo() reverses using m_intVal sign.
+//
+//   Caveat: redo() is a no-op, so after undo the user cannot redo to
+//   restore the move. Same Phase 3/4/5 simplification tradeoff as
+//   SetText / Opacity (caller-side setXxx after push is the redo path).
+LayerCommand* LayerCommand::makeMoveUp(LayerStack *stack, int index)
+{
+    auto *cmd = new LayerCommand(stack, index, +1);
+    cmd->setText(QStringLiteral("Move Layer Up"));
+    // Apply move now so the caller doesn't have to.
+    if (stack) stack->moveUp(index);
+    return cmd;
+}
+
+LayerCommand* LayerCommand::makeMoveDown(LayerStack *stack, int index)
+{
+    auto *cmd = new LayerCommand(stack, index, -1);
+    cmd->setText(QStringLiteral("Move Layer Down"));
+    // Apply move now so the caller doesn't have to.
+    if (stack) stack->moveDown(index);
+    return cmd;
+}
+
 // 阶段 1 W4.3 Phase 3 (2026-09-04): 3 参 (stack, op, index) 专用构造器
 //   避免跟 (stack, int, int) Move 构造器歧义
 LayerCommand::LayerCommand(LayerStack *stack, Op op, int index)
@@ -388,9 +418,13 @@ void LayerCommand::undo()
         break;
     }
     case Move: {
-        // m_index = 被移动 layer 的**原位置** (push 时存)
-        //   redo: moveUp(m_index-1) → layer 从 m_index 移到 m_index+1
-        //   undo: moveDown(m_index+1) → layer 从 m_index+1 移回 m_index (m_index+1 减 1 越界则调 moveDown(m_index))
+        // P2.5 bug fix (2026-09-22): undo reverses the move applied by the
+        //   makeMoveUp / makeMoveDown factory. m_index = pre-move index.
+        //   redo is a no-op (factory already applied the move).
+        //   forward was moveUp(m_index):   undo = moveDown(m_index + 1)
+        //   forward was moveDown(m_index): undo = moveUp(m_index - 1)
+        //   The m_index + 1 / m_index - 1 shift accounts for the layer's
+        //   new position after the forward move.
         if (m_intVal > 0 && m_index >= 0) m_stack->moveDown(m_index + 1);
         else if (m_intVal < 0)            m_stack->moveUp(m_index - 1);
         break;
@@ -652,10 +686,11 @@ void LayerCommand::redo()
         break;
     }
     case Move: {
-        // Phase 1 简化: undo no-op (避免越界 + 复杂 index 转换)
-        //   redo: moveUp(m_index) 或 moveDown(m_index), 越界时 LayerStack 内部返 false
-        if (m_intVal > 0) m_stack->moveUp(m_index);
-        else if (m_intVal < 0) m_stack->moveDown(m_index);
+        // P2.5 bug fix (2026-09-22): redo is a no-op. Callers go through
+        //   makeMoveUp / makeMoveDown factories which apply the move
+        //   themselves (factory pattern, matches Group/Ungroup/SetText).
+        //   Direct push(new LayerCommand(stack, index, direction)) without
+        //   factory is now a no-op too (kept for source compatibility).
         break;
     }
     case Opacity: {

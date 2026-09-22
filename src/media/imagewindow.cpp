@@ -583,10 +583,14 @@ bool ImageWindow::applyLayerOp(LayerOp op)
     case LayerOp::MoveUp: {
         if (sel < 0 || sel >= totalLayers) return false;
         if (m_undoStack) {
-            m_undoStack->push(new layers::LayerCommand(
-                m_layerStack.get(), sel, +1));
+            // P2.5 (2026-09-22): makeMoveUp factory applies the move
+            //   itself; caller no longer needs an explicit moveUp call.
+            //   The old push+moveUp pattern double-moved.
+            m_undoStack->push(layers::LayerCommand::makeMoveUp(
+                m_layerStack.get(), sel));
+        } else {
+            m_layerStack->moveUp(sel);
         }
-        m_layerStack->moveUp(sel);
         invalidateCurrentCache();
         renderToView();
         statusBar()->showMessage(tr("上移图层"), 2000);
@@ -595,10 +599,13 @@ bool ImageWindow::applyLayerOp(LayerOp op)
     case LayerOp::MoveDown: {
         if (sel < 0 || sel >= totalLayers) return false;
         if (m_undoStack) {
-            m_undoStack->push(new layers::LayerCommand(
-                m_layerStack.get(), sel, -1));
+            // P2.5 (2026-09-22): makeMoveDown factory applies the move
+            //   itself; caller no longer needs an explicit moveDown call.
+            m_undoStack->push(layers::LayerCommand::makeMoveDown(
+                m_layerStack.get(), sel));
+        } else {
+            m_layerStack->moveDown(sel);
         }
-        m_layerStack->moveDown(sel);
         invalidateCurrentCache();
         renderToView();
         statusBar()->showMessage(tr("下移图层"), 2000);
@@ -1109,15 +1116,17 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
         // moveUpRequested: index is the position of the layer that should
         //   be moved up.
-        //   LayerStack::moveUp(index) moves index -> index + 1.
+        //   P2.5 (2026-09-22): use makeMoveUp factory (it applies moveUp
+        //   itself, undo reverses). The old push+moveUp double-moved.
         connect(rawPanel, &layers::LayerPanel::moveUpRequested,
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (m_undoStack) {
-                m_undoStack->push(new layers::LayerCommand(
-                    m_layerStack.get(), index, +1));
+                m_undoStack->push(layers::LayerCommand::makeMoveUp(
+                    m_layerStack.get(), index));
+            } else {
+                m_layerStack->moveUp(index);
             }
-            m_layerStack->moveUp(index);
             invalidateCurrentCache();
             renderToView();
             statusBar()->showMessage(tr("上移图层"), 2000);
@@ -1128,10 +1137,11 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (m_undoStack) {
-                m_undoStack->push(new layers::LayerCommand(
-                    m_layerStack.get(), index, -1));
+                m_undoStack->push(layers::LayerCommand::makeMoveDown(
+                    m_layerStack.get(), index));
+            } else {
+                m_layerStack->moveDown(index);
             }
-            m_layerStack->moveDown(index);
             invalidateCurrentCache();
             renderToView();
             statusBar()->showMessage(tr("下移图层"), 2000);

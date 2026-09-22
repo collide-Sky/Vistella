@@ -81,7 +81,18 @@ public:
     // Remove: 同 Add, push 时 remove, undo 时 add
     static LayerCommand* makeRemove(LayerStack *stack, int index);
     // Move: index 是被移动的 layer, direction = +1 (上) / -1 (下)
+    //   P2.5 bug fix (2026-09-22): callers should use the makeMoveUp /
+    //   makeMoveDown factories below (factory pattern, same as Group/Ungroup).
+    //   The 3-arg (stack, index, direction) constructor is kept for source
+    //   compatibility but its redo() is now a no-op — if you push it directly
+    //   without calling moveUp/moveDown yourself, nothing moves.
     LayerCommand(LayerStack *stack, int index, int direction, QUndoCommand *parent = nullptr);
+    // makeMoveUp: factory applies LayerStack::moveUp(index) itself. Caller
+    //   does NOT need to call moveUp separately (matches makeMergeIntoGroup /
+    //   makeFlattenGroup). redo() is a no-op; undo() reverses the move.
+    static LayerCommand* makeMoveUp(LayerStack *stack, int index);
+    // makeMoveDown: factory applies LayerStack::moveDown(index) itself.
+    static LayerCommand* makeMoveDown(LayerStack *stack, int index);
     // Opacity / Visible / Locked / Linked / Blend / Rename: index + value
     LayerCommand(LayerStack *stack, Op op, int index, float floatVal, QUndoCommand *parent = nullptr);  // opacity
     LayerCommand(LayerStack *stack, Op op, int index, bool boolVal, QUndoCommand *parent = nullptr);    // visible / locked / linked
