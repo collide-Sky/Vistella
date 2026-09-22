@@ -2009,9 +2009,12 @@ void MainWindow::onHomeModuleRequested(int moduleKind)
 // ----------------- HomePage -----------------
 // F-G.4 (2026-09-09): onHomeNewRequested / onHomeOpenRequested 删 (HomePage dialog 直接 connect 到 onNewFile / onOpenFile)
 
-// P0-5 (2026-09-10): 滤镜菜单 4 action 弹 FilterDialog
-//   Apply = preview, OK = push FilterCommand, Cancel = close
-//   P0 简化: 不可调参数, 用 strategy 默认值
+// P0-5 (2026-09-10): 滤镜菜单弹 FilterDialog
+//   P3.1.1 (2026-09-22): dialog 加 slider/picker, 用 strategy 当前参数
+//   P3.1.3 (2026-09-22): Apply 实时预览 — dialog 直接调 m_host->previewFilter
+//     /clearPreview/applyFilterWithStrategy, mainwindow 这边只剩 status bar
+//     反馈 (避免重复 push FilterCommand)
+//   Apply = preview (临时 m_previewImage), OK = apply + 入撤销栈, Cancel = 关闭
 void MainWindow::onFilterMenuTriggered(filter::FilterKind kind)
 {
     auto *img = qobject_cast<ImageWindow *>(widgetAt(ui->tabWidget->currentIndex()));
@@ -2021,17 +2024,14 @@ void MainWindow::onFilterMenuTriggered(filter::FilterKind kind)
     }
     auto *dlg = new filter::FilterDialog(img, kind, this);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
-    connect(dlg, &filter::FilterDialog::applyRequested, this, [this, dlg, img, kind](){
-        // P0 简化: Apply 不真做 preview, 只显示状态
+    // P3.1.3 (2026-09-22): dialog 已经做了 preview / push command. mainwindow
+    //   只剩 status bar 反馈.
+    connect(dlg, &filter::FilterDialog::applyRequested, this, [this, kind](){
         statusBar()->showMessage(
-            tr("Apply %1 (P0 简化: 用默认值预览)").arg(QString::fromUtf8(filter::filterName(kind))),
+            tr("Apply %1 (预览已应用)").arg(QString::fromUtf8(filter::filterName(kind))),
             2000);
-        (void)img;
-        (void)dlg;
     });
-    connect(dlg, &filter::FilterDialog::okRequested, this, [this, img, kind](){
-        // OK: 调 ImageWindow::applyFilter push FilterCommand
-        img->applyFilter(kind);
+    connect(dlg, &filter::FilterDialog::okRequested, this, [this, kind](){
         statusBar()->showMessage(
             tr("已应用 %1 (入撤销栈)").arg(QString::fromUtf8(filter::filterName(kind))),
             2000);

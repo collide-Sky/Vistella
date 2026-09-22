@@ -1742,12 +1742,16 @@ void ImageWindow::renderToView()
 {
     // 阶段 1 W4.3 Phase 1: m_current 来自 layerStack.render() 缓存
     if (m_currentDirty) rebuildCurrentCache();
-    if (m_current.empty()) {
+    // P3.1.3 (2026-09-22): 滤镜预览优先 — 如果 m_previewImage 非空, 用它显示
+    //   临时预览层不动 m_current, Apply 每次都从 m_current 重新生成 m_previewImage
+    //   clearPreview (OK/Cancel) 把控制权交回 m_current
+    cv::Mat& display = m_previewImage.empty() ? m_current : m_previewImage;
+    if (display.empty()) {
         // P0-1.3 (2026-09-07): m_item 搬到 m_canvas
         m_canvas->pixmapItem()->setPixmap(QPixmap());
         return;
     }
-    const QImage qimg = ImageProcessor::matToQImage(m_current);
+    const QImage qimg = ImageProcessor::matToQImage(display);
     m_canvas->pixmapItem()->setPixmap(QPixmap::fromImage(qimg));
     m_canvas->scene()->setSceneRect(m_canvas->pixmapItem()->pixmap().rect());
     // 关键: 重置变换 + 按当前 m_canvas->zoom() 缩放 (跟原逻辑一致, 保持每次渲染都重设 transform)
@@ -1868,19 +1872,39 @@ void ImageWindow::applyFilter(filter::FilterKind kind)
         this, m_current, kind, filterName));
 }
 
-// P3.1.1 (2026-09-22): 滤镜 Apply 实时预览 — FilterDialog 调
-//   P3.1.3 实装: apply strategy->apply(m_current, m_previewImage) + renderToView
-//                注意 m_current 不动, renderToView 优先用 m_previewImage 显示
-//   P3.1.1 stub: 占位实装, 保证 P3.1.1 能编译通过; P3.1.3 commit 会替换为真实装
+// P3.1.3 (2026-09-22): 滤镜 Apply 实时预览 — FilterDialog::onApplyClicked 调
+//   apply strategy->apply(m_current, m_previewImage), renderToView 优先显示 m_previewImage
+//   m_current 不动, clearPreview 后回到 m_current 显示
+//   关键: 每次 Apply 都从当前 m_current (而不是 m_previewImage) 重新生成预览,
+//         防止预览多次叠加
 void ImageWindow::previewFilter(filter::FilterStrategy* strategy)
 {
-    (void)strategy;
-    LOG_DEBUG("[ImageWindow] previewFilter stub (real impl P3.1.3)");
+    if (!strategy) {
+        LOG_WARN("[ImageWindow] previewFilter: null strategy");
+        return;
+    }
+    if (m_current.empty()) {
+        LOG_WARN("[ImageWindow] previewFilter: no image loaded");
+        return;
+    }
+    m_previewImage.release();
+    strategy->apply(m_current, m_previewImage);
+    if (m_previewImage.empty()) {
+        LOG_WARN("[ImageWindow] previewFilter: strategy produced empty output");
+        return;
+    }
+    LOG_DEBUG("[ImageWindow] previewFilter: {}x{} preview ready",
+              m_previewImage.cols, m_previewImage.rows);
+    renderToView();
 }
 
 void ImageWindow::clearPreview()
 {
-    LOG_DEBUG("[ImageWindow] clearPreview stub (real impl P3.1.3)");
+    if (!m_previewImage.empty()) {
+        m_previewImage.release();
+        LOG_DEBUG("[ImageWindow] clearPreview");
+        renderToView();
+    }
 }
 
 void ImageWindow::applyFilterWithStrategy(filter::FilterStrategy* strategy, const QString& text)

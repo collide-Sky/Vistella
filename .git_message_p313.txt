@@ -1,0 +1,44 @@
+P3.1.3 (2026-09-22): Filter realtime preview (preview layer in ImageWindow)
+
+ImageWindow adds a transient m_previewImage (cv::Mat) layer. FilterDialog
+calls host->previewFilter(strategy) on Apply to apply the strategy to
+m_current and stash the result in m_previewImage; renderToView() now
+displays m_previewImage in preference to m_current until clearPreview()
+frees it (called on OK and Cancel).
+
+Root cause: P3.1.1 (2026-09-22) FilterDialog acquired sliders/pickers but
+had no path to actually show the user the result without committing. The
+P0-5 (2026-09-10) Apply handler in mainwindow was a no-op status-bar
+message; the user had to OK (commit) to see any visual change. Adding a
+non-destructive preview layer avoids the commit/cancel cycle.
+
+Design:
+  - m_previewImage is empty by default (cv::Mat default ctor)
+  - renderToView picks display = m_previewImage.empty() ? m_current : m_previewImage
+  - m_current is NEVER mutated by preview; OK replaces m_current via
+    FilterCommand::redo (same pattern as P0-5)
+  - Each Apply re-applies strategy->apply(m_current, m_previewImage) from
+    current m_current, preventing preview-on-preview stacking
+  - cancelPreview / okPreview both call clearPreview() to release the layer
+
+Files:
+  - src/media/imagewindow.h:    m_previewImage cv::Mat field added
+                                + 3 method decls already in P3.1.1
+  - src/media/imagewindow.cpp:  previewFilter() applies strategy to m_current
+                                  → m_previewImage, calls renderToView
+                                clearPreview() releases m_previewImage,
+                                  calls renderToView (re-show m_current)
+                                renderToView() picks m_previewImage if non-empty
+  - src/app/mainwindow.cpp:     onFilterMenuTriggered removes the duplicated
+                                  applyFilter() call (FilterDialog now does it).
+                                  Only status-bar hints remain on apply/ok signals.
+
+Tests: 60/60 ctest pass (no regression).
+  - tst_P0_5_FilterSystem:    unchanged (factory/command/dialog)
+  - tst_ImageWorker / tst_ImageEditCommand:  occasionally flake under ctest -j 4
+    due to QApplication parallel init race; pass under sequential or single-test run.
+    Same behavior as pre-P3.1.3 baseline — not caused by this commit.
+
+Verification:
+  - build_local.cmd exit 0
+  - ctest -j 4 (3 sequential runs): 60/60 passed
