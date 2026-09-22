@@ -372,12 +372,18 @@ void LayerCommand::undo()
     if (!m_stack) return;
     switch (m_op) {
     case Add: {
-        // 删刚加的
+        // P2.5 bug fix (2026-09-22): undo REMOVES the layer.
+        //   Caller is expected to pre-addLayer before push (see
+        //   ImageWindow::applyLayerOp + LayerPanel::duplicateLayer
+        //   patterns: caller does addLayer/duplicateLayer first, then
+        //   pushes LayerCommand(Add) to capture the new layer for undo).
+        //   This means push's redo() must be a no-op (the layer is already
+        //   in the stack), and undo() removes it.
         m_stack->removeLayer(m_stack->count() - 1);
         break;
     }
     case Remove: {
-        // 恢复
+        // Restore
         m_stack->addLayer(m_layer);
         break;
     }
@@ -623,7 +629,15 @@ void LayerCommand::redo()
     if (!m_stack) return;
     switch (m_op) {
     case Add: {
-        m_stack->addLayer(m_layer);
+        // P2.5 bug fix (2026-09-22): redo is a no-op because the caller
+        //   has already pre-added the layer (see LayerPanel/ImageWindow
+        //   pattern: addLayer/duplicateLayer first, then push the Add
+        //   LayerCommand). Matches Group/Ungroup factory pattern.
+        //
+        //   Without this no-op, every duplicateLayer / NewBitmap op
+        //   added the layer twice (count++ twice: once by caller, once
+        //   by Add::redo), bug reported by tst_LayerCommand's
+        //   test_addAfterDuplicate_bugReproducer.
         break;
     }
     case Remove: {

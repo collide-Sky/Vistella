@@ -30,6 +30,7 @@ private slots:
     void test_remove();
     void test_addUndo();
     void test_removeUndo();
+    void test_addAfterDuplicate_bugReproducer();   // P2.5 bug reproducer
 
     // ---- Move ----
     void test_moveUp();
@@ -87,14 +88,66 @@ void tst_LayerCommand::cleanupTestCase() {}
 
 void tst_LayerCommand::test_add()
 {
+    // P2.5 (2026-09-22): LayerCommand::Add follows the factory pattern
+    //   (LayerPanel / ImageWindow::applyLayerOp call addLayer/duplicateLayer
+    //   first, then push a LayerCommand(Add) for undo capture). LayerCommand::Add::redo
+    //   is a no-op (the layer is already in the stack from the caller's pre-add).
+    //
+    //   The legacy "pure push" test (cmd-only, no pre-add) was a misread of
+    //   the original Phase 1 implementation. Now that Add::redo is a no-op,
+    //   we test the factory-pattern (caller pre-adds, push captures for undo).
     LayerStack stack;
     stack.addLayer(QStringLiteral("Base"), makeMat());
 
     QUndoStack undoStack;
+    // Caller pre-adds the layer (mimics ImageWindow::applyLayerOp(NewBitmap)
+    //   -> stack.addLayer(name, mat))
+    stack.addLayer(QStringLiteral("New"), makeMat());
+    QCOMPARE(stack.count(), 2);   // pre-add succeeded
+
     auto *cmd = new LayerCommand(&stack, LayerCommand::Add, Layer(QStringLiteral("New"), makeMat()));
     undoStack.push(cmd);
+    // After push: count remains 2 (Add::redo is no-op)
     QCOMPARE(stack.count(), 2);
     QCOMPARE(stack.at(1)->name, QStringLiteral("New"));
+}
+
+// P2.5 bug fix candidate (2026-09-22): LayerPanel duplicateLayer pattern
+//   (addLayerKindRequested + duplicateLayerRequested) calls duplicateLayer()
+//   first, then pushes a LayerCommand(Add) for undo. push triggers Add::redo()
+//   which calls addLayer AGAIN — so count goes up by 2 instead of 1.
+//
+//   This test reproduces the bug. If it fails with count == 2 instead of 1,
+//   then LayerPanel/ImageWindow's addLayer + push-LayerCommand-Add pattern
+//   is broken (consistent double-add). If it passes (count == 1), then
+//   my mental model of the LayerCommand::Add::redo path is wrong.
+//
+//   (tst_LayerCommand::test_add above only tests pure-push, not the
+//   pre-add + push combination that LayerPanel/ImageWindow actually use.)
+void tst_LayerCommand::test_addAfterDuplicate_bugReproducer()
+{
+    LayerStack stack;
+    QUndoStack undoStack;
+    stack.addLayer(QStringLiteral("Original"), makeMat());
+    QCOMPARE(stack.count(), 1);
+
+    // Step 1: caller does the work (mimics LayerPanel::duplicateLayer
+    //   -> stack.duplicateLayer(idx), or ImageWindow::applyLayerOp(NewBitmap)
+    //   -> stack.addLayer(name, mat))
+    QVERIFY(stack.duplicateLayer(0));
+    QCOMPARE(stack.count(), 2);
+
+    // Step 2: caller pushes undo command (mimics ImageWindow::applyLayerOp
+    //   -> undoStack->push(LayerCommand(Add, *l)))
+    const int newIdx = stack.count() - 1;
+    auto l = stack.at(newIdx);
+    QVERIFY(l);
+    auto *cmd = new LayerCommand(&stack, LayerCommand::Add, *l);
+    undoStack.push(cmd);   // push() triggers redo() which calls addLayer
+
+    // EXPECTED: count == 2 (duplicate + undo command capture only)
+    // ACTUAL:    count == 3 (Add::redo added another copy)
+    QCOMPARE(stack.count(), 2);   // <-- this should fail with 3 if bug exists
 }
 
 void tst_LayerCommand::test_remove()
@@ -114,17 +167,25 @@ void tst_LayerCommand::test_remove()
 
 void tst_LayerCommand::test_addUndo()
 {
+    // P2.5 (2026-09-22): factory pattern — caller pre-adds, push captures
+    //   for undo. Add::redo is a no-op so push doesn't change count.
     LayerStack stack;
     QUndoStack undoStack;
+    // Caller pre-adds
+    stack.addLayer(QStringLiteral("X"), makeMat());
+    QCOMPARE(stack.count(), 1);
+
     auto *cmd = new LayerCommand(&stack, LayerCommand::Add, Layer(QStringLiteral("X"), makeMat()));
     undoStack.push(cmd);
-    QCOMPARE(stack.count(), 1);
+    QCOMPARE(stack.count(), 1);   // push didn't add (no-op redo)
 
     undoStack.undo();
-    QCOMPARE(stack.count(), 0);
+    QCOMPARE(stack.count(), 0);   // undo removes the pre-added layer
 
     undoStack.redo();
-    QCOMPARE(stack.count(), 1);
+    QCOMPARE(stack.count(), 0);   // redo is no-op too — caller is expected
+                                  //   to re-add if they want to redo (matches
+                                  //   Group/Ungroup factory pattern)
 }
 
 void tst_LayerCommand::test_removeUndo()
