@@ -755,9 +755,19 @@ void LayerCommand::redo()
         //   真实 mainwindow 流程: push(cmd 存 old) → setXxx(new) → undo 还原 old → setXxx(new) → redo no-op
         break;
     case SetAdjustmentLut:
-        // P0-3.3 (2026-09-08) 分支: m_host 非空 → redo 走 image-based
-        //   (跟 undo 对称, m_newMat 是 push 之前存好的)
-        if (m_host && !m_newMat.empty()) m_host->replaceCurrentImage(m_newMat);
+        // P2.5 bug fix (2026-09-22): redo is a no-op for both host and
+        //   legacy paths. The caller (AdjustmentPanel::applyCurrentTab +
+        //   commitUndoDebounced) has already applied m_newMat via
+        //   setCurrentImage before pushing this command. Without the
+        //   no-op, push's redo would re-apply m_newMat (double-apply).
+        //   Matches the Phase 3/4/5 simplification pattern used by
+        //   Visible/Locked/Linked/Blend/Rename/Move/Group/Ungroup/Opacity.
+        //
+        //   Legacy path (host == null) was already a no-op; this comment
+        //   brings the host path in line.
+        //
+        //   Trade-off: redo after undo is a no-op, so user cannot redo
+        //   to restore m_newMat. Same as SetText / Opacity trade-off.
         break;
     case AppendSmartFilter:
     case RemoveSmartFilter:
