@@ -69,8 +69,10 @@ namespace dialogs { class AdjustDialogBase; }
 namespace tools { class ToolContext; }
 // P0-4 (2026-09-10): SelectionModel forward decl (selection state holder)
 namespace selection { class SelectionModel; }
-// P0-5 (2026-09-10): FilterKind forward decl (20 滤镜 PS 同款)
-namespace filter { enum class FilterKind : int; }
+// P0-5 (2026-09-10): FilterStrategy forward decl (20 滤镜 PS 同款)
+//   P3.1.1 (2026-09-22): 改成全量 include — previewFilter/applyFilterWithStrategy
+//   接口签名需要 filter::FilterStrategy* (完整类型, 包括 kind() / apply())
+#include "filters/FilterStrategy.h"
 // P0-6.6 (2026-09-14): TransformBox forward decl (8 handle 自由变换)
 namespace transform { class TransformBox; }
 
@@ -280,6 +282,17 @@ public:
     // P0-5 (2026-09-10): 滤镜应用 (主菜单 4 action 接真)
     //   调 FilterFactory + strategy + push FilterCommand
     void applyFilter(filter::FilterKind kind);
+
+    // P3.1.1 (2026-09-22): 滤镜 Apply 实时预览接口 (FilterDialog 调)
+    //   previewFilter: 用 strategy 当前参数应用到 m_current, 存到 m_previewImage 临时层
+    //                  renderToView 会优先用 m_previewImage 显示, 直到 clearPreview
+    //   clearPreview: 释放 m_previewImage, 恢复 m_current 显示
+    // P3.1.3 (2026-09-22): applyFilterWithStrategy: 用 caller 提供的 strategy
+    //                  (含用户在 dialog 里调好的参数) 走 FilterCommand 入撤销栈
+    //                  替换之前的 applyFilter(kind) — kind 模式不再需要
+    void previewFilter(filter::FilterStrategy* strategy);
+    void clearPreview();
+    void applyFilterWithStrategy(filter::FilterStrategy* strategy, const QString& text);
 
     // F-N (2026-09-10): ToolContext accessor (eventFilter forwards to current tool via this)
     //   m_ctx is owned by ImageWindow (constructed in ctor, no need to inject from outside)

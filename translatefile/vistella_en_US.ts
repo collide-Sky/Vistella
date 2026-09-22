@@ -543,7 +543,7 @@
     </message>
     <message>
         <location filename="../src/media/imagewindow.ui" line="151"/>
-        <location filename="../src/media/imagewindow.cpp" line="1929"/>
+        <location filename="../src/media/imagewindow.cpp" line="1963"/>
         <source>●  进入涂抹模式 (再点退出)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -994,67 +994,67 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1927"/>
+        <location filename="../src/media/imagewindow.cpp" line="1961"/>
         <source>✓  涂抹中 (再点退出)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2003"/>
+        <location filename="../src/media/imagewindow.cpp" line="2037"/>
         <source>选择文字颜色</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2007"/>
+        <location filename="../src/media/imagewindow.cpp" line="2041"/>
         <source>文字颜色: RGB(%1,%2,%3)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2392"/>
-        <location filename="../src/media/imagewindow.cpp" line="2478"/>
-        <location filename="../src/media/imagewindow.cpp" line="2494"/>
-        <location filename="../src/media/imagewindow.cpp" line="2510"/>
-        <location filename="../src/media/imagewindow.cpp" line="2526"/>
-        <location filename="../src/media/imagewindow.cpp" line="2542"/>
+        <location filename="../src/media/imagewindow.cpp" line="2426"/>
+        <location filename="../src/media/imagewindow.cpp" line="2512"/>
+        <location filename="../src/media/imagewindow.cpp" line="2528"/>
+        <location filename="../src/media/imagewindow.cpp" line="2544"/>
+        <location filename="../src/media/imagewindow.cpp" line="2560"/>
+        <location filename="../src/media/imagewindow.cpp" line="2576"/>
         <source>当前页面没有图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2447"/>
+        <location filename="../src/media/imagewindow.cpp" line="2481"/>
         <source>已应用 SmartObject 变换</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2454"/>
+        <location filename="../src/media/imagewindow.cpp" line="2488"/>
         <source>ToolContext 未初始化</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2472"/>
+        <location filename="../src/media/imagewindow.cpp" line="2506"/>
         <source>自由变换 — 拖动 8 handle 或中心点 (Esc 退出)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2485"/>
+        <location filename="../src/media/imagewindow.cpp" line="2519"/>
         <source>水平翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2501"/>
+        <location filename="../src/media/imagewindow.cpp" line="2535"/>
         <source>垂直翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2517"/>
+        <location filename="../src/media/imagewindow.cpp" line="2551"/>
         <source>旋转 90° 顺时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2533"/>
+        <location filename="../src/media/imagewindow.cpp" line="2567"/>
         <source>旋转 90° 逆时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2549"/>
+        <location filename="../src/media/imagewindow.cpp" line="2583"/>
         <source>旋转 180°</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3260,17 +3260,17 @@ Selected: %1</source>
 <context>
     <name>filter::FilterDialog</name>
     <message>
-        <location filename="../src/media/filters/FilterDialog.cpp" line="56"/>
+        <location filename="../src/media/filters/FilterDialog.cpp" line="131"/>
         <source>Apply 预览</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/FilterDialog.cpp" line="61"/>
+        <location filename="../src/media/filters/FilterDialog.cpp" line="136"/>
         <source>OK</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/filters/FilterDialog.cpp" line="66"/>
+        <location filename="../src/media/filters/FilterDialog.cpp" line="141"/>
         <source>Cancel</source>
         <translation type="unfinished"></translation>
     </message>

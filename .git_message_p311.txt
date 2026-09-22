@@ -1,0 +1,42 @@
+P3.1.1 (2026-09-22): FilterDialog parameter UI (8 kinds with sliders/spinboxes)
+
+Replace P0-5 simplified dialog (label-only "参数: ...") with PS-style
+per-FilterKind parameter widgets:
+  - int slider + QSpinBox (ksize / d / level / levels / threshold / density)
+  - double slider + QDoubleSpinBox (sigma / sigmaColor / sigmaSpace /
+    amount / radius / HighPass radius)
+  - placeholder label "(无参数)" / "(固定参数)" for non-param filters
+  - Snap-to-odd for ksize (1..31)
+  - Live paramText refresh on every slider drag
+
+Root cause: P0-5 (2026-09-10) FilterDialog only showed a static
+paramText() — no way to actually edit filter parameters from UI.
+Strategy classes already expose the public fields (ksize/sigma/...);
+only the dialog needed wiring.
+
+Files:
+  - src/media/filters/FilterDialog.h:    FilterStrategy* strategy()
+                                         accessor + buildParamWidgets()
+  - src/media/filters/FilterDialog.cpp:  addIntRow / addDoubleRow helpers,
+                                         buildParamWidgets() per-kind switch,
+                                         refreshParamText() on slider change
+  - src/media/filters/FilterCommand.h:   new ctor (host, before, strategy*,
+                                         text) so dialog-owned strategy is
+                                         applied with user-edited params
+  - src/media/filters/FilterCommand.cpp: new ctor delegates apply to caller
+                                         strategy (no factory call, no defaults)
+  - src/media/imagewindow.h:             3 new public methods (previewFilter,
+                                         clearPreview, applyFilterWithStrategy)
+                                         + #include filters/FilterStrategy.h
+  - src/media/imagewindow.cpp:           applyFilterWithStrategy pushes the
+                                         strategy-based FilterCommand. previewFilter
+                                         / clearPreview are P3.1.1 stubs (real
+                                         impl in P3.1.3 commit)
+  - translatefile/vistella_*.ts:         lupdate pulled new source strings
+                                         (Apply 预览 / OK / Cancel / sliders)
+
+Tests: 60/60 ctest pass (no regression). New tests added in P3.1.4 commit.
+
+Verification:
+  - build_local.cmd exit 0 (Ninja Release-Debug, MSVC 2022, Qt 6.11.1)
+  - ctest -j 4: 60/60 passed in 5.95s

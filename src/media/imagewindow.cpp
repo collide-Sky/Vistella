@@ -1868,6 +1868,40 @@ void ImageWindow::applyFilter(filter::FilterKind kind)
         this, m_current, kind, filterName));
 }
 
+// P3.1.1 (2026-09-22): 滤镜 Apply 实时预览 — FilterDialog 调
+//   P3.1.3 实装: apply strategy->apply(m_current, m_previewImage) + renderToView
+//                注意 m_current 不动, renderToView 优先用 m_previewImage 显示
+//   P3.1.1 stub: 占位实装, 保证 P3.1.1 能编译通过; P3.1.3 commit 会替换为真实装
+void ImageWindow::previewFilter(filter::FilterStrategy* strategy)
+{
+    (void)strategy;
+    LOG_DEBUG("[ImageWindow] previewFilter stub (real impl P3.1.3)");
+}
+
+void ImageWindow::clearPreview()
+{
+    LOG_DEBUG("[ImageWindow] clearPreview stub (real impl P3.1.3)");
+}
+
+void ImageWindow::applyFilterWithStrategy(filter::FilterStrategy* strategy, const QString& text)
+{
+    if (m_current.empty()) {
+        LOG_WARN("[ImageWindow] applyFilterWithStrategy: no image loaded");
+        return;
+    }
+    if (!m_undoStack) {
+        LOG_ERROR("[ImageWindow] applyFilterWithStrategy: m_undoStack null");
+        return;
+    }
+    if (!strategy) {
+        LOG_ERROR("[ImageWindow] applyFilterWithStrategy: null strategy");
+        return;
+    }
+    LOG_INFO("[ImageWindow] applyFilterWithStrategy: text={}", text.toStdString());
+    // P3.1.1 (2026-09-22): 走新 ctor (strategy-based), 用 dialog 提供的 strategy (含 slider 当前值)
+    m_undoStack->push(new filter::FilterCommand(this, m_current, strategy, text));
+}
+
 // ---------------- 撤销栈 ----------------
 
 void ImageWindow::markSaved()
