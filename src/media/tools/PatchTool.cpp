@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 //
-// PatchTool implementation - P0-9.3 (2026-09-15)
-//
-// 详见 PatchTool.h 头注释
+// PatchTool implementation - P0-9.3 (2026-09-15) + P0-9.4 (2026-09-15) + P2.2 (2026-09-22)
 //
 #include "PatchTool.h"
 #include "../imagewindow.h"
 #include "../imageprocessor.h"
 #include "logger.h"
 
-#include <QImage>
-#include <QMouseEvent>
+#include <QComboBox>
+#include <QCoreApplication>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QWidget>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>     // P0-9.4 cv::rectangle + cv::Point
@@ -21,6 +21,11 @@
 namespace tools {
 
 PatchTool::PatchTool(QWidget* /*parent*/) : ToolState() {}
+
+QString PatchTool::pageTitle() const
+{
+    return QCoreApplication::translate("tools::PatchTool", "Patch Tool");
+}
 
 void PatchTool::onEnter(ImageWindow* host)
 {
@@ -67,25 +72,33 @@ void PatchTool::applyPatch(ImageWindow* host, const QPointF& dstA, const QPointF
         return;
     }
 
-    // P0-9.4 (2026-09-15): 用 cv::seamlessClone 做 Content Aware Fill
-    //   cv::seamlessClone(src, dst, mask, result, centerPoint)
-    //   - src: source 矩形 (从 image 切片)
-    //   - dst: destination image
-    //   - mask: source 区域 mask (255 在 source 区域)
-    //   - centerPoint: destination 中心 (在 dst image 中)
+    // P2.2: snapshot before apply for ImageEditCommand undo (MosaicTool pattern)
+    m_backup = img.clone();
+    m_strokeOpen = true;
+
     const cv::Rect srcCv(srcClip.x(), srcClip.y(), srcClip.width(), srcClip.height());
     cv::Mat sourceRoi = img(srcCv).clone();
 
     cv::Mat mask = cv::Mat::zeros(sourceRoi.size(), CV_8UC1);
     cv::rectangle(mask, cv::Rect(0, 0, sourceRoi.cols, sourceRoi.rows), cv::Scalar(255), cv::FILLED);
 
+    // P2.2: PatchMode mapping to cv::seamlessClone flags
+    //   Normal   -> NORMAL_CLONE (preserve src texture, blend edges)
+    //   Mixed    -> MIXED_CLONE (preserve dst gradient, blend edges)
+    //   MonochromeTransfer -> MONOCHROME_TRANSFER (apply src luminance to dst color)
+    int cloneFlags = cv::NORMAL_CLONE;
+    switch (m_patchMode) {
+    case PatchMode::Normal:              cloneFlags = cv::NORMAL_CLONE; break;
+    case PatchMode::Mixed:               cloneFlags = cv::MIXED_CLONE; break;
+    case PatchMode::MonochromeTransfer:  cloneFlags = cv::MONOCHROME_TRANSFER; break;
+    }
+
     const cv::Point center(dstClip.x() + dstClip.width() / 2,
                            dstClip.y() + dstClip.height() / 2);
 
     cv::Mat result;
     try {
-        // signature: seamlessClone(src, dst, mask, center, blend, flags)
-        cv::seamlessClone(sourceRoi, img, mask, center, result, cv::NORMAL_CLONE);
+        cv::seamlessClone(sourceRoi, img, mask, center, result, cloneFlags);
     } catch (const cv::Exception& e) {
         LOG_WARN("[PatchTool] cv::seamlessClone failed: {}, fallback to copy", e.what());
         result = img.clone();
@@ -93,8 +106,24 @@ void PatchTool::applyPatch(ImageWindow* host, const QPointF& dstA, const QPointF
         sourceRoi.copyTo(result(dstCv));
     }
     host->setCurrentImage(result);
-    LOG_INFO("[PatchTool] applied seamlessClone patch ({}x{} region)",
-             dstClip.width(), dstClip.height());
+
+    // P2.2: commit undo command (single push per patch)
+    if (auto* stack = host->undoStack()) {
+        const QString modeName = [this]() {
+            switch (m_patchMode) {
+            case PatchMode::Normal:              return QStringLiteral("Normal");
+            case PatchMode::Mixed:               return QStringLiteral("Mixed");
+            case PatchMode::MonochromeTransfer:  return QStringLiteral("Monochrome Transfer");
+            }
+            return QStringLiteral("Normal");
+        }();
+        stack->push(new ImageEditCommand(host, m_backup, result,
+            QCoreApplication::translate("tools::PatchTool", "Patch (%1)").arg(modeName)));
+    }
+    m_backup.release();
+    m_strokeOpen = false;
+    LOG_INFO("[PatchTool] applied seamlessClone patch ({}x{} region, mode={})",
+             dstClip.width(), dstClip.height(), static_cast<int>(m_patchMode));
 }
 
 void PatchTool::onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)
@@ -133,16 +162,29 @@ void PatchTool::onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF&
 QWidget* PatchTool::optionPage(QWidget* parent)
 {
     auto* page = new QWidget(parent);
-    auto* layout = new QHBoxLayout(page);
-    layout->setContentsMargins(4, 2, 4, 2);
-    layout->setSpacing(8);
+    auto* layout = new QFormLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setLabelAlignment(Qt::AlignRight);
 
-    auto* hint = new QLabel(QStringLiteral("(第一次拖选 source, 第二次拖选 destination)"), page);
+    // P2.2: Patch mode combo box (3 PS-standard modes)
+    auto* modeCombo = new QComboBox(page);
+    modeCombo->addItem(QCoreApplication::translate("tools::PatchTool", "Normal"),
+                       static_cast<int>(PatchMode::Normal));
+    modeCombo->addItem(QCoreApplication::translate("tools::PatchTool", "Mixed"),
+                       static_cast<int>(PatchMode::Mixed));
+    modeCombo->addItem(QCoreApplication::translate("tools::PatchTool", "Monochrome Transfer"),
+                       static_cast<int>(PatchMode::MonochromeTransfer));
+    modeCombo->setCurrentIndex(static_cast<int>(m_patchMode));
+    QObject::connect(modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), page,
+                     [this](int idx) { m_patchMode = static_cast<PatchMode>(idx); });
+    layout->addRow(QCoreApplication::translate("tools::PatchTool", "Mode:"), modeCombo);
+
+    auto* hint = new QLabel(QCoreApplication::translate("tools::PatchTool",
+        "(first drag selects source, second drag selects destination)"), page);
     hint->setStyleSheet(QStringLiteral("color: gray; font-size: 9pt;"));
-    layout->addWidget(hint);
-    layout->addStretch(1);
+    layout->addRow(QString(), hint);
 
-    LOG_DEBUG("[PatchTool] optionPage created");
+    LOG_DEBUG("[PatchTool] optionPage created (P2.2 with Patch Mode combo)");
     return page;
 }
 

@@ -1,22 +1,25 @@
 // SPDX-License-Identifier: MIT
 //
-// HealTool implementation - P0-9.4 (2026-09-15)
+// HealTool implementation - P0-9.4 (2026-09-15) + P2.2 (2026-09-22)
 //
-// PS 同款修复画笔 (J) — cv::inpaint 集成:
-//   - Alt + 单击取样 source point
-//   - 拖动 brush path:
-//     1. 在 destination 周围 brush 范围做 inpaint mask
-//     2. cv::inpaint (Telea 算法) 用 image 周边纹理填充 mask
-//     3. 跟 source 区域混合 (texture transfer 简化版: 直接用 inpaint 结果)
-//   - 不需要 cv::seamlessClone (PatchTool 才用)
+// PS-style Healing Brush (J) — cv::inpaint integration:
+//   - Alt + click: sample source point
+//   - drag brush path:
+//     1. Build inpaint mask covering brush radius around current position
+//     2. cv::inpaint (Telea algorithm) fills mask using surrounding texture
+//     3. Write inpainted region back to m_current
 //
-// 算法选择: cv::inpaint (cv::INPAINT_TELEA, PS 同款默认算法)
+// P2.2 (2026-09-22):
+//   - Page title i18n override (parent class uses default "Clone Stamp")
+//   - Inherits ImageEditCommand undo integration + QSlider optionPage from
+//     CloneTool base (HealTool doesn't override optionPage — base UI is fine)
 //
 #include "HealTool.h"
 #include "../imagewindow.h"
 #include "../imageprocessor.h"
 #include "logger.h"
 
+#include <QCoreApplication>
 #include <QImage>
 #include <QMouseEvent>
 #include <opencv2/core.hpp>
@@ -25,14 +28,18 @@
 
 namespace tools {
 
+QString HealTool::pageTitle() const
+{
+    return QCoreApplication::translate("tools::HealTool", "Healing Brush");
+}
+
 void HealTool::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& scenePos)
 {
+    showBrushCursor(host, scenePos);
     if (!m_dragging || !m_hasSample || !host) return;
 
     auto& img = host->currentImage();
     if (img.empty()) return;
-    QImage qimg = ImageProcessor::matToQImage(img);
-    if (qimg.isNull()) return;
 
     // 1. 构造 mask (brush 范围 = 255)
     cv::Mat mask = cv::Mat::zeros(img.size(), CV_8UC1);
@@ -42,7 +49,7 @@ void HealTool::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF&
     const cv::Rect brushRect(std::max(0, cx - half), std::max(0, cy - half),
                              std::min(m_brushSize, img.cols - std::max(0, cx - half)),
                              std::min(m_brushSize, img.rows - std::max(0, cy - half)));
-    if (brushRect.width() <= 0 || brushRect.height() <= 0) return;
+    if (brushRect.width <= 0 || brushRect.height <= 0) return;
     cv::rectangle(mask, brushRect, cv::Scalar(255), cv::FILLED);
 
     // 2. cv::inpaint (Telea, PS 同款默认) — 修复 brush 区域

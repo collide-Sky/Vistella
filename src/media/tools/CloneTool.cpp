@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 //
-// CloneTool implementation - P0-9.3 (2026-09-15)
-//
-// 详见 CloneTool.h 头注释
+// CloneTool implementation - P0-9.3 (2026-09-15) + P2.2 (2026-09-22)
 //
 #include "CloneTool.h"
 #include "../imagewindow.h"
 #include "../imageprocessor.h"
 #include "logger.h"
 
-#include <QImage>
-#include <QMouseEvent>
-#include <QSpinBox>
+#include <QCoreApplication>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
+#include <QSlider>
 #include <QWidget>
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -21,6 +20,12 @@
 namespace tools {
 
 CloneTool::CloneTool(QWidget* /*parent*/) : ToolState() {}
+
+QString CloneTool::pageTitle() const
+{
+    return QCoreApplication::translate(translateContext().toUtf8().constData(),
+                                       translateTitle().toUtf8().constData());
+}
 
 void CloneTool::onEnter(ImageWindow* host)
 {
@@ -33,10 +38,30 @@ void CloneTool::onEnter(ImageWindow* host)
 void CloneTool::onExit(ImageWindow* host)
 {
     Q_UNUSED(host);
+    hideBrushCursor(host);
     m_hasSample = false;
     m_dragging = false;
     m_host = nullptr;
     LOG_DEBUG("[CloneTool] onExit");
+}
+
+void CloneTool::showBrushCursor(ImageWindow* host, const QPointF& pos)
+{
+    if (!host) return;
+    auto* cur = host->brushCursor();
+    if (!cur) return;
+    // P2.2: QGraphicsEllipseItem uses setRect(x, y, w, h); centered at (-r,-r)
+    // so the cursor circle is centered on the cursor position
+    const int r = m_brushSize;
+    cur->setRect(-r, -r, r * 2, r * 2);
+    cur->setPos(pos);
+    cur->setVisible(true);
+}
+
+void CloneTool::hideBrushCursor(ImageWindow* host)
+{
+    if (!host) return;
+    if (auto* cur = host->brushCursor()) cur->setVisible(false);
 }
 
 void CloneTool::paintAt(QImage& img, const QPointF& dst, const QPointF& src)
@@ -61,14 +86,30 @@ void CloneTool::paintAt(QImage& img, const QPointF& dst, const QPointF& src)
     }
 }
 
+void CloneTool::commitStroke(const QString& text)
+{
+    if (!m_strokeOpen || !m_host || m_backup.empty()) {
+        m_backup.release();
+        m_strokeOpen = false;
+        return;
+    }
+    m_strokeOpen = false;
+    cv::Mat current = m_host->currentImage().clone();
+    if (auto* stack = m_host->undoStack()) {
+        stack->push(new ImageEditCommand(m_host, m_backup, current, text));
+    }
+    m_backup.release();
+}
+
 void CloneTool::onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)
 {
     if (!m_host || !host) return;
 
-    // Alt + 单击 = 取样
+    // Alt + 单击 = 取样 (no stroke opened)
     if (e->modifiers() & Qt::AltModifier && e->button() == Qt::LeftButton) {
         m_samplePoint = scenePos;
         m_hasSample = true;
+        showBrushCursor(host, scenePos);
         LOG_DEBUG("[CloneTool] sampled at ({}, {})", scenePos.x(), scenePos.y());
         return;
     }
@@ -78,6 +119,10 @@ void CloneTool::onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& s
         LOG_WARN("[CloneTool] no sample, Alt+click first to set source");
         return;
     }
+
+    // P2.2: snapshot for undo before first paint of the stroke
+    m_backup = host->currentImage().clone();
+    m_strokeOpen = true;
 
     m_lastDstPos = scenePos;
     m_dragging = true;
@@ -94,10 +139,12 @@ void CloneTool::onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& s
 
     cv::Mat newMat = ImageProcessor::qImageToMat(qimg);
     host->setCurrentImage(newMat);
+    showBrushCursor(host, scenePos);
 }
 
 void CloneTool::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& scenePos)
 {
+    showBrushCursor(host, scenePos);
     if (!m_dragging || !m_hasSample || !host) return;
 
     // PS 同款: 拖动时连续 paint
@@ -114,9 +161,10 @@ void CloneTool::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF
     m_lastDstPos = scenePos;
 }
 
-void CloneTool::onMouseRelease(QMouseEvent* /*e*/, ImageWindow* /*host*/, const QPointF& /*scenePos*/)
+void CloneTool::onMouseRelease(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& /*scenePos*/)
 {
     m_dragging = false;
+    commitStroke(QCoreApplication::translate("tools::CloneTool", "Clone Stamp"));
 }
 
 void CloneTool::onKeyPress(QKeyEvent* e, ImageWindow* /*host*/)
@@ -130,28 +178,35 @@ void CloneTool::onKeyPress(QKeyEvent* e, ImageWindow* /*host*/)
 QWidget* CloneTool::optionPage(QWidget* parent)
 {
     auto* page = new QWidget(parent);
-    auto* layout = new QHBoxLayout(page);
-    layout->setContentsMargins(4, 2, 4, 2);
-    layout->setSpacing(8);
+    auto* layout = new QFormLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setLabelAlignment(Qt::AlignRight);
 
-    auto* sizeLabel = new QLabel(QStringLiteral("笔刷:"), page);
-    layout->addWidget(sizeLabel);
+    // P2.2: brush size slider + value label (P2.1 MagicWand-style consistency)
+    auto* szRow  = new QWidget(page);
+    auto* szLay  = new QHBoxLayout(szRow);
+    szLay->setContentsMargins(0, 0, 0, 0);
+    auto* szLbl  = new QLabel(QString::number(m_brushSize), szRow);
+    auto* slider = new QSlider(Qt::Horizontal, szRow);
+    slider->setRange(2, 200);
+    slider->setValue(m_brushSize);
+    slider->setTickInterval(20);
+    slider->setTickPosition(QSlider::TicksBelow);
+    szLay->addWidget(slider, 1);
+    szLay->addWidget(szLbl);
+    layout->addRow(QCoreApplication::translate("tools::CloneTool", "Brush Size:"), szRow);
+    QObject::connect(slider, &QSlider::valueChanged, page,
+                     [this, szLbl](int v) {
+                         setBrushSize(v);
+                         szLbl->setText(QString::number(v));
+                     });
 
-    auto* sizeSpin = new QSpinBox(page);
-    sizeSpin->setRange(2, 200);
-    sizeSpin->setValue(m_brushSize);
-    layout->addWidget(sizeSpin);
-
-    auto* hint = new QLabel(QStringLiteral("(Alt + 单击取样)"), page);
+    auto* hint = new QLabel(QCoreApplication::translate("tools::CloneTool",
+        "(Alt + click to sample source)"), page);
     hint->setStyleSheet(QStringLiteral("color: gray; font-size: 9pt;"));
-    layout->addWidget(hint);
+    layout->addRow(QString(), hint);
 
-    layout->addStretch(1);
-
-    QObject::connect(sizeSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-                     page, [this](int v) { m_brushSize = v; });
-
-    LOG_DEBUG("[CloneTool] optionPage created");
+    LOG_DEBUG("[CloneTool] optionPage created (P2.2)");
     return page;
 }
 

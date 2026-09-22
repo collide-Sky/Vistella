@@ -45,10 +45,21 @@ private slots:
     // CloneTool
     void test_CloneTool_alt_click_sets_sample();
     void test_CloneTool_brush_size_getter_setter();
+    void test_CloneTool_pageTitle_i18n();      // P2.2: pageTitle走 i18n, 非中文 QStringLiteral
+
+    // PatchTool
+    void test_PatchTool_patchMode_setter_3_modes();   // P2.2: PatchMode enum 3 值
+    void test_PatchTool_pageTitle_i18n();
+
+    // HealTool
+    void test_HealTool_pageTitle_i18n();
 
     // RedEyeTool
     void test_RedEyeTool_isRedEyePixel_red_returns_true();
     void test_RedEyeTool_isRedEyePixel_gray_returns_false();
+    void test_RedEyeTool_pupilSize_setter();          // P2.2: pupil size slider setter
+    void test_RedEyeTool_darken_setter();             // P2.2: darken amount setter
+    void test_RedEyeTool_pageTitle_i18n();
 };
 
 // ================== ShapeTool ==================
@@ -175,6 +186,109 @@ void tst_P0_9_System::test_RedEyeTool_isRedEyePixel_gray_returns_false()
     QVERIFY(!tools::RedEyeTool::isRedEyePixel(100, 80, 80));
     // R=G=B=255 白色
     QVERIFY(!tools::RedEyeTool::isRedEyePixel(255, 255, 255));
+}
+
+// ================== P2.2 i18n pageTitle tests ==================
+//
+// P2.2 (2026-09-22): 4 个工具的 pageTitle 改走 QCoreApplication::translate,
+//   禁止用 QStringLiteral 中文 (会乱码 + 翻译系统不识别).
+//   Verify pageTitle returns a non-empty string in baseline English (e.g. "Clone Stamp"),
+//   and does NOT contain Chinese characters (the old QStringLiteral literals did).
+//
+static bool containsChinese(const QString& s)
+{
+    for (QChar c : s) {
+        if (c.unicode() >= 0x4E00 && c.unicode() <= 0x9FFF) return true;
+    }
+    return false;
+}
+
+void tst_P0_9_System::test_CloneTool_pageTitle_i18n()
+{
+    tools::CloneTool tool;
+    const QString title = tool.pageTitle();
+    QVERIFY2(!title.isEmpty(), "pageTitle should not be empty");
+    QVERIFY2(!containsChinese(title),
+             qPrintable(QStringLiteral("CloneTool pageTitle contains Chinese: %1").arg(title)));
+    QCOMPARE(title, QStringLiteral("Clone Stamp"));   // baseline English
+}
+
+void tst_P0_9_System::test_HealTool_pageTitle_i18n()
+{
+    tools::HealTool tool;
+    const QString title = tool.pageTitle();
+    QVERIFY2(!title.isEmpty(), "HealTool pageTitle should not be empty");
+    QVERIFY2(!containsChinese(title),
+             qPrintable(QStringLiteral("HealTool pageTitle contains Chinese: %1").arg(title)));
+    QCOMPARE(title, QStringLiteral("Healing Brush"));   // overrides base
+}
+
+void tst_P0_9_System::test_PatchTool_pageTitle_i18n()
+{
+    tools::PatchTool tool;
+    const QString title = tool.pageTitle();
+    QVERIFY2(!title.isEmpty(), "PatchTool pageTitle should not be empty");
+    QVERIFY2(!containsChinese(title),
+             qPrintable(QStringLiteral("PatchTool pageTitle contains Chinese: %1").arg(title)));
+    QCOMPARE(title, QStringLiteral("Patch Tool"));
+}
+
+void tst_P0_9_System::test_RedEyeTool_pageTitle_i18n()
+{
+    tools::RedEyeTool tool;
+    const QString title = tool.pageTitle();
+    QVERIFY2(!title.isEmpty(), "RedEyeTool pageTitle should not be empty");
+    QVERIFY2(!containsChinese(title),
+             qPrintable(QStringLiteral("RedEyeTool pageTitle contains Chinese: %1").arg(title)));
+    QCOMPARE(title, QStringLiteral("Red Eye Tool"));
+}
+
+// ================== P2.2 optionPage setter tests ==================
+//
+// Verify PatchTool::setPatchMode covers all 3 enum values, and RedEyeTool
+// pupilSize / darken setters round-trip.
+//
+void tst_P0_9_System::test_PatchTool_patchMode_setter_3_modes()
+{
+    tools::PatchTool tool;
+    QCOMPARE(static_cast<int>(tool.patchMode()),
+             static_cast<int>(tools::PatchTool::PatchMode::Normal));   // default
+
+    tool.setPatchMode(tools::PatchTool::PatchMode::Mixed);
+    QCOMPARE(static_cast<int>(tool.patchMode()),
+             static_cast<int>(tools::PatchTool::PatchMode::Mixed));
+
+    tool.setPatchMode(tools::PatchTool::PatchMode::MonochromeTransfer);
+    QCOMPARE(static_cast<int>(tool.patchMode()),
+             static_cast<int>(tools::PatchTool::PatchMode::MonochromeTransfer));
+
+    tool.setPatchMode(tools::PatchTool::PatchMode::Normal);
+    QCOMPARE(static_cast<int>(tool.patchMode()),
+             static_cast<int>(tools::PatchTool::PatchMode::Normal));
+}
+
+void tst_P0_9_System::test_RedEyeTool_pupilSize_setter()
+{
+    tools::RedEyeTool tool;
+    QCOMPARE(tool.pupilSize(), 30);     // default
+    tool.setPupilSize(50);
+    QCOMPARE(tool.pupilSize(), 50);
+    tool.setPupilSize(1);
+    QCOMPARE(tool.pupilSize(), 1);
+    tool.setPupilSize(100);
+    QCOMPARE(tool.pupilSize(), 100);
+}
+
+void tst_P0_9_System::test_RedEyeTool_darken_setter()
+{
+    tools::RedEyeTool tool;
+    QCOMPARE(tool.darken(), 50);        // default
+    tool.setDarken(0);                  // no-op for this pixel
+    QCOMPARE(tool.darken(), 0);
+    tool.setDarken(100);                // full desaturate
+    QCOMPARE(tool.darken(), 100);
+    tool.setDarken(25);                 // partial
+    QCOMPARE(tool.darken(), 25);
 }
 
 QTEST_MAIN(tst_P0_9_System)

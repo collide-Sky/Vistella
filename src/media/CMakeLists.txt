@@ -109,6 +109,7 @@ add_library(vistella_media STATIC
     tools/CloneTool.h
     tools/CloneTool.cpp
     tools/HealTool.h
+    tools/HealTool.cpp
     tools/RedEyeTool.h
     tools/RedEyeTool.cpp
     tools/PatchTool.h

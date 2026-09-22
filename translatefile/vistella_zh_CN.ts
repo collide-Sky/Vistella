@@ -3327,6 +3327,32 @@ Selected: %1</source>
     </message>
 </context>
 <context>
+    <name>tools::CloneTool</name>
+    <message>
+        <location filename="../src/media/tools/CloneTool.cpp" line="167"/>
+        <source>Clone Stamp</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/CloneTool.cpp" line="197"/>
+        <source>Brush Size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/CloneTool.cpp" line="204"/>
+        <source>(Alt + click to sample source)</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>tools::HealTool</name>
+    <message>
+        <location filename="../src/media/tools/HealTool.cpp" line="33"/>
+        <source>Healing Brush</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>tools::Lasso</name>
     <message>
         <location filename="../src/media/tools/Lasso.cpp" line="74"/>
@@ -3402,6 +3428,72 @@ Selected: %1</source>
     <message>
         <location filename="../src/media/tools/MaskOptionsPanel.cpp" line="43"/>
         <source>Protect</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>tools::PatchTool</name>
+    <message>
+        <location filename="../src/media/tools/PatchTool.cpp" line="27"/>
+        <source>Patch Tool</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/PatchTool.cpp" line="121"/>
+        <source>Patch (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/PatchTool.cpp" line="171"/>
+        <source>Normal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/PatchTool.cpp" line="173"/>
+        <source>Mixed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/PatchTool.cpp" line="175"/>
+        <source>Monochrome Transfer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/PatchTool.cpp" line="180"/>
+        <source>Mode:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/PatchTool.cpp" line="182"/>
+        <source>(first drag selects source, second drag selects destination)</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>tools::RedEyeTool</name>
+    <message>
+        <location filename="../src/media/tools/RedEyeTool.cpp" line="35"/>
+        <source>Red Eye Tool</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/RedEyeTool.cpp" line="93"/>
+        <source>Red Eye Removal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/RedEyeTool.cpp" line="143"/>
+        <source>Pupil Size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/RedEyeTool.cpp" line="162"/>
+        <source>Darken:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/RedEyeTool.cpp" line="169"/>
+        <source>(drag rectangle around the red-eye area)</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
