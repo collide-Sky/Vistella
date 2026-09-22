@@ -75,12 +75,22 @@ public:
     QImage end(const QImage& image) override;
     void cancel() override;
 
+    // P2.1 (2026-09-22): feathering radius (0 = none, max 50px)
+    void setFeather(int r) { m_featherRadius = std::clamp(r, 0, 50); }
+    int  feather() const { return m_featherRadius; }
+
+    // P2.1 (2026-09-22): anti-alias on path boundary
+    void setAntiAlias(bool b) { m_antiAlias = b; }
+    bool antiAlias() const { return m_antiAlias; }
+
     // For tests / live preview
     const QPolygonF& path() const { return m_path; }
 
 private:
     QPolygonF m_path;
     bool      m_active = false;
+    int       m_featherRadius = 0;
+    bool      m_antiAlias = true;
 };
 
 // ===== MagicWand: flood fill =====
@@ -92,6 +102,12 @@ public:
     void setTolerance(int t) { m_tolerance = std::clamp(t, 0, 255); }
     int  tolerance() const { return m_tolerance; }
 
+    // P2.1 (2026-09-22): contiguous switch (PS standard)
+    //   true  (default): BFS 4-neighborhood, only connected same-color region
+    //   false:           full image scan, all pixels within tolerance
+    void setContiguous(bool c) { m_contiguous = c; }
+    bool contiguous() const { return m_contiguous; }
+
     void begin(const QPointF& p) override;
     void update(const QPointF& p) override;
     QImage end(const QImage& image) override;
@@ -101,6 +117,7 @@ private:
     bool    m_active = false;
     QPointF m_seed;
     int     m_tolerance = 32;
+    bool    m_contiguous = true;
 };
 
 // ===== ColorRange: P1 placeholder (returns empty mask) =====

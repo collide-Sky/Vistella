@@ -3327,6 +3327,52 @@ Selected: %1</source>
     </message>
 </context>
 <context>
+    <name>tools::Lasso</name>
+    <message>
+        <location filename="../src/media/tools/Lasso.cpp" line="74"/>
+        <source>Lasso</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/Lasso.cpp" line="111"/>
+        <source>Feather:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/Lasso.cpp" line="120"/>
+        <source>Anti-alias</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>tools::MagicWand</name>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="75"/>
+        <source>MagicWand</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="112"/>
+        <source>Tolerance:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="127"/>
+        <source>Contiguous</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="138"/>
+        <source>P2.x reserved: Sample All Layers (cross-layer pixel sampling).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="140"/>
+        <source>Sample:</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>tools::MaskOptionsPanel</name>
     <message>
         <location filename="../src/media/tools/MaskOptionsPanel.cpp" line="34"/>

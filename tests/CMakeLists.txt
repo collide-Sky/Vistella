@@ -162,3 +162,9 @@ add_vistella_test(tst_AdjustmentDialogs)
 # P1.5.1 (2026-09-18): AdjustmentPanel::setStandaloneParams dispatcher
 #   Routing dialogId -> applyXxxFromArgs, params struct updates, UI slider refresh
 add_vistella_test(tst_AdjustmentDispatcher)
+
+# P2.1 (2026-09-22): Vector selection tools full implementation
+#   MagicWand: contiguous / non-contiguous / tolerance sweep
+#   Lasso: feathering (integral-image box blur) + anti-alias
+#   MarchingAnts phase cycle
+add_vistella_test(tst_LassoMagicWand)

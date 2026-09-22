@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// Lasso implementation - F-L (2026-09-10) + P0-4.5 (2026-09-10)
+// Lasso implementation - F-L (2026-09-10) + P0-4.5 (2026-09-10) + P2.1 (2026-09-22)
 //
 #include "Lasso.h"
 #include "../imagewindow.h"
@@ -8,9 +8,15 @@
 #include "../selection/SelectionStrategy.h"
 #include "logger.h"
 
+#include <QCoreApplication>
+
+#include <QCheckBox>
 #include <QCursor>
+#include <QFormLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QSlider>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -65,7 +71,7 @@ void Lasso::onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF& sce
 
 mediators::ToolId Lasso::id() const { return mediators::ToolId::Lasso; }
 
-QString Lasso::pageTitle() const { return QStringLiteral("Lasso"); }
+QString Lasso::pageTitle() const { return QCoreApplication::translate("tools::Lasso", "Lasso"); }
 
 QCursor Lasso::cursor() const
 {
@@ -73,15 +79,51 @@ QCursor Lasso::cursor() const
     return Qt::CrossCursor;
 }
 
+void Lasso::setFeather(int r)
+{
+    if (m_strategy) m_strategy->setFeather(r);
+}
+
+void Lasso::setAntiAlias(bool b)
+{
+    if (m_strategy) m_strategy->setAntiAlias(b);
+}
+
 QWidget* Lasso::optionPage(QWidget* parent)
 {
     auto* page = new QWidget(parent);
-    auto* layout = new QVBoxLayout(page);
+    auto* layout = new QFormLayout(page);
     layout->setContentsMargins(4, 4, 4, 4);
-    auto* label = new QLabel(QStringLiteral("Lasso (L) options (F-L stub)"), page);
-    layout->addWidget(label);
-    layout->addStretch(1);
-    LOG_DEBUG("[Lasso] optionPage created");
+    layout->setLabelAlignment(Qt::AlignRight);
+
+    // Feather slider (0..50 px)
+    auto* feaRow = new QWidget(page);
+    auto* feaLay = new QHBoxLayout(feaRow);
+    feaLay->setContentsMargins(0, 0, 0, 0);
+    auto* feaLbl = new QLabel(QString::number(0), feaRow);
+    m_featherSlider = new QSlider(Qt::Horizontal, feaRow);
+    m_featherSlider->setRange(0, 50);
+    m_featherSlider->setValue(m_strategy ? m_strategy->feather() : 0);
+    m_featherSlider->setTickInterval(10);
+    m_featherSlider->setTickPosition(QSlider::TicksBelow);
+    feaLay->addWidget(m_featherSlider, 1);
+    feaLay->addWidget(feaLbl);
+    layout->addRow(QCoreApplication::translate("tools::Lasso", "Feather:"), feaRow);
+    // P2.1: 3-arg connect (ToolState is not QObject — see MagicWand.cpp note)
+    QObject::connect(m_featherSlider, &QSlider::valueChanged,
+                     [this, feaLbl](int v) {
+                         setFeather(v);
+                         feaLbl->setText(QString::number(v));
+                     });
+
+    // Anti-alias checkbox (default on, since feathering wants smooth edges)
+    m_antiAlias = new QCheckBox(QCoreApplication::translate("tools::Lasso", "Anti-alias"), page);
+    m_antiAlias->setChecked(m_strategy ? m_strategy->antiAlias() : true);
+    layout->addRow(QString(), m_antiAlias);
+    QObject::connect(m_antiAlias, &QCheckBox::toggled,
+                     [this](bool b) { setAntiAlias(b); });
+
+    LOG_DEBUG("[Lasso] optionPage created (P2.1 with feather + anti-alias)");
     return page;
 }
 

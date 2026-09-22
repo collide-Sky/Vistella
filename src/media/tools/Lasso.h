@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 //
-// Lasso - F-L (2026-09-10) + P0-4.5 (2026-09-10)
+// Lasso - F-L (2026-09-10) + P0-4.5 (2026-09-10) + P2.1 (2026-09-22)
 //
-// PS-style Lasso tool. P0-4 stage: free-form polygon -> SelectionModel mask.
+// PS-style Lasso tool. P2.1: option page (Feather slider + Anti-alias checkbox)
+// wired to the strategy; free-form polygon -> SelectionModel mask.
 //
 #pragma once
 
@@ -12,6 +13,8 @@
 class QCursor;
 class QWidget;
 class QMouseEvent;
+class QSlider;
+class QCheckBox;
 
 namespace selection { class LassoSelectionStrategy; }
 
@@ -35,8 +38,16 @@ public:
     QCursor cursor() const override;
     QWidget* optionPage(QWidget* parent = nullptr) override;
 
+    // P2.1: option UI hooks
+    void setFeather(int r);
+    void setAntiAlias(bool b);
+
 private:
     std::unique_ptr<selection::LassoSelectionStrategy> m_strategy;
+
+    // P2.1: option page widgets (raw pointers; parented to optionPage QWidget)
+    QSlider*  m_featherSlider = nullptr;
+    QCheckBox* m_antiAlias    = nullptr;
 };
 
 } // namespace tools

@@ -502,11 +502,6 @@
 <context>
     <name>ImageWindow</name>
     <message>
-        <location filename="../src/media/imagewindow.ui" line="88"/>
-        <source>模糊</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/media/imagewindow.ui" line="63"/>
         <source>马赛克 (拖动涂抹)</source>
         <translation type="unfinished"></translation>
@@ -519,6 +514,11 @@
     <message>
         <location filename="../src/media/imagewindow.ui" line="83"/>
         <source>像素化</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/imagewindow.ui" line="88"/>
+        <source>模糊</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1361,6 +1361,11 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/app/mainwindow.cpp" line="272"/>
+        <source>导出...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/app/mainwindow.cpp" line="273"/>
         <source>关闭当前</source>
         <translation type="unfinished"></translation>
@@ -1449,6 +1454,16 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/app/mainwindow.cpp" line="318"/>
+        <source>水平翻转</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/app/mainwindow.cpp" line="319"/>
+        <source>垂直翻转</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/app/mainwindow.cpp" line="320"/>
         <source>旋转 90° 顺时针</source>
         <translation type="unfinished"></translation>
@@ -1488,6 +1503,11 @@
         <location filename="../src/app/mainwindow.cpp" line="395"/>
         <location filename="../src/app/mainwindow.cpp" line="2602"/>
         <source>信息树</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/app/mainwindow.cpp" line="405"/>
+        <source>右侧面板</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1601,26 +1621,6 @@
     <message>
         <location filename="../src/app/mainwindow.cpp" line="489"/>
         <source>裁剪</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/app/mainwindow.cpp" line="318"/>
-        <source>水平翻转</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/app/mainwindow.cpp" line="272"/>
-        <source>导出...</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/app/mainwindow.cpp" line="319"/>
-        <source>垂直翻转</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/app/mainwindow.cpp" line="405"/>
-        <source>右侧面板</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2338,27 +2338,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="253"/>
-        <source>检测到上次未正常退出</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/app/main.cpp" line="254"/>
-        <source>上次程序异常退出, 仍有 %1 个文件未关闭。
-是否恢复这些文件?</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/filters/liquify/LiquifyCommand.cpp" line="14"/>
-        <source>Liquify</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/tools/MaskBrushCommand.cpp" line="17"/>
-        <source>Mask Brush Stroke</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/media/docks/TransformDialog.cpp" line="23"/>
         <source>Transform</source>
         <translation type="unfinished"></translation>
@@ -2417,6 +2396,27 @@
     <message>
         <location filename="../src/media/docks/TransformDialog.cpp" line="112"/>
         <source>Cancel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/filters/liquify/LiquifyCommand.cpp" line="14"/>
+        <source>Liquify</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MaskBrushCommand.cpp" line="17"/>
+        <source>Mask Brush Stroke</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/app/main.cpp" line="253"/>
+        <source>检测到上次未正常退出</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/app/main.cpp" line="254"/>
+        <source>上次程序异常退出, 仍有 %1 个文件未关闭。
+是否恢复这些文件?</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -3324,6 +3324,52 @@ Selected: %1</source>
     <message>
         <location filename="../src/media/filters/liquify/LiquifyOptionsPanel.cpp" line="258"/>
         <source>Face %1  (%2, %3, %4 x %5)</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>tools::Lasso</name>
+    <message>
+        <location filename="../src/media/tools/Lasso.cpp" line="74"/>
+        <source>Lasso</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/Lasso.cpp" line="111"/>
+        <source>Feather:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/Lasso.cpp" line="120"/>
+        <source>Anti-alias</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>tools::MagicWand</name>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="75"/>
+        <source>MagicWand</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="112"/>
+        <source>Tolerance:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="127"/>
+        <source>Contiguous</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="138"/>
+        <source>P2.x reserved: Sample All Layers (cross-layer pixel sampling).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/MagicWand.cpp" line="140"/>
+        <source>Sample:</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

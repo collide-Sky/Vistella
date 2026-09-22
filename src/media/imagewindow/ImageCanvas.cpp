@@ -183,6 +183,15 @@ void ImageCanvas::setTransformBox(transform::TransformBox* box)
     viewport()->update();
 }
 
+// P2.1 (2026-09-22): mask overlay toggle (PS-style "Show Selection Overlay")
+void ImageCanvas::setMaskOverlayVisible(bool v)
+{
+    if (m_showMaskOverlay == v) return;
+    m_showMaskOverlay = v;
+    LOG_INFO("[ImageCanvas] setMaskOverlayVisible: {}", v ? "ON" : "off");
+    viewport()->update();
+}
+
 void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
 {
     if (!m_sel || m_sel->isEmpty()) return;
@@ -195,6 +204,40 @@ void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
     const QRect bbox = m_sel->boundingRect();
     if (bbox.isEmpty()) return;
 
+    // Map image -> scene (1:1 since pixmap not transformed independently)
+    QPointF origin = m_item ? m_item->scenePos() : QPointF(0, 0);
+    QRectF sceneBbox(origin + QPointF(bbox.x(), bbox.y()),
+                     QSizeF(bbox.width(), bbox.height()));
+
+    // P2.1 (2026-09-22): mask overlay — fill the selected region with 30% blue
+    //   tint so users can see exactly what is selected without obscuring the
+    //   image. Default off (PS default: marching ants only). Toggle via
+    //   setMaskOverlayVisible() (called from menu / keyboard shortcut).
+    if (m_showMaskOverlay) {
+        p->save();
+        p->setRenderHint(QPainter::Antialiasing, false);
+        p->setCompositionMode(QPainter::CompositionMode_SourceAtop);
+        // Build a QImage of mask region tinted blue, then draw
+        //   PS uses 50% blue overlay (RGB 0, 0, 255) — we use 76/255 alpha for visibility
+        QImage tintImage(mask.size(), QImage::Format_ARGB32_Premultiplied);
+        tintImage.fill(QColor(0, 120, 255, 76));
+        // Apply mask alpha to tint: where mask=0, tint=transparent
+        QImage maskedTint(mask.size(), QImage::Format_ARGB32_Premultiplied);
+        maskedTint.fill(Qt::transparent);
+        for (int y = 0; y < mask.height(); ++y) {
+            const uchar* mrow = mask.constScanLine(y);
+            QRgb* drow = reinterpret_cast<QRgb*>(maskedTint.scanLine(y));
+            for (int x = 0; x < mask.width(); ++x) {
+                const int a = mrow[x];
+                if (a == 0) continue;
+                const int blue = 76 * a / 255;
+                drow[x] = qRgba(0, 120 * a / 255, 255 * a / 255, blue);
+            }
+        }
+        p->drawImage(sceneBbox.topLeft(), maskedTint);
+        p->restore();
+    }
+
     // Build outline: scan each row, find runs of selected pixels, draw rects
     //   For typical PS-style "rect + lasso" selections, this gives clean outline
     p->save();
@@ -204,10 +247,7 @@ void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
     penBlack.setDashOffset(phaseOffset);
     penBlack.setCosmetic(true);   // 1px regardless of zoom
     p->setPen(penBlack);
-    // Map image -> scene (1:1 since pixmap not transformed independently)
-    QPointF origin = m_item ? m_item->scenePos() : QPointF(0, 0);
-    p->drawRect(QRectF(origin + QPointF(bbox.x(), bbox.y()),
-                       QSizeF(bbox.width(), bbox.height())));
+    p->drawRect(sceneBbox);
     p->restore();
 
     // P0-6.10 (2026-09-14): 自由变换 box 渲染 — 10 handle + 1 rotation line

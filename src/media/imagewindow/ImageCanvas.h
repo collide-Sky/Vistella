@@ -56,6 +56,13 @@ public:
     // P0-4.3: selection rendering
     void setSelectionModel(selection::SelectionModel* sel);
 
+    // P2.1 (2026-09-22): mask overlay visibility (PS-style "Show Selection Overlay")
+    //   When true, drawForeground fills the mask region with 30% blue tint
+    //   so users can see exactly what is selected without obscuring the image.
+    //   Default off (PS default: "marching ants only").
+    void setMaskOverlayVisible(bool v);
+    bool isMaskOverlayVisible() const { return m_showMaskOverlay; }
+
     // P0-6.10 (2026-09-14): 自由变换 box (10 handle 渲染)
     //   m_box 是 weak ref, ImageWindow 持有所有权
     //   当 m_box != nullptr 时, drawForeground 画 8 handle + 1 center + 1 rotation handle
@@ -109,4 +116,9 @@ private:
     selection::MarchingAnts*   m_ants = nullptr;     // owned
     // P0-6.10: 自由变换 box (weak ref, ImageWindow::m_box 持所有权)
     transform::TransformBox*   m_box  = nullptr;
+
+    // P2.1 (2026-09-22): mask overlay visibility (PS-style "Show Selection Overlay"
+    //   default off; flip on via menu / keyboard shortcut). When enabled,
+    //   drawForeground fills the inverse mask region with 30% blue tint.
+    bool                       m_showMaskOverlay = false;
 };
