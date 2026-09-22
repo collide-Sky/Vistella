@@ -24,6 +24,7 @@
 #include "../src/media/tools/ShapeTool.h"
 #include "../src/media/tools/PenTool.h"
 #include "../src/media/tools/CloneTool.h"
+#include "../src/media/tools/Crop.h"
 #include "../src/media/tools/HealTool.h"
 #include "../src/media/tools/PatchTool.h"
 #include "../src/media/tools/RedEyeTool.h"
@@ -60,6 +61,11 @@ private slots:
     void test_RedEyeTool_pupilSize_setter();          // P2.2: pupil size slider setter
     void test_RedEyeTool_darken_setter();             // P2.2: darken amount setter
     void test_RedEyeTool_pageTitle_i18n();
+
+    // P2.3 (2026-09-22): Crop tool
+    void test_Crop_aspectRatio_setter_4_modes();      // Free / 1:1 / 4:3 / 16:9
+    void test_Crop_pageTitle_i18n();
+    void test_Crop_hasCropRect_state();               // drag rectangle state tracking
 };
 
 // ================== ShapeTool ==================
@@ -289,6 +295,54 @@ void tst_P0_9_System::test_RedEyeTool_darken_setter()
     QCOMPARE(tool.darken(), 100);
     tool.setDarken(25);                 // partial
     QCOMPARE(tool.darken(), 25);
+}
+
+// ================== P2.3 Crop tests ==================
+//
+// P2.3 (2026-09-22): full Crop tool impl with optionPage (Aspect Ratio combo)
+//   + ImageEditCommand undo on release. Verify enum round-trips and drag state.
+//
+void tst_P0_9_System::test_Crop_aspectRatio_setter_4_modes()
+{
+    tools::Crop tool;
+    QCOMPARE(static_cast<int>(tool.aspectRatio()),
+             static_cast<int>(tools::Crop::AspectRatio::Free));   // default
+
+    tool.setAspectRatio(tools::Crop::AspectRatio::Ratio1_1);
+    QCOMPARE(static_cast<int>(tool.aspectRatio()),
+             static_cast<int>(tools::Crop::AspectRatio::Ratio1_1));
+
+    tool.setAspectRatio(tools::Crop::AspectRatio::Ratio4_3);
+    QCOMPARE(static_cast<int>(tool.aspectRatio()),
+             static_cast<int>(tools::Crop::AspectRatio::Ratio4_3));
+
+    tool.setAspectRatio(tools::Crop::AspectRatio::Ratio16_9);
+    QCOMPARE(static_cast<int>(tool.aspectRatio()),
+             static_cast<int>(tools::Crop::AspectRatio::Ratio16_9));
+
+    tool.setAspectRatio(tools::Crop::AspectRatio::Free);
+    QCOMPARE(static_cast<int>(tool.aspectRatio()),
+             static_cast<int>(tools::Crop::AspectRatio::Free));
+}
+
+void tst_P0_9_System::test_Crop_pageTitle_i18n()
+{
+    tools::Crop tool;
+    const QString title = tool.pageTitle();
+    QVERIFY2(!title.isEmpty(), "Crop pageTitle should not be empty");
+    QVERIFY2(!containsChinese(title),
+             qPrintable(QStringLiteral("Crop pageTitle contains Chinese: %1").arg(title)));
+    QCOMPARE(title, QStringLiteral("Crop Tool"));
+}
+
+void tst_P0_9_System::test_Crop_hasCropRect_state()
+{
+    tools::Crop tool;
+    QVERIFY(!tool.hasCropRect());      // initial state
+    QVERIFY(!tool.hasCropRect());
+    // cropA / cropB default to (0,0)
+    QCOMPARE(tool.cropA(), QPointF());
+    QCOMPARE(tool.cropB(), QPointF());
 }
 
 QTEST_MAIN(tst_P0_9_System)

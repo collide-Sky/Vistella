@@ -21,6 +21,7 @@
 // P1.4.6 (2026-09-17): Unified transform dialog (replaces P1.4.5's chained
 //   QInputDialog).
 #include "../media/docks/TransformDialog.h"
+#include "../media/imagewindow/TextOverlayController.h"   // P2.3: bold/italic toggle via TextOverlayController
 #include <opencv2/imgproc.hpp>
 #include <QInputDialog>
 #include "logger.h"
@@ -42,11 +43,14 @@
 #include <QShowEvent>
 #include <QDesktopServices>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontDialog>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -56,6 +60,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSizePolicy>
+#include <QStandardPaths>
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
@@ -580,21 +585,68 @@ void MainWindow::buildActions()
         onSmartObjectResetTransform();
     });
 
-    // ---- 文字 (Text) ----
+    // ---- 文字 (Text) - P2.3 (2026-09-22): text menu actions routed to active ImageWindow ----
+//   Earlier (P0) these were notImpl placeholders. P2.3 wires them through
+//   ImageWindow::textOverlay() so font / size / color / bold / italic change
+//   the active text item via TextOverlayController + applyStyleToCurrent().
     QMenu *mText = mb->addMenu(tr("文字"));
     QAction *aTextFont = mText->addAction(tr("字体..."));
-    connect(aTextFont, &QAction::triggered, this, notImpl(tr("文字"), tr("字体")));
+    connect(aTextFont, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        auto* t = iw->textOverlay();
+        if (!t) { statusBar()->showMessage(tr("文字覆盖层未就绪"), 2000); return; }
+        bool ok = false;
+        QFont f = QFontDialog::getFont(&ok, QFont(t->textFont()), this, tr("选择字体"));
+        if (!ok) return;
+        t->onFontChanged(f.family());
+        statusBar()->showMessage(tr("字体已更新为 %1").arg(f.family()), 2000);
+    });
     QAction *aTextSize = mText->addAction(tr("字号..."));
-    connect(aTextSize, &QAction::triggered, this, notImpl(tr("文字"), tr("字号")));
+    connect(aTextSize, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        auto* t = iw->textOverlay();
+        if (!t) { statusBar()->showMessage(tr("文字覆盖层未就绪"), 2000); return; }
+        bool ok = false;
+        const int sz = QInputDialog::getInt(this, tr("字号"),
+            tr("字号 (pt):"), t->textSize(), 6, 200, 1, &ok);
+        if (!ok) return;
+        t->onSizeChanged(sz);
+        statusBar()->showMessage(tr("字号已更新为 %1").arg(sz), 2000);
+    });
     QAction *aTextColor = mText->addAction(tr("颜色..."));
-    connect(aTextColor, &QAction::triggered, this, notImpl(tr("文字"), tr("颜色")));
+    connect(aTextColor, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        iw->onTextColorClicked();
+    });
     mText->addSeparator();
     QAction *aTextBold = mText->addAction(tr("粗体"));
     aTextBold->setShortcut(QKeySequence(QStringLiteral("Ctrl+B")));
-    connect(aTextBold, &QAction::triggered, this, notImpl(tr("文字"), tr("粗体")));
+    connect(aTextBold, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        auto* t = iw->textOverlay();
+        if (!t) { statusBar()->showMessage(tr("文字覆盖层未就绪"), 2000); return; }
+        // P2.3: toggle via TextOverlayController + apply (same path as TextTool optionPage)
+        const bool newBold = !t->textBold();
+        t->setTextBold(newBold);
+        t->applyStyleToCurrent();
+        statusBar()->showMessage(newBold ? tr("粗体: 开") : tr("粗体: 关"), 2000);
+    });
     QAction *aTextItalic = mText->addAction(tr("斜体"));
     aTextItalic->setShortcut(QKeySequence(QStringLiteral("Ctrl+I")));
-    connect(aTextItalic, &QAction::triggered, this, notImpl(tr("文字"), tr("斜体")));
+    connect(aTextItalic, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        auto* t = iw->textOverlay();
+        if (!t) { statusBar()->showMessage(tr("文字覆盖层未就绪"), 2000); return; }
+        const bool newItalic = !t->textItalic();
+        t->setTextItalic(newItalic);
+        t->applyStyleToCurrent();
+        statusBar()->showMessage(newItalic ? tr("斜体: 开") : tr("斜体: 关"), 2000);
+    });
 
     // ---- 选择 (Select) ----
     QMenu *mSelect = mb->addMenu(tr("选择"));
@@ -1551,31 +1603,104 @@ void MainWindow::onImageInverse()
         statusBar()->showMessage(tr("当前页面没有可反选的选区"), 2000);
     }
 }
-// P0 placeholder (2026-09-18): onFind / onReplace are minimal honest stubs.
-//   Full text-overlay find/replace is deferred to a later stage (TextLayer
-//   search controller). We deliberately avoid the misleading "unimplemented"
-//   message which implied "broken" - this version tells the user which stage
-//   to expect the feature in.
+// P2.3 (2026-09-22): onFind / onReplace — search TextLayer text via QInputDialog
+//   Active ImageWindow -> LayerStack -> scan all Text layers for substring.
+//   Replace pushes per-layer setText command via LayerCommand factory.
 void MainWindow::onFind()
 {
+    auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!iw) {
+        statusBar()->showMessage(tr("查找 — 没有活动的图片窗口"), 3000);
+        return;
+    }
+    bool ok = false;
+    const QString pattern = QInputDialog::getText(this, tr("查找"),
+        tr("查找文本 (在所有文字图层):"), QLineEdit::Normal, QString(), &ok);
+    if (!ok || pattern.isEmpty()) return;
+
+    auto* stack = iw->layerStack();
+    if (!stack) {
+        statusBar()->showMessage(tr("查找 — 图层栈不可用"), 3000);
+        return;
+    }
+    int hits = 0;
+    for (int i = 0; i < stack->count(); ++i) {
+        auto l = stack->at(i);
+        if (!l) continue;
+        if (l->kind != layers::Layer::Text) continue;
+        if (l->text.contains(pattern, Qt::CaseInsensitive)) {
+            LOG_INFO("[MainWindow] onFind: layer {} text contains '{}' (length {})",
+                     i, pattern.toStdString(), l->text.length());
+            ++hits;
+        }
+    }
     statusBar()->showMessage(
-        tr("查找: P0 placeholder — 全文本图层搜索在后续阶段实装"), 3000);
+        tr("查找: 模式 '%1' 在 %2 个文字图层中找到").arg(pattern).arg(hits), 4000);
 }
+
 void MainWindow::onReplace()
 {
+    auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!iw) {
+        statusBar()->showMessage(tr("替换 — 没有活动的图片窗口"), 3000);
+        return;
+    }
+    bool ok = false;
+    const QString pattern = QInputDialog::getText(this, tr("替换"),
+        tr("查找文本:"), QLineEdit::Normal, QString(), &ok);
+    if (!ok || pattern.isEmpty()) return;
+    const QString replacement = QInputDialog::getText(this, tr("替换"),
+        tr("替换为:"), QLineEdit::Normal, QString(), &ok);
+    if (!ok) return;
+
+    auto* stack = iw->layerStack();
+    if (!stack) {
+        statusBar()->showMessage(tr("替换 — 图层栈不可用"), 3000);
+        return;
+    }
+    auto* undoStack = iw->undoStack();
+    int replaced = 0;
+    for (int i = 0; i < stack->count(); ++i) {
+        auto l = stack->at(i);
+        if (!l) continue;
+        if (l->kind != layers::Layer::Text) continue;
+        if (!l->text.contains(pattern, Qt::CaseInsensitive)) continue;
+        const QString newText = QString(l->text).replace(pattern, replacement, Qt::CaseInsensitive);
+        // P2.3: SetText redo is no-op (Opacity-pattern) — apply new text first,
+        //   then push command that stores oldText for undo.
+        stack->setText(i, newText);
+        if (undoStack) {
+            undoStack->push(layers::LayerCommand::makeSetText(stack, i, l->text));
+        }
+        ++replaced;
+    }
     statusBar()->showMessage(
-        tr("替换: P0 placeholder — 全文本图层替换在后续阶段实装"), 3000);
+        tr("替换: '%1' → '%2' 在 %3 个文字图层中应用").arg(pattern, replacement).arg(replaced),
+        4000);
 }
 void MainWindow::onZoomIn()  { statusBar()->showMessage(tr("放大"), 2000); }
 void MainWindow::onZoomOut() { statusBar()->showMessage(tr("缩小"), 2000); }
-// P0 placeholder (2026-09-18): full workspace reset (docks / panels /
-//   toolbars to PS/PW default layout) is deferred to a later stage. This
-//   version is a no-op action that surfaces the menu entry without claiming
-//   a broken "unimplemented" message.
+// P2.3 (2026-09-22): onResetLayout — restore default dock/panel layout
+//   Calls QMainWindow::restoreState with the saved default state file
+//   (workspace_default.ini under QStandardPaths::AppDataLocation).
+//   Falls back to a statusBar message if the file is missing.
 void MainWindow::onResetLayout()
 {
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + "/workspace_default.ini";
+    QFile f(path);
+    if (f.exists() && f.open(QIODevice::ReadOnly)) {
+        const QByteArray state = f.readAll();
+        f.close();
+        if (!state.isEmpty()) {
+            restoreState(state);
+            statusBar()->showMessage(tr("默认布局已恢复"), 2000);
+            LOG_INFO("[MainWindow] onResetLayout: restored from {}", path.toStdString());
+            return;
+        }
+    }
     statusBar()->showMessage(
-        tr("默认布局恢复: 见后续阶段 workspace 全局 reset 实装"), 3000);
+        tr("默认布局文件不存在 (%1) — 请先保存当前布局为默认").arg(path), 3000);
 }
 
 // P0-6.5 (2026-09-14): 图像变换 6 槽 — 调当前 ImageWindow 接口

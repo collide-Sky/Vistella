@@ -363,6 +363,11 @@ public slots:
     //   clears hasTransform (matches PS semantics).
     void applySmartObjectTransform(int idx, const QTransform& t);
 
+    // P2.3 (2026-09-22): text color picker (MainWindow text menu calls this)
+    //   Originally private; promoted to public slot so MainWindow::aTextColor
+    //   connect can invoke it without friend declaration.
+    void onTextColorClicked();
+
 private slots:
     // 工具栏 actions
     // P0-1.4 (2026-09-07): onSave / onSaveAs / onOpen / onClose 搬到 ImageIOController
@@ -380,8 +385,6 @@ private slots:
     // 文字功能: 双击图片空白/已有文字直接进入编辑, 无需按钮
     // 马赛克模式切换 (按钮) - 进马赛克时禁止双击进入文字编辑, 退马赛克时恢复
     void onMosaicModeToggled(bool on);
-    // 文字颜色按钮
-    void onTextColorClicked();
     // 文字 font / size 改变 -> 应用到选中/正在编辑的 item
     void onTextFontChanged();
     void onTextSizeChanged(int v);
