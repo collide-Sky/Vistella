@@ -46,6 +46,7 @@ private slots:
     void test_linked();
     void test_blend();
     void test_rename();
+    void test_visible_callerPreApply_bugReproducer();   // P2.5 bug reproducer
 
     // ---- Merge / Group / Ungroup ----
     void test_merge();
@@ -382,6 +383,31 @@ void tst_LayerCommand::test_rename()
     // Phase 1 简化: Rename undo 路径在 mainwindow 实际不调 (因为我们直接调 stack.rename 改了 name)
     //   LayerCommand::Rename::undo 走 l->name = m_strVal, 但 m_strVal == old name, 跟当前 name 一样
     //   所以 undo 是 no-op, 测试这里跳过 undo
+}
+
+void tst_LayerCommand::test_visible_callerPreApply_bugReproducer()
+{
+    // P2.5 bug fix (2026-09-22): LayerCommand::Visible redo used to revert
+    //   to m_boolVal (the old value), silently undoing the caller's
+    //   setVisible(new). Now redo is a no-op (matches Opacity pattern).
+    //   The caller pattern in ImageWindow::applyLayerOp is:
+    //       oldVisible = l->visible;
+    //       setVisible(newVisible);
+    //       push(new LayerCommand(Visible, idx, oldVisible));
+    //   Without the fix, push's redo() would set visible back to oldVisible.
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("L1"), makeMat());
+    QCOMPARE(stack.at(0)->visible, true);
+
+    QUndoStack undoStack;
+    const bool oldVisible = stack.at(0)->visible;             // true
+    QVERIFY(stack.setVisible(0, false));                       // caller pre-applies
+    QCOMPARE(stack.at(0)->visible, false);                     // caller change took effect
+    undoStack.push(new LayerCommand(
+        &stack, LayerCommand::Visible, 0, oldVisible));       // m_boolVal = old
+    QCOMPARE(stack.at(0)->visible, false);                     // push's redo did NOT revert
+    undoStack.undo();                                           // undo restores old
+    QCOMPARE(stack.at(0)->visible, true);
 }
 
 // =====================================================================

@@ -700,28 +700,30 @@ void LayerCommand::redo()
         break;
     }
     case Visible: {
-        auto l = m_stack->at(m_index);
-        if (l) l->visible = m_boolVal;
+        // P2.5 bug fix (2026-09-22): redo is a no-op. Caller did
+        //   setVisible(newValue) before pushing; pushing a redo that
+        //   reverts to m_boolVal (the old value) would silently undo the
+        //   caller's setVisible. Matches Opacity/SetText pattern.
         break;
     }
     case Locked: {
-        auto l = m_stack->at(m_index);
-        if (l) l->locked = m_boolVal;
+        // P2.5 bug fix (2026-09-22): redo is a no-op (matches Visible).
         break;
     }
     case Linked: {
-        auto l = m_stack->at(m_index);
-        if (l) l->isLinked = m_boolVal;
+        // P2.5 bug fix (2026-09-22): redo is a no-op (matches Visible).
         break;
     }
     case Blend: {
-        auto l = m_stack->at(m_index);
-        if (l) l->blend = static_cast<Layer::BlendMode>(m_intVal);
+        // P2.5 bug fix (2026-09-22): redo is a no-op. Caller did
+        //   setBlend(newMode) before pushing; a redo that reverts to
+        //   m_intVal (the old mode) would silently undo the caller.
         break;
     }
     case Rename: {
-        auto l = m_stack->at(m_index);
-        if (l) l->name = m_strVal;
+        // P2.5 bug fix (2026-09-22): redo is a no-op. Caller did
+        //   rename(newName) before pushing; a redo that reverts to
+        //   m_strVal (the old name) would silently undo the caller.
         break;
     }
     case Merge: {
