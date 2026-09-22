@@ -774,30 +774,55 @@ void MainWindow::buildActions()
         statusBar()->showMessage(tr("选区羽化完成 (半径 %1 px)").arg(radius), 2000);
     });
 
-    // ---- 滤镜 (Filter) - P0-5 (2026-09-10) 4 action 接真 ----
+    // ---- 滤镜 (Filter) - P0-5 (2026-09-10) 4 action + P3.1.2 (2026-09-22) 16 action ----
+    //   P3.1.2: 4 flat action -> 5 submenu (4+3+3+5+5=20 滤镜 PS 同款)
+    //   每个 action 调 onFilterMenuTriggered(kind), 弹 FilterDialog (PS 风格: Apply 实时预览 + OK 入撤销栈)
     QMenu *mFilter = mb->addMenu(tr("滤镜"));
-    QAction *aFilterBlur = mFilter->addAction(tr("模糊..."));
-    connect(aFilterBlur, &QAction::triggered, this, [this]{
-        onFilterMenuTriggered(filter::FilterKind::GaussianBlur);
-    });
-    QAction *aFilterSharpen = mFilter->addAction(tr("锐化..."));
-    connect(aFilterSharpen, &QAction::triggered, this, [this]{
-        onFilterMenuTriggered(filter::FilterKind::Sharpen);
-    });
-    QAction *aFilterEmboss = mFilter->addAction(tr("浮雕..."));
-    connect(aFilterEmboss, &QAction::triggered, this, [this]{
-        onFilterMenuTriggered(filter::FilterKind::Emboss);
-    });
+
+    // P3.1.2 (2026-09-22): 通用 lambda: add a submenu action + 自动连接 onFilterMenuTriggered
+    auto addFilterAction = [this](QMenu *parent, const QString& text, filter::FilterKind kind) {
+        QAction *a = parent->addAction(text);
+        connect(a, &QAction::triggered, this, [this, kind]{
+            onFilterMenuTriggered(kind);
+        });
+    };
+
+    // 5 submenu: 模糊(4) / 锐化(3) / 风格化(3) / 颜色(5) / 其他(5)
+    QMenu *mFilterBlur = mFilter->addMenu(tr("模糊"));
+    addFilterAction(mFilterBlur, tr("高斯模糊..."),         filter::FilterKind::GaussianBlur);
+    addFilterAction(mFilterBlur, tr("方框模糊..."),         filter::FilterKind::BoxBlur);
+    addFilterAction(mFilterBlur, tr("中值模糊..."),         filter::FilterKind::MedianBlur);
+    addFilterAction(mFilterBlur, tr("双边模糊..."),         filter::FilterKind::BilateralBlur);
+
+    QMenu *mFilterSharpen = mFilter->addMenu(tr("锐化"));
+    addFilterAction(mFilterSharpen, tr("锐化..."),           filter::FilterKind::Sharpen);
+    addFilterAction(mFilterSharpen, tr("进一步锐化..."),     filter::FilterKind::SharpenMore);
+    addFilterAction(mFilterSharpen, tr("反锐化蒙版..."),     filter::FilterKind::UnsharpMask);
+
+    QMenu *mFilterStyle = mFilter->addMenu(tr("风格化"));
+    addFilterAction(mFilterStyle, tr("浮雕..."),             filter::FilterKind::Emboss);
+    addFilterAction(mFilterStyle, tr("查找边缘..."),         filter::FilterKind::FindEdges);
+    addFilterAction(mFilterStyle, tr("照亮边缘..."),         filter::FilterKind::GlowingEdges);
+
+    QMenu *mFilterColor = mFilter->addMenu(tr("颜色"));
+    addFilterAction(mFilterColor, tr("去色..."),             filter::FilterKind::Desaturate);
+    addFilterAction(mFilterColor, tr("反相..."),             filter::FilterKind::Invert);
+    addFilterAction(mFilterColor, tr("阈值..."),             filter::FilterKind::Threshold);
+    addFilterAction(mFilterColor, tr("色调分离..."),         filter::FilterKind::Posterize);
+    addFilterAction(mFilterColor, tr("渐变映射..."),         filter::FilterKind::GradientMap);
+
+    QMenu *mFilterOther = mFilter->addMenu(tr("其他"));
+    addFilterAction(mFilterOther, tr("照片滤镜..."),         filter::FilterKind::PhotoFilter);
+    addFilterAction(mFilterOther, tr("进一步模糊..."),       filter::FilterKind::BlurMore);
+    addFilterAction(mFilterOther, tr("高反差保留..."),       filter::FilterKind::HighPass);
+    addFilterAction(mFilterOther, tr("曝光过度..."),         filter::FilterKind::Solarize);
+    addFilterAction(mFilterOther, tr("滤镜画廊..."),         filter::FilterKind::FilterGallery);
+
     mFilter->addSeparator();
-    QAction *aFilterColorAdjust = mFilter->addAction(tr("色彩调整..."));
-    connect(aFilterColorAdjust, &QAction::triggered, this, [this]{
-        onFilterMenuTriggered(filter::FilterKind::PhotoFilter);
-    });
     // P0 leftover 5 (2026-09-21): Curves / Levels / B&W / ChannelMixer
     //   standalone dialogs. Each entry pops a non-modal dialog via the
     //   active ImageWindow's DialogMediator. dialog->applied is routed to
     //   AdjustmentPanel::setStandaloneParams inside ImageWindow.
-    mFilter->addSeparator();
     QAction *aAdjustCurves = mFilter->addAction(tr("曲线 (Curves)..."));
     connect(aAdjustCurves, &QAction::triggered, this, [this]{
         onAdjustDialogTriggered("Curves");
