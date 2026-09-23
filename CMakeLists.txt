@@ -80,15 +80,62 @@ endif()
 # ---- LibRaw (Camera Raw 解码, P3.5 2026-09-23) ----
 #   Optional: 没装 libraw 时 CameraRawLoader 提供 stub 接口, build 仍 pass,
 #   UI 流程 (Camera Raw 菜单 + 扩展名注册) 完整. 真链接时自动启用解码路径.
-#   安装: vcpkg install libraw:x64-windows (或 apt install libraw-dev)
+#   4 路径找 libraw (按优先级):
+#     1. vcpkg 路径 (vcpkg install libraw:x64-windows)
+#     2. CMAKE_PREFIX_PATH / LIBRAW_DIR 环境变量 (手动安装路径)
+#     3. 常见 Windows 安装路径 (D:/libraw, C:/Program Files/libraw 等)
+#     4. Linux 系统路径 (apt install libraw-dev, /usr/local/lib)
 find_package(LibRaw QUIET CONFIG)
 if(LibRaw_FOUND)
-    message(STATUS "LibRaw ${LibRaw_VERSION} found: ${LibRaw_DIR}")
+    message(STATUS "LibRaw ${LibRaw_VERSION} found via find_package: ${LibRaw_DIR}")
+else()
+    # fallback: 手动下载 libraw Windows binary (LibRaw-x.y.z-Windows.zip 解压)
+    #   解压到 D:\libraw\, CMakeLists 自动找 libraw.lib + headers
+    find_path(LIBRAW_INCLUDE_DIR
+        NAMES libraw/libraw.h libraw.h
+        PATHS
+            "$ENV{LIBRAW_DIR}/include"
+            "$ENV{CMAKE_PREFIX_PATH}/include"
+            "D:/libraw/include"
+            "C:/libraw/include"
+            "C:/Program Files/libraw/include"
+            "/usr/include"
+            "/usr/local/include"
+            "/opt/include"
+        NO_DEFAULT_PATH)
+    find_library(LIBRAW_LIBRARY
+        NAMES libraw
+        PATHS
+            "$ENV{LIBRAW_DIR}/lib"
+            "$ENV{LIBRAW_DIR}/lib/x64"
+            "$ENV{CMAKE_PREFIX_PATH}/lib"
+            "D:/libraw/lib"
+            "C:/libraw/lib"
+            "C:/Program Files/libraw/lib"
+            "/usr/lib"
+            "/usr/lib/x86_64-linux-gnu"
+            "/usr/local/lib"
+            "/opt/lib"
+        NO_DEFAULT_PATH)
+    if(LIBRAW_INCLUDE_DIR AND LIBRAW_LIBRARY)
+        message(STATUS "LibRaw found via fallback: ${LIBRAW_LIBRARY} + ${LIBRAW_INCLUDE_DIR}")
+        # 构造一个 alias target (跟 vcpkg find_package 行为一致)
+        if(NOT TARGET LibRaw::LibRaw)
+            add_library(LibRaw::LibRaw UNKNOWN IMPORTED)
+            set_target_properties(LibRaw::LibRaw PROPERTIES
+                IMPORTED_LOCATION "${LIBRAW_LIBRARY}"
+                INTERFACE_INCLUDE_DIRECTORIES "${LIBRAW_INCLUDE_DIR}")
+        endif()
+        set(LibRaw_FOUND TRUE)
+        # 版本号 (从 libraw_version.h 提取 — 可选, 默认 "manual")
+        set(LibRaw_VERSION "manual" CACHE STRING "LibRaw version (manual install)" FORCE)
+    endif()
+endif()
+if(LibRaw_FOUND)
     set(MULTIDOC_HAVE_LIBRAW ON CACHE BOOL "LibRaw library found, enable CameraRawLoader real path" FORCE)
-    # 链接: VISIBLE 给 vistella_media 用
     set(VISTELLA_LIBS ${VISTELLA_LIBS} LibRaw::LibRaw)
 else()
-    message(STATUS "LibRaw not found: CameraRawLoader stub mode (vcpkg install libraw:x64-windows)")
+    message(STATUS "LibRaw not found: CameraRawLoader stub mode (vcpkg install libraw:x64-windows OR unzip LibRaw Windows binary to D:/libraw)")
     set(MULTIDOC_HAVE_LIBRAW OFF CACHE BOOL "LibRaw not found, CameraRawLoader stub only" FORCE)
 endif()
 
