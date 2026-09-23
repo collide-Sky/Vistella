@@ -282,7 +282,10 @@ target_link_libraries(vistella_media
 #   CMakeLists.txt find_package(LibRaw). Stub-only build is the default until
 #   vcpkg/libraw gets installed.
 if(MULTIDOC_HAVE_LIBRAW)
-    target_compile_definitions(vistella_media PRIVATE MULTIDOC_HAVE_LIBRAW)
+    # PUBLIC (not PRIVATE) so test targets linking vistella_media also see the
+    # definition — otherwise CameraRawLoader::hasLibRawSupport() (compiled with
+    # MULTIDOC_HAVE_LIBRAW) disagrees with the test's local view (compiled without).
+    target_compile_definitions(vistella_media PUBLIC MULTIDOC_HAVE_LIBRAW)
     if(TARGET LibRaw::LibRaw)
         target_link_libraries(vistella_media PUBLIC LibRaw::LibRaw)
     elseif(TARGET libraw)
