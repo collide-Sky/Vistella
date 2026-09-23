@@ -487,9 +487,9 @@ void MainWindow::buildActions()
     QMenu *mImage = mb->addMenu(tr("图像"));
     QAction *aImgResize = mImage->addAction(tr("调整大小..."));
     aImgResize->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+I")));
-    // P2.5 (2026-09-22): wired to active ImageWindow via placeholder status
-    //   (image resize needs cv::Mat + QInputDialog for new dimensions; full
-    //   P2.5.x ResizeDialog is scheduled P2.5.x). For now, show a hint.
+    // P2.5 (2026-09-22): active ImageWindow + QInputDialog 双弹窗宽度/高度
+    //   + cv::resize(cv::INTER_LINEAR) + ImageEditCommand 推 undo stack.
+    //   Full ResizeDialog (with aspect-ratio lock / dpi / preset) 是 P2.5.x 计划.
     connect(aImgResize, &QAction::triggered, this, [this]() {
         auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
         if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
