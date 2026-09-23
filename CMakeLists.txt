@@ -95,10 +95,15 @@ else()
         NAMES libraw/libraw.h libraw.h
         PATHS
             "$ENV{LIBRAW_DIR}/include"
+            "$ENV{LIBRAW_DIR}"
             "$ENV{CMAKE_PREFIX_PATH}/include"
             "D:/libraw/include"
+            "D:/libraw"
+            "D:/Collide/LibRaw-0.22.2"
             "C:/libraw/include"
+            "C:/libraw"
             "C:/Program Files/libraw/include"
+            "C:/Program Files/libraw"
             "/usr/include"
             "/usr/local/include"
             "/opt/include"
@@ -108,10 +113,16 @@ else()
         PATHS
             "$ENV{LIBRAW_DIR}/lib"
             "$ENV{LIBRAW_DIR}/lib/x64"
+            "$ENV{LIBRAW_DIR}"
             "$ENV{CMAKE_PREFIX_PATH}/lib"
             "D:/libraw/lib"
+            "D:/libraw"
+            "D:/Collide/LibRaw-0.22.2/lib"
+            "D:/Collide/LibRaw-0.22.2"
             "C:/libraw/lib"
+            "C:/libraw"
             "C:/Program Files/libraw/lib"
+            "C:/Program Files/libraw"
             "/usr/lib"
             "/usr/lib/x86_64-linux-gnu"
             "/usr/local/lib"
@@ -287,6 +298,31 @@ if(vistella_WITH_OPENCV AND WINDEPLOYQT_EXE)
             COMMENT "Copying OpenCV ${CMAKE_BUILD_TYPE} runtime DLLs to build dir"
         )
         message(STATUS "OpenCV runtime DLLs: will copy from ${_md_opencv_bin} on POST_BUILD")
+    endif()
+endif()
+
+# ---- LibRaw DLL POST_BUILD copy (P3.5 follow-up 2026-09-23) ----
+#   LibRaw fallback path may point to D:/Collide/LibRaw-0.22.2 (not standard
+#   install layout); copy libraw.dll into Vistella.exe dir so the import
+#   resolves at runtime without PATH setup.
+if(LibRaw_FOUND AND LIBRAW_LIBRARY)
+    get_filename_component(_md_libraw_lib_dir "${LIBRAW_LIBRARY}" DIRECTORY)
+    # Try ../bin first (LibRaw prebuilt layout), then same dir as lib file.
+    set(_md_libraw_dll_search_paths
+        "${_md_libraw_lib_dir}/../bin"
+        "${_md_libraw_lib_dir}")
+    find_file(_md_libraw_dll
+        NAMES libraw.dll libraw_d.dll
+        PATHS ${_md_libraw_dll_search_paths}
+        NO_DEFAULT_PATH)
+    if(_md_libraw_dll)
+        add_custom_command(TARGET Vistella POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_md_libraw_dll}"
+                "$<TARGET_FILE_DIR:Vistella>"
+            COMMENT "Copying LibRaw runtime DLL (${_md_libraw_dll}) to build dir"
+        )
+        message(STATUS "LibRaw DLL: will copy from ${_md_libraw_dll} on POST_BUILD")
     endif()
 endif()
 

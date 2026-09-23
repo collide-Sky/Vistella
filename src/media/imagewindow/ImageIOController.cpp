@@ -19,6 +19,7 @@
 #include "ImageIOController.h"
 #include "../imagewindow.h"
 #include "camera_raw/CameraRawLoader.h"
+#include "camera_raw/CameraRawDialog.h"
 #include "TextOverlayController.h"
 #include "../imageprocessor.h"
 #include "../dialogs/ExportDialog.h"
@@ -32,9 +33,11 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDir>
+#include <QCoreApplication>
 #include <QMessageBox>
 #include <QSharedPointer>
 
+#include <opencv2/imgcodecs.hpp> // P3.5 follow-up cv::imwrite for RAW temp
 #include <opencv2/imgproc.hpp>   // P0-8.2 cv::resize + cv::INTER_AREA
 
 ImageIOController::ImageIOController(QObject* parent) : QObject(parent) {}
@@ -225,34 +228,43 @@ bool ImageIOController::loadFile(const QString& path, QString* err)
 {
     if (!m_host) return false;
     // P3.5 (2026-09-23): RAW 拦截 — 调 CameraRawLoader 解码, 不走 cv::imread.
-    //   CameraRawLoader::decodeRaw 当前是 stub (返错误信息), 真 libraw 路径
-    //   后续 dev 集成 libraw 时启用. UI 流程完整, 失败给用户清晰错误.
-    if (path.endsWith(QStringLiteral(".cr2"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".cr3"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".nef"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".arw"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".dng"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".raf"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".orf"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".rw2"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".pef"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".srw"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".x3f"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".nrw"), Qt::CaseInsensitive)) {
-        if (!camera_raw::hasLibRawSupport()) {
-            if (err) *err = QStringLiteral(
-                "Camera Raw 解码需要 libraw. "
-                "请运行 vcpkg install libraw:x64-windows 并重新配置 CMake.");
-            return false;
-        }
-        // TODO(P3.5+): 弹 CameraRawDialog 让用户调 exposure/wb 等参数, 然后调
-        //   camera_raw::decodeRaw(path, settings). 当前 stub 接口已就绪, UI 集成
-        //   留待 libraw 真链接后再接. 避免 UI flow 跟没链接的 libraw 冲突.
+    //   P3.5 follow-up (2026-09-23): 弹 CameraRawDialog 让用户调 exposure/wb
+    //   等参数, 然后调 camera_raw::decodeRaw(path, settings). 真 libraw 解码结果
+    //   走 cv::imwrite -> temp file -> m_host->loadFile (跟正常打开场景统一路径).
+    if (!camera_raw::supportedRawExtensions().contains(
+            QFileInfo(path).suffix().prepend(".").toLower())) {
+        return m_host->loadFile(path, err);
+    }
+    if (!camera_raw::hasLibRawSupport()) {
         if (err) *err = QStringLiteral(
-            "Camera Raw 暂未实装 UI dialog; libraw 链接路径在 P3.5+ 实装.");
+            "Camera Raw 解码需要 libraw. "
+            "请运行 vcpkg install libraw:x64-windows 并重新配置 CMake.");
         return false;
     }
-    return m_host->loadFile(path, err);
+    // 弹 PS-style Camera Raw dialog 模态等用户 OK.
+    camera_raw::CameraRawDialog dlg;
+    if (dlg.exec() != QDialog::Accepted) {
+        return false;  // user cancelled
+    }
+    camera_raw::CameraRawSettings settings = dlg.settings();
+    camera_raw::CameraRawResult res = camera_raw::decodeRaw(path, settings);
+    if (!res.ok()) {
+        if (err) *err = res.errorMsg.isEmpty()
+                          ? QStringLiteral("Camera Raw decode failed")
+                          : res.errorMsg;
+        return false;
+    }
+    // 写临时 PNG, 让 m_host->loadFile 走正常路径 (LayerStack/selection/zoom 初始化).
+    //   cv::imwrite 走 cv::Mat -> disk; loadFile 内部 cv::imread + 16 bit -> 8U.
+    QString tempPath = QDir::tempPath() + QStringLiteral("/multidoc_raw_")
+                       + QFileInfo(path).completeBaseName()
+                       + QStringLiteral("_%1.png")
+                            .arg(QCoreApplication::applicationPid());
+    if (!cv::imwrite(tempPath.toLocal8Bit().toStdString(), res.image)) {
+        if (err) *err = QStringLiteral("cv::imwrite temp failed for RAW");
+        return false;
+    }
+    return m_host->loadFile(tempPath, err);
 }
 
 // ---- 以下是 P0-1.1 拍板的占位接口, 实际未使用, 保持空实现 ----

@@ -453,48 +453,48 @@
 <context>
     <name>ImageIOController</name>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="52"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="55"/>
         <source>打开图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="53"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="56"/>
         <source>图像 (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff);; 全部文件 (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="57"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="60"/>
         <source>打开失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="75"/>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="101"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="78"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="104"/>
         <source>保存失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="94"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="97"/>
         <source>另存为</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="95"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="98"/>
         <source>图像 (*.png *.jpg *.bmp);; 全部文件 (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="139"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="142"/>
         <source>导出为...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="140"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="143"/>
         <source>PNG (*.png);; JPEG (*.jpg *.jpeg);; TIFF (*.tif *.tiff);; WebP (*.webp);; BMP (*.bmp);; GIF (*.gif);; 全部文件 (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="170"/>
+        <location filename="../src/media/imagewindow/ImageIOController.cpp" line="173"/>
         <source>导出失败</source>
         <translation type="unfinished"></translation>
     </message>
