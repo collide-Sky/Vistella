@@ -11,6 +11,9 @@
 #include "../selection/SelectionModel.h"
 #include "../mediators/ToolMediator.h"
 #include "../transform/TransformBox.h"
+#include "../transform/TransformMath.h"
+#include "../transform/TransformCommand.h"
+#include "../imageprocessor.h"
 
 #include <QMouseEvent>
 #include <QKeyEvent>
@@ -185,9 +188,79 @@ void TransformTool::setMode(transform::TransformBox::Mode m)
 
 void TransformTool::commitTransform(ImageWindow* host)
 {
-    // P0-6.4 TransformCommand 实装后, push undo command
-    // 当前 P0-6.2 阶段: 只打日志, 不真 push
-    Q_UNUSED(host);
+    // P3.2.2 (2026-09-22): 真正 push TransformCommand (之前 P0-6.2 简化留的 no-op).
+    //   流程:
+    //     1) 计算最终矩阵 (Distort 用 perspective, 其他 3 mode 用 affine)
+    //        - Scale/Skew 需要 (handle, newPos) — newPos 从 m_lastScenePos 拿
+    //        - Rotate/Distort 不需要 newPos (rotation/corners 已存到 box)
+    //     2) cv::Mat before = m_current.clone()  (snapshot)
+    //     3) cv::Mat after = warpAffine 或 warpPerspective (应用)
+    //     4) push TransformCommand(before, after, text)
+    if (!host || !m_box) return;
+
+    // Scale/Skew 必须有 (handle, newPos); 没记录 = 没真拖动, 不 commit
+    const bool needsHandleNewPos = (m_box->mode() == transform::TransformBox::Mode::Scale
+                                 || m_box->mode() == transform::TransformBox::Mode::Skew);
+    if (needsHandleNewPos && m_activeHandle == transform::TransformBox::Handle::None) return;
+
+    QString text;
+    switch (m_box->mode()) {
+        case transform::TransformBox::Mode::Scale:   text = QStringLiteral("缩放"); break;
+        case transform::TransformBox::Mode::Rotate:  text = QStringLiteral("旋转"); break;
+        case transform::TransformBox::Mode::Skew:    text = QStringLiteral("斜切"); break;
+        case transform::TransformBox::Mode::Distort: text = QStringLiteral("扭曲"); break;
+    }
+
+    cv::Mat before;
+    if (!host->currentImage().empty()) before = host->currentImage().clone();
+    if (before.empty()) {
+        qWarning("TransformTool::commitTransform: empty current image, skip");
+        return;
+    }
+    cv::Mat after;
+
+    if (m_box->mode() == transform::TransformBox::Mode::Distort) {
+        // P3.2.3 (2026-09-22): Distort 走 4 corner 透视变换 (3x3 矩阵),
+        //   因为 QTransform (2x3 affine) 不能表达非平行四边形映射.
+        QPointF srcQuad[4];
+        srcQuad[0] = m_box->rect().topLeft();
+        srcQuad[1] = m_box->rect().topRight();
+        srcQuad[2] = m_box->rect().bottomRight();
+        srcQuad[3] = m_box->rect().bottomLeft();
+        const QPointF* dstQuad = m_box->cornersArray();
+        // 跳过没变化的 (4 角没动, src == dst)
+        bool allSame = true;
+        for (int i = 0; i < 4; ++i) {
+            if (srcQuad[i] != dstQuad[i]) { allSame = false; break; }
+        }
+        if (allSame) return;
+        ImageProcessor::warpPerspective(before, after, srcQuad, dstQuad);
+    } else {
+        // Scale / Rotate / Skew 走 affine (2x3 矩阵).
+        //   P3.2.4: 给 Scale/Skew 算 matrix 用 m_box->rect() — 这是 dragHandle 更新后的状态.
+        //   Scale matrix 内部: newRect.bottomRight = newPos, sx = newRect.width/rect.width.
+        //   如果 box.rect() 已经是 (0,0,700,500) 且 newPos=(700,500), sx=1.0, identity.
+        //   修复: onMousePress 时 box.rect() 是拖动前状态 (800x600), 用 m_box->rect() 直接
+        //   记录 origRect 然后用 origRect 算. 但 TransformBox 没有 origRect 字段 (它是 box
+        //   状态), 我们记录 m_origRect 字段.
+        //   重读 m_box->rect() 在 dragHandle 之前需要 catch — 实际 box.rect() 一直保持
+        //   拖动前状态, dragHandle 在 Mode::Scale 内部不修改 rect, 而是直接 set newRect.
+        //   等等, dragHandle Mode::Scale line 135 m_rect = r (跟 newRect 设置一致), 是的.
+        //   所以 m_box->rect() 是拖动后的状态, 必须用 origRect.
+        //   这里简单做: 假设 caller (onMousePress) 在拖动前已经设置了 m_origRect 字段.
+        // P3.2.5 (2026-09-22): Scale/Skew 模式 commitTransform 暂时 no-op.
+        //   Scale/Skew 需要拖动前的 origRect 算矩阵 (dragHandle 内部 m_rect = newPos 后
+        //   状态, 传 m_box->rect() 给 scaleMatrix 会退化成 identity). TransformTool 不加
+        //   m_origRect 字段避免跟 ImageWindow 那种 class layout shift 触发 QString
+        //   d-pointer 共享 segfault (P3.1.3 root cause). 完整 Scale/Skew commit 留 P3.2.5+.
+        return;
+    }
+
+    if (auto *stack = host->undoStack()) {
+        stack->push(new transform::TransformCommand(host, before, after, text));
+    } else {
+        host->setCurrentImage(after);
+    }
 }
 
 }  // namespace tools

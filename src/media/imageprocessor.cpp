@@ -353,6 +353,25 @@ void ImageProcessor::warpAffine(const cv::Mat &in, cv::Mat &out, const cv::Mat &
     cv::warpAffine(in, out, M, dsize, cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0, 0));
 }
 
+// P3.2.3 (2026-09-22): 4 corner 透视变换 (3x3 矩阵). 用于 TransformTool Distort
+//   模式拖成非平行四边形的情况 (QTransform 2x3 affine 不能表达).
+//   srcQuad/dstQuad = 4 个 QPointF, 顺序 TL/TR/BR/BL (跟 TransformBox::cornersArray 一致).
+void ImageProcessor::warpPerspective(const cv::Mat &in, cv::Mat &out,
+                                    const QPointF srcQuad[4], const QPointF dstQuad[4])
+{
+    if (in.empty()) { out = in; return; }
+    cv::Point2f src[4], dst[4];
+    for (int i = 0; i < 4; ++i) {
+        src[i] = cv::Point2f(static_cast<float>(srcQuad[i].x()),
+                             static_cast<float>(srcQuad[i].y()));
+        dst[i] = cv::Point2f(static_cast<float>(dstQuad[i].x()),
+                             static_cast<float>(dstQuad[i].y()));
+    }
+    cv::Mat M = cv::getPerspectiveTransform(src, dst);
+    cv::warpPerspective(in, out, M, in.size(),
+                        cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0, 0));
+}
+
 cv::Mat ImageProcessor::qTransformToAffine(const QTransform &t)
 {
     // QTransform 3x3 → cv::Mat 2x3 (CV_64F)

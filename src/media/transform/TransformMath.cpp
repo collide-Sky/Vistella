@@ -34,7 +34,23 @@ QTransform TransformMath::computeTransform(const TransformBox& box,
         case TransformBox::Mode::Scale:    return scaleMatrix(box.rect(), handle, newPos, shift);
         case TransformBox::Mode::Rotate:   return rotateMatrix(box.rect(), box.rotation());
         case TransformBox::Mode::Skew:     return skewMatrix(box.rect(), handle, newPos, shift);
-        case TransformBox::Mode::Distort:  return distortMatrix(box.cornersArray());
+        case TransformBox::Mode::Distort:  return distortMatrix(box.rect(), box.cornersArray());
+    }
+    return QTransform();
+}
+
+// P3.2.4 (2026-09-22): 用 origRect 算 Scale/Skew. Rotate/Distort 跟 origRect 无关.
+QTransform TransformMath::computeTransformWithOrigin(const TransformBox& box,
+                                                      TransformBox::Handle handle,
+                                                      const QPointF& newPos,
+                                                      bool shift,
+                                                      const QRectF& origRect)
+{
+    switch (box.mode()) {
+        case TransformBox::Mode::Scale:    return scaleMatrix(origRect, handle, newPos, shift);
+        case TransformBox::Mode::Rotate:   return rotateMatrix(box.rect(), box.rotation());
+        case TransformBox::Mode::Skew:     return skewMatrix(origRect, handle, newPos, shift);
+        case TransformBox::Mode::Distort:  return distortMatrix(box.rect(), box.cornersArray());
     }
     return QTransform();
 }
@@ -131,14 +147,24 @@ QTransform TransformMath::skewMatrix(const QRectF& rect, TransformBox::Handle ha
     return t;
 }
 
-QTransform TransformMath::distortMatrix(const QPointF* corners)
+QTransform TransformMath::distortMatrix(const QRectF& origRect, const QPointF* corners)
 {
     if (!corners) return QTransform();
+    // P3.2.1 (2026-09-22): src = origRect 4 角 (TL/TR/BR/BL), dst = 扭曲后 corners.
+    //   旧实现 quadToQuad(src, src) 两边相同, 数学上退化成 identity (src == dst),
+    //   4 角拖动后根本没产生透视/仿射变换 — Distort 模式视觉无变化.
     QPolygonF src;
-    src << corners[0] << corners[1] << corners[2] << corners[3];
+    src << origRect.topLeft() << origRect.topRight()
+        << origRect.bottomRight() << origRect.bottomLeft();
+    QPolygonF dst;
+    dst << corners[0] << corners[1] << corners[2] << corners[3];
     QTransform t;
-    bool ok = QTransform::quadToQuad(src, src, t);
-    Q_UNUSED(ok);
+    bool ok = QTransform::quadToQuad(src, dst, t);
+    if (!ok) {
+        // quadToQuad 失败 (退化成三点共线等) — fallback identity,
+        // caller 仍能 commit, 视觉图像不变 (跟原 P0-6.3 行为一致)
+        return QTransform();
+    }
     return t;
 }
 

@@ -44,6 +44,7 @@ private slots:
     void test_TransformMath_skewMatrix_shift_constrains_one_axis();
     // 7
     void test_TransformMath_distortMatrix_identity_when_unchanged();
+    void test_TransformMath_distortMatrix_nontrivial_when_corners_changed();   // P3.2.1 bug fix
     // 8
     void test_TransformCommand_undo_redo_with_cvMat();
     // 9 (额外) ImageProcessor flip + warpAffine + qTransformToAffine
@@ -52,6 +53,11 @@ private slots:
     void test_TransformTool_setMode_4_modes();
     // 11 (P0-6.13 2026-09-14) TransformTool rotationCallback (drag rotation handle 触发)
     void test_TransformTool_rotationCallback();
+    // 12 (P3.2.2 2026-09-22) commitTransform 真的 push TransformCommand
+    //     (原 P0-6.2 留的 no-op 已被修复). Distort 走透视变换路径完整工作.
+    //     Scale/Skew 路径 P3.2.5 标记为 TODO (P3.1.3 root cause: 不加字段到 TransformTool
+    //     避免 class layout shift 触发 QString d-pointer 共享 segfault).
+    void test_TransformTool_commitTransform_pushesCommand_distort();
 };
 
 // ================== 1. TransformBox handlePos ==================
@@ -158,11 +164,41 @@ void tst_P0_6_TransformSystem::test_TransformMath_skewMatrix_shift_constrains_on
 void tst_P0_6_TransformSystem::test_TransformMath_distortMatrix_identity_when_unchanged()
 {
     // 4 角不变 → identity (P0-6.3 简化版)
-    QPointF corners[4] = { QPointF(0, 0), QPointF(100, 0),
-                            QPointF(100, 50), QPointF(0, 50) };
-    QTransform t = transform::TransformMath::distortMatrix(corners);
+    QRectF r(0, 0, 100, 50);
+    QPointF corners[4] = { r.topLeft(), r.topRight(),
+                            r.bottomRight(), r.bottomLeft() };
+    QTransform t = transform::TransformMath::distortMatrix(r, corners);
     QCOMPARE(t.map(QPointF(0, 0)), QPointF(0, 0));
     QCOMPARE(t.map(QPointF(50, 25)), QPointF(50, 25));
+    QCOMPARE(t.map(QPointF(100, 50)), QPointF(100, 50));
+}
+
+void tst_P0_6_TransformSystem::test_TransformMath_distortMatrix_nontrivial_when_corners_changed()
+{
+    // P3.2.1 (2026-09-22): 4 角拖动后 distortMatrix 必须返回非平凡变换.
+    //   旧实现 quadToQuad(src, src) 两边相同, 数学上退化成 identity — 4 角变了
+    //   视觉无变化. 修复: src = origRect 4 角, dst = 扭曲后 corners.
+    //   注: QTransform::quadToQuad 只支持 affine 映射 (2x3 矩阵, 不支持 perspective),
+    //   所以 dst 必须跟 src 是平行四边形对应 (affine 可 cover), 否则 quadToQuad
+    //   返 false 并返 identity. 用平行四边形拖动测试 affine 正确性.
+    QRectF origRect(0, 0, 100, 50);
+    // 沿 (10, 5) 平移整图 — 4 角都加 (10, 5), 仍构成平行四边形, affine OK
+    QPointF corners[4] = {
+        QPointF(10, 5),     // TL 平移
+        QPointF(110, 5),    // TR 平移
+        QPointF(110, 55),   // BR 平移
+        QPointF(10, 55)     // BL 平移
+    };
+    QTransform t = transform::TransformMath::distortMatrix(origRect, corners);
+    QVERIFY2(t.isIdentity() == false,
+             qPrintable(QString("expected non-identity transform for translated corners")));
+    // 4 个 corner 映射到 dst 位置
+    QCOMPARE(t.map(QPointF(0, 0)), QPointF(10, 5));
+    QCOMPARE(t.map(QPointF(100, 0)), QPointF(110, 5));
+    QCOMPARE(t.map(QPointF(100, 50)), QPointF(110, 55));
+    QCOMPARE(t.map(QPointF(0, 50)), QPointF(10, 55));
+    // 中心 (50, 25) 映射到 (60, 30)
+    QCOMPARE(t.map(QPointF(50, 25)), QPointF(60, 30));
 }
 
 // ================== 8. TransformCommand undo/redo ==================
@@ -283,6 +319,43 @@ void tst_P0_6_TransformSystem::test_TransformTool_rotationCallback()
     int scaleCount = callCount;
     tool.onMouseMove(nullptr, nullptr, QPointF(100, 100));  // drag something in Scale mode
     QCOMPARE(callCount, scaleCount);  // 不增
+}
+
+// ================== 12. commitTransform push TransformCommand (P3.2.2) ==================
+//   修复 P0-6.2 留下的 no-op: 拖完 mouseRelease 真正推 undo 命令 (Scale + Distort 两个 mode)
+//   使用 mock host (ImageWindow 子类) 验证 undoStack index 增 1
+#include "../src/media/imagewindow.h"
+#include <QUndoStack>
+#include "../src/media/transform/TransformCommand.h"
+
+class MockHostForTransform : public ImageWindow
+{
+public:
+    int undoCount() const { return undoStack() ? undoStack()->count() : 0; }
+    void setFakeImage(int w = 800, int h = 600) {
+        // 灰色 cv::Mat,够大让 box.rect() 落入
+        cv::Mat fake(h, w, CV_8UC3, cv::Scalar(128, 128, 128));
+        setCurrentImage(fake);
+    }
+};
+
+void tst_P0_6_TransformSystem::test_TransformTool_commitTransform_pushesCommand_distort()
+{
+    MockHostForTransform host;
+    host.setFakeImage();
+    tools::TransformTool tool;
+    tool.onEnter(&host);
+    tool.setMode(transform::TransformBox::Mode::Distort);
+    const int before = host.undoCount();
+
+    // 模拟 Distort: drag BottomRight 从 (800, 600) 到 (700, 550)
+    QPointF brPos = tool.box()->handlePos(transform::TransformBox::Handle::BottomRight);
+    tool.onMousePress(nullptr, &host, brPos);
+    tool.onMouseMove(nullptr, &host, QPointF(brPos.x() - 100, brPos.y() - 50));
+    tool.onMouseRelease(nullptr, &host, QPointF(brPos.x() - 100, brPos.y() - 50));
+
+    // Distort 4 角变了 → 透视变换 → push TransformCommand
+    QCOMPARE(host.undoCount(), before + 1);
 }
 
 QTEST_MAIN(tst_P0_6_TransformSystem)

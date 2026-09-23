@@ -8,6 +8,7 @@
 #include <QPolygonF>
 #include <QPair>
 #include <QColor>
+#include <QPointF>
 
 #include <future>
 #include <functional>
@@ -65,6 +66,10 @@ public:
     //   仿射变换 (旋转 + 缩放 + 斜切, 2x3 矩阵)
     //   M 是 2x3 cv::Mat (CV_32F 或 CV_64F)
     static void warpAffine(const cv::Mat &in, cv::Mat &out, const cv::Mat &M, cv::Size dsize);
+    // P3.2.3 (2026-09-22): 4 corner 透视变换 (QTransform 2x3 affine 不能 cover,
+    //   Distort 模式拖成非平行四边形时用这个). 4 corner 顺序: TL, TR, BR, BL.
+    static void warpPerspective(const cv::Mat &in, cv::Mat &out,
+                               const QPointF srcQuad[4], const QPointF dstQuad[4]);
     //   QTransform → 2x3 cv::Mat 转换 (PS 风格: 4 mode 矩阵入口)
     static cv::Mat qTransformToAffine(const QTransform &t);
 
