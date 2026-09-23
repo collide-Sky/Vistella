@@ -237,24 +237,30 @@ void TransformTool::commitTransform(ImageWindow* host)
         ImageProcessor::warpPerspective(before, after, srcQuad, dstQuad);
     } else {
         // Scale / Rotate / Skew 走 affine (2x3 矩阵).
-        //   P3.2.4: 给 Scale/Skew 算 matrix 用 m_box->rect() — 这是 dragHandle 更新后的状态.
-        //   Scale matrix 内部: newRect.bottomRight = newPos, sx = newRect.width/rect.width.
-        //   如果 box.rect() 已经是 (0,0,700,500) 且 newPos=(700,500), sx=1.0, identity.
-        //   修复: onMousePress 时 box.rect() 是拖动前状态 (800x600), 用 m_box->rect() 直接
-        //   记录 origRect 然后用 origRect 算. 但 TransformBox 没有 origRect 字段 (它是 box
-        //   状态), 我们记录 m_origRect 字段.
-        //   重读 m_box->rect() 在 dragHandle 之前需要 catch — 实际 box.rect() 一直保持
-        //   拖动前状态, dragHandle 在 Mode::Scale 内部不修改 rect, 而是直接 set newRect.
-        //   等等, dragHandle Mode::Scale line 135 m_rect = r (跟 newRect 设置一致), 是的.
-        //   所以 m_box->rect() 是拖动后的状态, 必须用 origRect.
-        //   这里简单做: 假设 caller (onMousePress) 在拖动前已经设置了 m_origRect 字段.
-        // P3.2.5 (2026-09-22): Scale/Skew 模式 commitTransform 暂时 no-op.
-        //   Scale/Skew 需要拖动前的 origRect 算矩阵 (dragHandle 内部 m_rect = newPos 后
-        //   状态, 传 m_box->rect() 给 scaleMatrix 会退化成 identity). TransformTool 不加
-        //   m_origRect 字段避免跟 ImageWindow 那种 class layout shift 触发 QString
-        //   d-pointer 共享 segfault (P3.1.3 root cause). 完整 Scale/Skew commit 留 P3.2.5+.
-        return;
+        //   P3.2.5 (2026-09-23): Scale/Skew 用 box.origRect() (拖动前 rect) 算非平凡矩阵.
+        //   旧实现传 m_box->rect() (dragHandle 已更新到 newPos 后状态) 退化 identity.
+        //   现在 TransformBox::dragHandle 第一次进入时 snapshot 到 m_dragOrigRect,
+        //   commit 时 box.origRect() 返 pre-drag state, scaleMatrix 用它算 sx/sy 正确.
+        //   Rotate 不需要 origRect (用 rotation angle).
+        //   注: 加字段到 TransformBox 安全 — TransformBox 不是 Q_OBJECT 派生,
+        //   不进 QString d-pointer 共享路径 (跟 P3.1.3 root cause 无关).
+        QTransform qxform = transform::TransformMath::computeTransformWithOrigin(
+            *m_box, m_activeHandle, m_lastScenePos, m_shiftHeld,
+            m_box->origRect());
+        if (qxform.isIdentity() && m_box->mode() != transform::TransformBox::Mode::Rotate) {
+            // identity = 真没动, 不 push
+            return;
+        }
+        if (!qxform.isAffine()) {
+            qWarning("TransformTool::commitTransform: non-affine transform, skip");
+            return;
+        }
+        cv::Mat M = ImageProcessor::qTransformToAffine(qxform);
+        ImageProcessor::warpAffine(before, after, M, before.size());
     }
+
+    // P3.2.5: commit 完 (push 或 skip) 后清 dragging 标志.
+    m_box->resetDrag();
 
     if (auto *stack = host->undoStack()) {
         stack->push(new transform::TransformCommand(host, before, after, text));

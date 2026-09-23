@@ -58,6 +58,8 @@ private slots:
     //     Scale/Skew 路径 P3.2.5 标记为 TODO (P3.1.3 root cause: 不加字段到 TransformTool
     //     避免 class layout shift 触发 QString d-pointer 共享 segfault).
     void test_TransformTool_commitTransform_pushesCommand_distort();
+    void test_TransformTool_commitTransform_pushesCommand_scale();    // P3.2.5
+    void test_TransformTool_commitTransform_pushesCommand_skew();     // P3.2.5
 };
 
 // ================== 1. TransformBox handlePos ==================
@@ -355,6 +357,48 @@ void tst_P0_6_TransformSystem::test_TransformTool_commitTransform_pushesCommand_
     tool.onMouseRelease(nullptr, &host, QPointF(brPos.x() - 100, brPos.y() - 50));
 
     // Distort 4 角变了 → 透视变换 → push TransformCommand
+    QCOMPARE(host.undoCount(), before + 1);
+}
+
+// P3.2.5 (2026-09-23): Scale mode commitTransform 真正 push TransformCommand.
+//   修复: TransformBox::dragHandle Scale mode 第一次进入 snapshot m_dragOrigRect,
+//   commit 时 box.origRect() 返 pre-drag state, scaleMatrix 算非平凡矩阵.
+void tst_P0_6_TransformSystem::test_TransformTool_commitTransform_pushesCommand_scale()
+{
+    MockHostForTransform host;
+    host.setFakeImage();
+    tools::TransformTool tool;
+    tool.onEnter(&host);
+    tool.setMode(transform::TransformBox::Mode::Scale);
+    const int before = host.undoCount();
+
+    // 模拟 Scale: drag BottomRight handle 从 (800, 600) 到 (700, 500) (缩小 100,100)
+    QPointF brPos = tool.box()->handlePos(transform::TransformBox::Handle::BottomRight);
+    tool.onMousePress(nullptr, &host, brPos);
+    tool.onMouseMove(nullptr, &host, QPointF(brPos.x() - 100, brPos.y() - 100));
+    tool.onMouseRelease(nullptr, &host, QPointF(brPos.x() - 100, brPos.y() - 100));
+
+    // P3.2.5 修复后: commitTransform 真的 push (旧 P3.2.4 因为 rect.bottomRight==newPos 退化 identity 不 push)
+    QCOMPARE(host.undoCount(), before + 1);
+    // commit 完后 m_dragging 应该清, round 后的 dragHandle 应该重新 snapshot
+    QCOMPARE(tool.box()->origRect(), tool.box()->rect());
+}
+
+void tst_P0_6_TransformSystem::test_TransformTool_commitTransform_pushesCommand_skew()
+{
+    MockHostForTransform host;
+    host.setFakeImage();
+    tools::TransformTool tool;
+    tool.onEnter(&host);
+    tool.setMode(transform::TransformBox::Mode::Skew);
+    const int before = host.undoCount();
+
+    // 模拟 Skew: drag Top handle 沿 Y 拖动
+    QPointF topPos = tool.box()->handlePos(transform::TransformBox::Handle::Top);
+    tool.onMousePress(nullptr, &host, topPos);
+    tool.onMouseMove(nullptr, &host, QPointF(topPos.x(), topPos.y() + 50));
+    tool.onMouseRelease(nullptr, &host, QPointF(topPos.x(), topPos.y() + 50));
+
     QCOMPARE(host.undoCount(), before + 1);
 }
 

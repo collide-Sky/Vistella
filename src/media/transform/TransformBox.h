@@ -63,6 +63,12 @@ public:
     // ===== 初始 / 重置 =====
     void setRect(const QRectF& r);   // 重设 4 角 (跟 boundingRect 同步)
     QRectF rect() const { return m_rect; }
+    // P3.2.5 (2026-09-23): 拖动开始前的 origRect (Scale/Skew only).
+    //   拖动中 (m_dragging=true) 返 m_dragOrigRect; 否则返 m_rect (跟 rect() 等价).
+    //   commitTransform 用 origRect + newPos 算非平凡矩阵, 不退化成 identity.
+    QRectF origRect() const { return m_dragging ? m_dragOrigRect : m_rect; }
+    // P3.2.5: 重置 dragging 标志 (commit / cancel 后调用).
+    void resetDrag() { m_dragging = false; }
 
     // ===== Mode 切换 =====
     void setMode(Mode m);
@@ -113,6 +119,15 @@ private:
     Mode   m_mode = Mode::Scale;
     qreal  m_rotationDeg = 0.0;  // 旋转角度 (度, 顺时针为正)
     QPointF m_corners[4];        // TL, TR, BR, BL — Distort 模式独立位置
+
+    // P3.2.5 (2026-09-23): Scale/Skew 拖动开始时记录的 origRect + dragging 标志.
+    //   dragHandle Scale/Skew mode 第一次进入会 snapshot m_rect 到 m_dragOrigRect
+    //   (m_dragging=true), 后续 m_rect 一直被更新到 newPos 后状态. commit
+    //   时 caller 调 origRect() 拿 pre-drag state 算非 identity 矩阵.
+    //   注: TransformBox 不是 Q_OBJECT 派生, 加字段不影响 QString d-pointer
+    //   共享路径 (跟 P3.1.3 root cause 无关 — 那种 crash 限于 QWidget/QObject 类).
+    QRectF m_dragOrigRect;
+    bool   m_dragging = false;
 
     // 同步 m_corners 跟 m_rect (Scale/Skew 时, m_corners 跟 m_rect 4 角一致)
     void syncCornersFromRect();
