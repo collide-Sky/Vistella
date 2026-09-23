@@ -59,6 +59,10 @@ enum class FilterKind {
     AddNoise       = 20,    // 加 Gaussian 噪声 (cv::randn)
     ReduceNoise    = 21,    // bilateral 降噪 (PS Noise > Reduce Noise 简化)
     MedianNoise    = 22,    // Median 降噪 (复用 MedianBlurFilter,PS Noise > Median 别名)
+    // White Balance (1) — 23 (P3.4 2026-09-22)
+    //   Temp (色温, 2000K..10000K): R/B 通道补偿 (蓝->红 / 红->蓝)
+    //   Tint (-150..+150): 绿/品红通道补偿
+    WhiteBalance   = 23,
 };
 
 // 中文显示名 (PS 风格: 模糊/锐化/浮雕...)
@@ -305,6 +309,32 @@ public:
     bool hasParam() const override { return true; }
     QString paramText() const override;
     int ksize = 3;   // 1..31 odd
+};
+
+// WhiteBalanceFilter (P3.4 2026-09-22): PS Image > Adjustments > White Balance
+//   Temp (色温): 2000K..10000K, 默认 6500K
+//     - 低于 6500K (2000K) → 加暖 (R 通道乘 > 1, B 通道乘 < 1, 蓝色减)
+//     - 高于 6500K (10000K) → 加冷 (R 通道乘 < 1, B 通道乘 > 1, 蓝色加)
+//   Tint (-150..+150): 默认 0
+//     - 正值 → 加品红 (R+B 通道乘 > 1, G 通道乘 < 1)
+//     - 负值 → 加绿 (G 通道乘 > 1, R+B 通道乘 < 1)
+//   简化实现 (跟 PS RAW 默认算法类似):
+//     temp_k = (temp - 6500) / 6500  (范围约 ±0.7)
+//     r_gain = 1 - temp_k * 0.3
+//     b_gain = 1 + temp_k * 0.5
+//     tint_k = tint / 150.0
+//     r_gain += tint_k * 0.2  (tint 同时也微调 R)
+//     b_gain += tint_k * 0.2
+//     g_gain -= tint_k * 0.3
+class WhiteBalanceFilter : public FilterStrategy {
+public:
+    FilterKind kind() const override { return FilterKind::WhiteBalance; }
+    QString name() const override { return QStringLiteral("白平衡"); }
+    void apply(const cv::Mat& in, cv::Mat& out) override;
+    bool hasParam() const override { return true; }
+    QString paramText() const override;
+    int temp = 6500;     // 2000..10000 K
+    int tint = 0;       // -150..+150
 };
 
 } // namespace filter

@@ -44,6 +44,7 @@ class tst_P0_5_FilterSystem : public QObject
 private slots:
     void factory_createsAll20Kinds();
     void factory_createsAll23Kinds();        // P3.3: +3 Noise
+    void factory_createsAll24Kinds();        // P3.4: +1 WhiteBalance
     void filterName_returnsValidForAllKinds();
     void filterName_returnsValidForAll23Kinds();  // P3.3
     void blur_4_filters_changeImage();
@@ -52,6 +53,7 @@ private slots:
     void color_5_filters_changeImage();
     void other_5_filters_changeImage();
     void noise_3_filters_changeImage();      // P3.3
+    void whiteBalance_tempShiftsRedBlue();   // P3.4
     void command_redoUndo();
     void filterDialog_emitSignals();
     void hasParam_consistent();
@@ -96,6 +98,16 @@ void tst_P0_5_FilterSystem::factory_createsAll20Kinds()
 void tst_P0_5_FilterSystem::factory_createsAll23Kinds()
 {
     for (int i = 0; i <= 22; ++i) {
+        auto f = FilterFactory::createFilter(static_cast<FilterKind>(i));
+        QVERIFY2(f != nullptr, qPrintable(QString("filter kind=%1 null").arg(i)));
+        QCOMPARE(static_cast<int>(f->kind()), i);
+    }
+}
+
+// P3.4 (2026-09-22): 24 filter (23 + 1 WhiteBalance)
+void tst_P0_5_FilterSystem::factory_createsAll24Kinds()
+{
+    for (int i = 0; i <= 23; ++i) {
         auto f = FilterFactory::createFilter(static_cast<FilterKind>(i));
         QVERIFY2(f != nullptr, qPrintable(QString("filter kind=%1 null").arg(i)));
         QCOMPARE(static_cast<int>(f->kind()), i);
@@ -251,6 +263,72 @@ void tst_P0_5_FilterSystem::noise_3_filters_changeImage()
         QVERIFY2(imageDiff(in, out) > 0.0,
                  qPrintable(QString("MedianNoise ksize=5 should differ from input, got diff=%1")
                             .arg(imageDiff(in, out))));
+    }
+}
+
+// P3.4 (2026-09-22): WhiteBalance — Temp 调冷调暖 R/B 通道变化, tint 默认 0 时 R/B
+//   通道发生预期方向变化. 验证 temp=2000K (暖) R 通道均值增加, temp=10000K (冷) B 通道均值增加.
+void tst_P0_5_FilterSystem::whiteBalance_tempShiftsRedBlue()
+{
+    cv::Mat in = makeTestImage();
+    cv::Mat out;
+
+    // 1) temp=6500K + tint=0 → 输出几乎不变 (默认)
+    {
+        auto f = FilterFactory::createFilter(FilterKind::WhiteBalance);
+        auto *w = static_cast<WhiteBalanceFilter*>(f.get());
+        w->temp = 6500; w->tint = 0;
+        f->apply(in, out);
+        QVERIFY(!out.empty());
+        // 默认参数下 gain ≈ 1, 输出应跟原图近似
+        QVERIFY2(imageDiff(in, out) < 1.0,
+                 qPrintable(QString("WhiteBalance default should be near-identity, got diff=%1")
+                            .arg(imageDiff(in, out))));
+    }
+
+    // 2) temp=2000K (暖, 加橙红) → R 通道均值 > 原图 R 通道均值
+    {
+        cv::Scalar inMean = cv::mean(in);
+        cv::Scalar bMean;
+        {
+            auto f = FilterFactory::createFilter(FilterKind::WhiteBalance);
+            auto *w = static_cast<WhiteBalanceFilter*>(f.get());
+            w->temp = 2000; w->tint = 0;
+            f->apply(in, out);
+        }
+        bMean = cv::mean(out);
+        QVERIFY(bMean[2] > inMean[2]);  // R 通道 (cv::Scalar BGR 索引 2) 增加
+        QVERIFY(bMean[0] < inMean[0]);  // B 通道 (索引 0) 减少
+    }
+
+    // 3) temp=10000K (冷, 加蓝) → B 通道均值 > 原图 B 通道均值
+    {
+        cv::Scalar inMean = cv::mean(in);
+        cv::Scalar bMean;
+        {
+            auto f = FilterFactory::createFilter(FilterKind::WhiteBalance);
+            auto *w = static_cast<WhiteBalanceFilter*>(f.get());
+            w->temp = 10000; w->tint = 0;
+            f->apply(in, out);
+        }
+        bMean = cv::mean(out);
+        QVERIFY(bMean[0] > inMean[0]);  // B 通道增加
+        QVERIFY(bMean[2] < inMean[2]);  // R 通道减少
+    }
+
+    // 4) tint=+150 (品红) → R+B 通道均值 > 原图
+    {
+        cv::Scalar inMean = cv::mean(in);
+        cv::Scalar bMean;
+        {
+            auto f = FilterFactory::createFilter(FilterKind::WhiteBalance);
+            auto *w = static_cast<WhiteBalanceFilter*>(f.get());
+            w->temp = 6500; w->tint = 150;
+            f->apply(in, out);
+        }
+        bMean = cv::mean(out);
+        // tint 同时调 R+B (跟 PS RAW 默认算法一致), G 通道减少
+        QVERIFY(bMean[1] < inMean[1]);  // G 通道减少
     }
 }
 

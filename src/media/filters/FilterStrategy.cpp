@@ -39,6 +39,7 @@ const char* filterName(FilterKind k)
     case FilterKind::AddNoise:      return "添加噪点";
     case FilterKind::ReduceNoise:   return "减少噪点";
     case FilterKind::MedianNoise:   return "中值降噪";
+    case FilterKind::WhiteBalance:  return "白平衡";
     }
     return "未知滤镜";
 }
@@ -388,6 +389,55 @@ void MedianNoiseFilter::apply(const cv::Mat& in, cv::Mat& out)
 QString MedianNoiseFilter::paramText() const
 {
     return QStringLiteral("ksize=%1").arg(ksize);
+}
+
+// WhiteBalanceFilter (P3.4 2026-09-22)
+//   拆分 in 通道 (b/r 通道重缩放), clamp 到 0..255 防止溢出.
+void WhiteBalanceFilter::apply(const cv::Mat& in, cv::Mat& out)
+{
+    if (in.empty()) return;
+    // 1) 算 RGB/offset 系数 (跟 PS RAW 默认算法简化版一致)
+    const double tempK = (temp - 6500) / 6500.0;       // -0.69..+0.54
+    const double tintK = tint / 150.0;                // -1..+1
+    double rGain = 1.0 - tempK * 0.3 + tintK * 0.2;
+    double gGain = 1.0 - tintK * 0.3;
+    double bGain = 1.0 + tempK * 0.5 + tintK * 0.2;
+    // clamp gain 到 [0.3, 2.5] 避免单色过度饱和
+    rGain = std::clamp(rGain, 0.3, 2.5);
+    gGain = std::clamp(gGain, 0.3, 2.5);
+    bGain = std::clamp(bGain, 0.3, 2.5);
+
+    // 2) 应用 gain (单通道分别 multiply)
+    if (in.channels() >= 3) {
+        out.create(in.size(), in.type());
+        for (int y = 0; y < in.rows; ++y) {
+            for (int x = 0; x < in.cols; ++x) {
+                cv::Vec3b v = in.at<cv::Vec3b>(y, x);
+                v[0] = static_cast<uchar>(std::min(255, std::max(0, static_cast<int>(v[0] * bGain))));
+                v[1] = static_cast<uchar>(std::min(255, std::max(0, static_cast<int>(v[1] * gGain))));
+                v[2] = static_cast<uchar>(std::min(255, std::max(0, static_cast<int>(v[2] * rGain))));
+                out.at<cv::Vec3b>(y, x) = v;
+            }
+        }
+    } else if (in.channels() == 1) {
+        // 灰度图: 3 通道应用同一 gain (Temp 影响整图亮度)
+        out.create(in.size(), in.type());
+        for (int y = 0; y < in.rows; ++y) {
+            for (int x = 0; x < in.cols; ++x) {
+                uchar v = in.at<uchar>(y, x);
+                const double g = (rGain + gGain + bGain) / 3.0;
+                out.at<uchar>(y, x) = static_cast<uchar>(
+                    std::min(255, std::max(0, static_cast<int>(v * g))));
+            }
+        }
+    } else {
+        in.copyTo(out);
+    }
+}
+
+QString WhiteBalanceFilter::paramText() const
+{
+    return QStringLiteral("temp=%1K, tint=%2").arg(temp).arg(tint);
 }
 
 } // namespace filter

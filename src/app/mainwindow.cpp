@@ -810,6 +810,8 @@ void MainWindow::buildActions()
     addFilterAction(mFilterColor, tr("阈值..."),             filter::FilterKind::Threshold);
     addFilterAction(mFilterColor, tr("色调分离..."),         filter::FilterKind::Posterize);
     addFilterAction(mFilterColor, tr("渐变映射..."),         filter::FilterKind::GradientMap);
+    // P3.4 (2026-09-22): 白平衡 (Temp/Tint)
+    addFilterAction(mFilterColor, tr("白平衡..."),           filter::FilterKind::WhiteBalance);
 
     QMenu *mFilterOther = mFilter->addMenu(tr("其他"));
     addFilterAction(mFilterOther, tr("照片滤镜..."),         filter::FilterKind::PhotoFilter);

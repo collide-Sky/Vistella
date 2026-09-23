@@ -32,6 +32,7 @@ std::unique_ptr<FilterStrategy> FilterFactory::createFilter(FilterKind kind)
     case FilterKind::AddNoise:       return std::make_unique<AddNoiseFilter>();
     case FilterKind::ReduceNoise:    return std::make_unique<ReduceNoiseFilter>();
     case FilterKind::MedianNoise:    return std::make_unique<MedianNoiseFilter>();
+    case FilterKind::WhiteBalance:   return std::make_unique<WhiteBalanceFilter>();
     }
     return nullptr;
 }
