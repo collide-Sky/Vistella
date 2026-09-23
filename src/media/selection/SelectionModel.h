@@ -31,6 +31,7 @@
 #include <QRect>
 #include <QSize>
 #include <Qt>
+#include <QTransform>
 
 namespace selection {
 
@@ -62,6 +63,19 @@ public:
     void invert();
     // Compose newMask into current mask per mode
     void setMask(const QImage& newMask, Mode mode = Mode::Replace);
+
+    // P3.6 (2026-09-23): PS select > Modify 5 项 + Transform.
+    //   5 项都生成新 mask (不直接改),触发 changed signal, bbox recompute.
+    //   选区变换 (translate/scale/rotate) — QTransform 应用到 mask 像素坐标.
+    //   选区羽化 (feather radiusPx): Gaussian blur alpha8 mask + 阈值化保留边缘
+    //   选区扩展 (grow radiusPx): dilation 半径 N 像素
+    //   选区收缩 (shrink radiusPx): erosion 半径 N 像素
+    //   选区平滑 (smooth radiusPx): medianBlur 平滑 mask
+    void feather(int radiusPx);
+    void grow(int radiusPx);
+    void shrink(int radiusPx);
+    void smooth(int radiusPx);
+    void transform(const QTransform& t);
 
     // ===== Queries =====
     bool contains(const QPoint& p) const;
