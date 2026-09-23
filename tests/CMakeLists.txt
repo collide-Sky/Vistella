@@ -176,3 +176,8 @@ add_vistella_test(tst_LassoMagicWand)
 #   - UnsharpMask amount spinbox 改动 -> strategy 字段同步
 #   - Sharpen 显示 (无参数) placeholder
 add_vistella_test(tst_P3_1_FilterDialog)
+
+# P3.5 (2026-09-23): Camera Raw (libraw stub + CameraRawDialog UI +
+#   FileExtensionRegistry 12 RAW 格式覆盖 + decodeRaw stub error 路径).
+#   真 libraw 链接时 stub 自动切换, 测试不需要改.
+add_vistella_test(tst_P3_5_CameraRaw)

@@ -18,6 +18,7 @@
 //
 #include "ImageIOController.h"
 #include "../imagewindow.h"
+#include "camera_raw/CameraRawLoader.h"
 #include "TextOverlayController.h"
 #include "../imageprocessor.h"
 #include "../dialogs/ExportDialog.h"
@@ -223,6 +224,34 @@ void ImageIOController::onExport()
 bool ImageIOController::loadFile(const QString& path, QString* err)
 {
     if (!m_host) return false;
+    // P3.5 (2026-09-23): RAW 拦截 — 调 CameraRawLoader 解码, 不走 cv::imread.
+    //   CameraRawLoader::decodeRaw 当前是 stub (返错误信息), 真 libraw 路径
+    //   后续 dev 集成 libraw 时启用. UI 流程完整, 失败给用户清晰错误.
+    if (path.endsWith(QStringLiteral(".cr2"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".cr3"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".nef"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".arw"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".dng"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".raf"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".orf"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".rw2"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".pef"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".srw"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".x3f"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".nrw"), Qt::CaseInsensitive)) {
+        if (!camera_raw::hasLibRawSupport()) {
+            if (err) *err = QStringLiteral(
+                "Camera Raw 解码需要 libraw. "
+                "请运行 vcpkg install libraw:x64-windows 并重新配置 CMake.");
+            return false;
+        }
+        // TODO(P3.5+): 弹 CameraRawDialog 让用户调 exposure/wb 等参数, 然后调
+        //   camera_raw::decodeRaw(path, settings). 当前 stub 接口已就绪, UI 集成
+        //   留待 libraw 真链接后再接. 避免 UI flow 跟没链接的 libraw 冲突.
+        if (err) *err = QStringLiteral(
+            "Camera Raw 暂未实装 UI dialog; libraw 链接路径在 P3.5+ 实装.");
+        return false;
+    }
     return m_host->loadFile(path, err);
 }
 

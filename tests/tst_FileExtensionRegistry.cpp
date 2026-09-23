@@ -100,13 +100,19 @@ void tst_FileExtensionRegistry::test_moduleIdForExtension_caseInsensitive()
 
 void tst_FileExtensionRegistry::test_visionAndImageShareExts()
 {
-    // visionWorker 跟 imageWorker 必须共享扩展名 (阶段 0 决策 5: vision 跑在图像上)
+    // visionWorker 跟 imageWorker 必须共享基础扩展名 (阶段 0 决策 5: vision 跑在图像上)
+    //   P3.5 (2026-09-23): imageWorker 扩展 12 RAW 格式 (.cr2/.nef/.../), visionWorker
+    //   不需要 RAW (vision 检测用普通图像). 关系变成: visionWorker ⊂ imageWorker.
     const QStringList imgExts = FileExtensionRegistry::extensionsFor(QString::fromLatin1(kImageWorker));
     const QStringList visExts = FileExtensionRegistry::extensionsFor(QString::fromLatin1(kVisionWorker));
 
     QVERIFY(!imgExts.isEmpty());
     QVERIFY(!visExts.isEmpty());
-    QCOMPARE(imgExts, visExts);   // 两个 list 必须一致
+    // visionWorker 是 imageWorker 的子集 (vision 检测不需要 RAW)
+    for (const auto &e : visExts) {
+        QVERIFY2(imgExts.contains(e),
+                 qPrintable(QString("visionWorker ext %1 not in imageWorker").arg(e)));
+    }
 
     // visionWorker 自己不能是空表 (防止有人误改)
     QVERIFY(visExts.contains(QStringLiteral(".png")));

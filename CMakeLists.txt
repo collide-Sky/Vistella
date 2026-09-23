@@ -77,6 +77,21 @@ if(vistella_WITH_OPENCV)
     message(STATUS "OpenCV ${OpenCV_VERSION} found: ${OpenCV_DIR}")
 endif()
 
+# ---- LibRaw (Camera Raw 解码, P3.5 2026-09-23) ----
+#   Optional: 没装 libraw 时 CameraRawLoader 提供 stub 接口, build 仍 pass,
+#   UI 流程 (Camera Raw 菜单 + 扩展名注册) 完整. 真链接时自动启用解码路径.
+#   安装: vcpkg install libraw:x64-windows (或 apt install libraw-dev)
+find_package(LibRaw QUIET CONFIG)
+if(LibRaw_FOUND)
+    message(STATUS "LibRaw ${LibRaw_VERSION} found: ${LibRaw_DIR}")
+    set(MULTIDOC_HAVE_LIBRAW ON CACHE BOOL "LibRaw library found, enable CameraRawLoader real path" FORCE)
+    # 链接: VISIBLE 给 vistella_media 用
+    set(VISTELLA_LIBS ${VISTELLA_LIBS} LibRaw::LibRaw)
+else()
+    message(STATUS "LibRaw not found: CameraRawLoader stub mode (vcpkg install libraw:x64-windows)")
+    set(MULTIDOC_HAVE_LIBRAW OFF CACHE BOOL "LibRaw not found, CameraRawLoader stub only" FORCE)
+endif()
+
 qt_standard_project_setup()
 
 # ---- 单元测试 (阶段 1 前置优化, 2026-09-03) ----

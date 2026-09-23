@@ -20,6 +20,14 @@ add_library(vistella_media STATIC
     imagewindow/ImageIOController.h
     imagewindow/ImageIOController.cpp
 
+    # P3.5 (2026-09-23): Camera Raw 解码 (libraw 集成, optional)
+    #   CameraRawLoader 提供 stub 接口 (CameraRawLoader.cpp #ifdef MULTIDOC_HAVE_LIBRAW
+    #   切换真/假路径). CMakeLists.txt 顶层用 find_package(LibRaw) 设 MULTIDOC_HAVE_LIBRAW.
+    imagewindow/camera_raw/CameraRawLoader.h
+    imagewindow/camera_raw/CameraRawLoader.cpp
+    imagewindow/camera_raw/CameraRawDialog.h
+    imagewindow/camera_raw/CameraRawDialog.cpp
+
     # P0-3.2 (2026-09-08): PS 风格色彩调整 UI - 5 tab (Curves/Levels/HSL/B&W/ChannelMixer)
     #   AdjustmentPanel.h 内嵌 CurveEditor (自定义 QWidget, 8 控制点拖动)
     imagewindow/AdjustmentPanel.h
@@ -269,6 +277,18 @@ target_link_libraries(vistella_media
         # imagewindow 用了 RecentManager::instance()
         vistella_core
 )
+
+# P3.5 (2026-09-23): Camera Raw (libraw) — optional link. Defined by top-level
+#   CMakeLists.txt find_package(LibRaw). Stub-only build is the default until
+#   vcpkg/libraw gets installed.
+if(MULTIDOC_HAVE_LIBRAW)
+    target_compile_definitions(vistella_media PRIVATE MULTIDOC_HAVE_LIBRAW)
+    if(TARGET LibRaw::LibRaw)
+        target_link_libraries(vistella_media PUBLIC LibRaw::LibRaw)
+    elseif(TARGET libraw)
+        target_link_libraries(vistella_media PUBLIC libraw)
+    endif()
+endif()
 
 # OpenCV include + lib: PUBLIC 因为 imagewindow.h 直接 #include <opencv2/core.hpp>
 # 阶段 1 前置优化 (2026-09-03): 改用 imported target 而非 ${OpenCV_LIBS} 变量

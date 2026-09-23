@@ -24,6 +24,21 @@ const QHash<QString, QStringList> &buildTable()
             QStringLiteral(".webp"),
             QStringLiteral(".tif"),
             QStringLiteral(".tiff"),
+            // P3.5 (2026-09-23): Camera Raw 扩展名 (libraw 解码).
+            //   不依赖 libraw 编译 (CameraRawLoader 提供 stub 接口); 用户
+            //   启动后调 onOpenRawFile 自动拦截这些扩展名, 没 libraw 时返错误.
+            QStringLiteral(".cr2"),
+            QStringLiteral(".cr3"),
+            QStringLiteral(".nef"),
+            QStringLiteral(".arw"),
+            QStringLiteral(".dng"),
+            QStringLiteral(".raf"),
+            QStringLiteral(".orf"),
+            QStringLiteral(".rw2"),
+            QStringLiteral(".pef"),
+            QStringLiteral(".srw"),
+            QStringLiteral(".x3f"),
+            QStringLiteral(".nrw"),
         }},
         // audioWorker - 音频处理 (Audition+ffmpeg, 阶段 2 扩展)
         { QStringLiteral("audioWorker"), {
