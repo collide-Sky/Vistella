@@ -1339,7 +1339,7 @@
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="204"/>
-        <location filename="../src/app/mainwindow.cpp" line="1456"/>
+        <location filename="../src/app/mainwindow.cpp" line="1475"/>
         <source>保存确认</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1367,9 +1367,9 @@
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="220"/>
-        <location filename="../src/app/mainwindow.cpp" line="1465"/>
-        <location filename="../src/app/mainwindow.cpp" line="1616"/>
-        <location filename="../src/app/mainwindow.cpp" line="1648"/>
+        <location filename="../src/app/mainwindow.cpp" line="1484"/>
+        <location filename="../src/app/mainwindow.cpp" line="1635"/>
+        <location filename="../src/app/mainwindow.cpp" line="1667"/>
         <source>另存为</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1400,7 +1400,7 @@
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="280"/>
-        <location filename="../src/app/mainwindow.cpp" line="1555"/>
+        <location filename="../src/app/mainwindow.cpp" line="1574"/>
         <source>关闭其他</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1446,26 +1446,26 @@
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="291"/>
-        <location filename="../src/app/mainwindow.cpp" line="1765"/>
+        <location filename="../src/app/mainwindow.cpp" line="1784"/>
         <source>查找</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="292"/>
-        <location filename="../src/app/mainwindow.cpp" line="1797"/>
-        <location filename="../src/app/mainwindow.cpp" line="1800"/>
+        <location filename="../src/app/mainwindow.cpp" line="1816"/>
+        <location filename="../src/app/mainwindow.cpp" line="1819"/>
         <source>替换</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="295"/>
-        <location filename="../src/app/mainwindow.cpp" line="1829"/>
+        <location filename="../src/app/mainwindow.cpp" line="1848"/>
         <source>放大</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="296"/>
-        <location filename="../src/app/mainwindow.cpp" line="1830"/>
+        <location filename="../src/app/mainwindow.cpp" line="1849"/>
         <source>缩小</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1526,13 +1526,13 @@
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="396"/>
-        <location filename="../src/app/mainwindow.cpp" line="2874"/>
+        <location filename="../src/app/mainwindow.cpp" line="2895"/>
         <source>主页</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="401"/>
-        <location filename="../src/app/mainwindow.cpp" line="2875"/>
+        <location filename="../src/app/mainwindow.cpp" line="2896"/>
         <source>信息树</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1617,7 +1617,7 @@
     </message>
     <message>
         <location filename="../src/app/mainwindow.cpp" line="487"/>
-        <location filename="../src/app/mainwindow.cpp" line="1145"/>
+        <location filename="../src/app/mainwindow.cpp" line="1164"/>
         <source>图像</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1752,7 +1752,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2043"/>
+        <location filename="../src/app/mainwindow.cpp" line="2062"/>
         <source>Apply %1 (预览已应用)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1929,57 +1929,57 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1761"/>
+        <location filename="../src/app/mainwindow.cpp" line="1780"/>
         <source>查找 — 没有活动的图片窗口</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1766"/>
+        <location filename="../src/app/mainwindow.cpp" line="1785"/>
         <source>查找文本 (在所有文字图层):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1771"/>
+        <location filename="../src/app/mainwindow.cpp" line="1790"/>
         <source>查找 — 图层栈不可用</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1786"/>
+        <location filename="../src/app/mainwindow.cpp" line="1805"/>
         <source>查找: 模式 &apos;%1&apos; 在 %2 个文字图层中找到</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1793"/>
+        <location filename="../src/app/mainwindow.cpp" line="1812"/>
         <source>替换 — 没有活动的图片窗口</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1798"/>
+        <location filename="../src/app/mainwindow.cpp" line="1817"/>
         <source>查找文本:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1801"/>
+        <location filename="../src/app/mainwindow.cpp" line="1820"/>
         <source>替换为:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1806"/>
+        <location filename="../src/app/mainwindow.cpp" line="1825"/>
         <source>替换 — 图层栈不可用</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1826"/>
+        <location filename="../src/app/mainwindow.cpp" line="1845"/>
         <source>替换: &apos;%1&apos; → &apos;%2&apos; 在 %3 个文字图层中应用</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1845"/>
+        <location filename="../src/app/mainwindow.cpp" line="1864"/>
         <source>默认布局已恢复</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1851"/>
+        <location filename="../src/app/mainwindow.cpp" line="1870"/>
         <source>默认布局文件不存在 (%1) — 请先保存当前布局为默认</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2180,391 +2180,391 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1144"/>
+        <location filename="../src/app/mainwindow.cpp" line="1163"/>
         <source>文本</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1182"/>
-        <location filename="../src/app/mainwindow.cpp" line="1568"/>
+        <location filename="../src/app/mainwindow.cpp" line="1201"/>
+        <location filename="../src/app/mainwindow.cpp" line="1587"/>
         <source>钉住 / 取消钉住</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1193"/>
-        <location filename="../src/app/mainwindow.cpp" line="1552"/>
+        <location filename="../src/app/mainwindow.cpp" line="1212"/>
+        <location filename="../src/app/mainwindow.cpp" line="1571"/>
         <source>关闭</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1457"/>
+        <location filename="../src/app/mainwindow.cpp" line="1476"/>
         <source>文档 &quot;%1&quot; 有未保存的修改。是否保存?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1547"/>
+        <location filename="../src/app/mainwindow.cpp" line="1566"/>
         <source>返回主页</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1561"/>
+        <location filename="../src/app/mainwindow.cpp" line="1580"/>
         <source>其他同类型一并关闭</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1601"/>
+        <location filename="../src/app/mainwindow.cpp" line="1620"/>
         <source>打开文件</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1623"/>
-        <location filename="../src/app/mainwindow.cpp" line="1652"/>
+        <location filename="../src/app/mainwindow.cpp" line="1642"/>
+        <location filename="../src/app/mainwindow.cpp" line="1671"/>
         <source>保存失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1704"/>
+        <location filename="../src/app/mainwindow.cpp" line="1723"/>
         <source>当前页面没有可撤销的操作</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1712"/>
+        <location filename="../src/app/mainwindow.cpp" line="1731"/>
         <source>当前页面没有可重做的操作</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1729"/>
+        <location filename="../src/app/mainwindow.cpp" line="1748"/>
         <source>当前页面没有可全选的图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1740"/>
+        <location filename="../src/app/mainwindow.cpp" line="1759"/>
         <source>当前页面没有可取消的选区</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1751"/>
+        <location filename="../src/app/mainwindow.cpp" line="1770"/>
         <source>当前页面没有可反选的选区</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1861"/>
-        <location filename="../src/app/mainwindow.cpp" line="1870"/>
-        <location filename="../src/app/mainwindow.cpp" line="1879"/>
-        <location filename="../src/app/mainwindow.cpp" line="1888"/>
-        <location filename="../src/app/mainwindow.cpp" line="1897"/>
-        <location filename="../src/app/mainwindow.cpp" line="1906"/>
+        <location filename="../src/app/mainwindow.cpp" line="1880"/>
+        <location filename="../src/app/mainwindow.cpp" line="1889"/>
+        <location filename="../src/app/mainwindow.cpp" line="1898"/>
+        <location filename="../src/app/mainwindow.cpp" line="1907"/>
+        <location filename="../src/app/mainwindow.cpp" line="1916"/>
+        <location filename="../src/app/mainwindow.cpp" line="1925"/>
         <source>当前页面没有图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1947"/>
+        <location filename="../src/app/mainwindow.cpp" line="1966"/>
         <source>已选择登录方式: %1 (阶段 0 仅占位)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1976"/>
+        <location filename="../src/app/mainwindow.cpp" line="1995"/>
         <source>图像 (%1);; 音频 (%2);; 视频 (%3);; 文本 (*.txt *.md);; 全部文件 (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="1999"/>
+        <location filename="../src/app/mainwindow.cpp" line="2018"/>
         <source>未命名</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2003"/>
+        <location filename="../src/app/mainwindow.cpp" line="2022"/>
         <source>未命名图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2034"/>
+        <location filename="../src/app/mainwindow.cpp" line="2053"/>
         <source>当前页面不可应用滤镜 (需要图像窗口)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2048"/>
+        <location filename="../src/app/mainwindow.cpp" line="2067"/>
         <source>已应用 %1 (入撤销栈)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2068"/>
+        <location filename="../src/app/mainwindow.cpp" line="2087"/>
         <source>当前页面不可用 (需要图像窗口)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2072"/>
+        <location filename="../src/app/mainwindow.cpp" line="2091"/>
         <source>已打开 %1 对话框</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2079"/>
+        <location filename="../src/app/mainwindow.cpp" line="2098"/>
         <source>当前页面不可应用 Liquify (需要图像窗口)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2086"/>
+        <location filename="../src/app/mainwindow.cpp" line="2105"/>
         <source>Liquify: 当前图像为空</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2115"/>
+        <location filename="../src/app/mainwindow.cpp" line="2134"/>
         <source>已应用 Liquify (入撤销栈)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2131"/>
+        <location filename="../src/app/mainwindow.cpp" line="2150"/>
         <source>需要图像窗口才能编辑蒙版</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2136"/>
+        <location filename="../src/app/mainwindow.cpp" line="2155"/>
         <source>已切换到 Mask Brush 工具 (画笔编辑当前层像素蒙版)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2138"/>
+        <location filename="../src/app/mainwindow.cpp" line="2157"/>
         <source>ToolMediator 未初始化</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2148"/>
-        <location filename="../src/app/mainwindow.cpp" line="2190"/>
-        <location filename="../src/app/mainwindow.cpp" line="2254"/>
-        <location filename="../src/app/mainwindow.cpp" line="2329"/>
+        <location filename="../src/app/mainwindow.cpp" line="2167"/>
+        <location filename="../src/app/mainwindow.cpp" line="2209"/>
+        <location filename="../src/app/mainwindow.cpp" line="2273"/>
+        <location filename="../src/app/mainwindow.cpp" line="2348"/>
         <source>需要图像窗口</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2153"/>
-        <location filename="../src/app/mainwindow.cpp" line="2195"/>
-        <location filename="../src/app/mainwindow.cpp" line="2259"/>
-        <location filename="../src/app/mainwindow.cpp" line="2331"/>
+        <location filename="../src/app/mainwindow.cpp" line="2172"/>
+        <location filename="../src/app/mainwindow.cpp" line="2214"/>
+        <location filename="../src/app/mainwindow.cpp" line="2278"/>
+        <location filename="../src/app/mainwindow.cpp" line="2350"/>
         <source>LayerStack 未初始化</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2158"/>
-        <location filename="../src/app/mainwindow.cpp" line="2200"/>
-        <location filename="../src/app/mainwindow.cpp" line="2264"/>
-        <location filename="../src/app/mainwindow.cpp" line="2334"/>
+        <location filename="../src/app/mainwindow.cpp" line="2177"/>
+        <location filename="../src/app/mainwindow.cpp" line="2219"/>
+        <location filename="../src/app/mainwindow.cpp" line="2283"/>
+        <location filename="../src/app/mainwindow.cpp" line="2353"/>
         <source>请先选中图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2163"/>
-        <location filename="../src/app/mainwindow.cpp" line="2269"/>
+        <location filename="../src/app/mainwindow.cpp" line="2182"/>
+        <location filename="../src/app/mainwindow.cpp" line="2288"/>
         <source>图层无图像数据</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2181"/>
+        <location filename="../src/app/mainwindow.cpp" line="2200"/>
         <source>已添加像素蒙版 (全白, 现在用 Mask Brush 涂黑遮罩)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2205"/>
+        <location filename="../src/app/mainwindow.cpp" line="2224"/>
         <source>当前图层没有像素蒙版 (先添加像素蒙版)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2211"/>
-        <location filename="../src/app/mainwindow.cpp" line="2214"/>
-        <location filename="../src/app/mainwindow.cpp" line="2217"/>
-        <location filename="../src/app/mainwindow.cpp" line="2220"/>
+        <location filename="../src/app/mainwindow.cpp" line="2230"/>
+        <location filename="../src/app/mainwindow.cpp" line="2233"/>
+        <location filename="../src/app/mainwindow.cpp" line="2236"/>
+        <location filename="../src/app/mainwindow.cpp" line="2239"/>
         <source>Refine Edge</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2212"/>
+        <location filename="../src/app/mainwindow.cpp" line="2231"/>
         <source>Smooth (0-100):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2215"/>
+        <location filename="../src/app/mainwindow.cpp" line="2234"/>
         <source>Feather (0-100):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2218"/>
+        <location filename="../src/app/mainwindow.cpp" line="2237"/>
         <source>Contrast (-100..+100):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2221"/>
+        <location filename="../src/app/mainwindow.cpp" line="2240"/>
         <source>Shift (-100..+100, 收缩/扩展):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2243"/>
+        <location filename="../src/app/mainwindow.cpp" line="2262"/>
         <source>已应用 Refine Edge (s=%1 f=%2 c=%3 s=%5)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2285"/>
-        <location filename="../src/app/mainwindow.cpp" line="2288"/>
+        <location filename="../src/app/mainwindow.cpp" line="2304"/>
+        <location filename="../src/app/mainwindow.cpp" line="2307"/>
         <source>Color Range</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2286"/>
+        <location filename="../src/app/mainwindow.cpp" line="2305"/>
         <source>Fuzziness (0-255):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2289"/>
+        <location filename="../src/app/mainwindow.cpp" line="2308"/>
         <source>Invert (0/1):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2311"/>
+        <location filename="../src/app/mainwindow.cpp" line="2330"/>
         <source>已应用 Color Range (fuzziness=%1, invert=%2)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2351"/>
+        <location filename="../src/app/mainwindow.cpp" line="2370"/>
         <source>图层无效</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2355"/>
+        <location filename="../src/app/mainwindow.cpp" line="2374"/>
         <source>该图层已是智能对象</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2359"/>
+        <location filename="../src/app/mainwindow.cpp" line="2378"/>
         <source>请先选中一个有图像的 Bitmap 图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2365"/>
+        <location filename="../src/app/mainwindow.cpp" line="2384"/>
         <source>转换为智能对象失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2373"/>
+        <location filename="../src/app/mainwindow.cpp" line="2392"/>
         <source>已转换为智能对象 (嵌入模式)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2388"/>
-        <location filename="../src/app/mainwindow.cpp" line="2438"/>
-        <location filename="../src/app/mainwindow.cpp" line="2481"/>
-        <location filename="../src/app/mainwindow.cpp" line="2539"/>
-        <location filename="../src/app/mainwindow.cpp" line="2568"/>
-        <location filename="../src/app/mainwindow.cpp" line="2599"/>
-        <location filename="../src/app/mainwindow.cpp" line="2624"/>
+        <location filename="../src/app/mainwindow.cpp" line="2407"/>
+        <location filename="../src/app/mainwindow.cpp" line="2457"/>
+        <location filename="../src/app/mainwindow.cpp" line="2500"/>
+        <location filename="../src/app/mainwindow.cpp" line="2558"/>
+        <location filename="../src/app/mainwindow.cpp" line="2587"/>
+        <location filename="../src/app/mainwindow.cpp" line="2618"/>
+        <location filename="../src/app/mainwindow.cpp" line="2643"/>
         <source>请先选中一个智能对象图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2393"/>
+        <location filename="../src/app/mainwindow.cpp" line="2412"/>
         <source>栅格化失败 (源文件不存在)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2401"/>
+        <location filename="../src/app/mainwindow.cpp" line="2420"/>
         <source>已栅格化智能对象</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2416"/>
+        <location filename="../src/app/mainwindow.cpp" line="2435"/>
         <source>该图层不是智能对象或未设置源文件</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2420"/>
+        <location filename="../src/app/mainwindow.cpp" line="2439"/>
         <source>无法打开源文件: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2423"/>
+        <location filename="../src/app/mainwindow.cpp" line="2442"/>
         <source>已在系统默认应用打开源文件: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2444"/>
+        <location filename="../src/app/mainwindow.cpp" line="2463"/>
         <source>选择源文件</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2445"/>
+        <location filename="../src/app/mainwindow.cpp" line="2464"/>
         <source>图像 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;所有 (*.*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2453"/>
+        <location filename="../src/app/mainwindow.cpp" line="2472"/>
         <source>重新链接失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2462"/>
+        <location filename="../src/app/mainwindow.cpp" line="2481"/>
         <source>已重新链接到: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2493"/>
+        <location filename="../src/app/mainwindow.cpp" line="2512"/>
         <source>选择智能滤镜</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2494"/>
+        <location filename="../src/app/mainwindow.cpp" line="2513"/>
         <source>滤镜类型:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2499"/>
+        <location filename="../src/app/mainwindow.cpp" line="2518"/>
         <source>应用滤镜失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2506"/>
+        <location filename="../src/app/mainwindow.cpp" line="2525"/>
         <source>已应用智能滤镜: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2543"/>
-        <location filename="../src/app/mainwindow.cpp" line="2547"/>
+        <location filename="../src/app/mainwindow.cpp" line="2562"/>
+        <location filename="../src/app/mainwindow.cpp" line="2566"/>
         <source>缩放</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2544"/>
+        <location filename="../src/app/mainwindow.cpp" line="2563"/>
         <source>Scale X (0.1..10):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2548"/>
+        <location filename="../src/app/mainwindow.cpp" line="2567"/>
         <source>Scale Y (0.1..10):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2572"/>
+        <location filename="../src/app/mainwindow.cpp" line="2591"/>
         <source>旋转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2573"/>
+        <location filename="../src/app/mainwindow.cpp" line="2592"/>
         <source>Rotation (degrees, -360..360):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2628"/>
+        <location filename="../src/app/mainwindow.cpp" line="2647"/>
         <source>未应用任何变换</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2646"/>
+        <location filename="../src/app/mainwindow.cpp" line="2665"/>
         <source>打开文件夹</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2654"/>
+        <location filename="../src/app/mainwindow.cpp" line="2673"/>
         <source>已加载目录: %1 (在信息树里双击/回车打开文件)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/app/mainwindow.cpp" line="2702"/>
+        <location filename="../src/app/mainwindow.cpp" line="2721"/>
         <source>打开失败</source>
         <translation type="unfinished"></translation>
     </message>

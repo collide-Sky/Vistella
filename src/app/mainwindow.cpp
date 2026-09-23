@@ -1004,25 +1004,37 @@ void MainWindow::onMaximizeRestore()
 }
 
 // =============================================================
-// 简单窗口状态机 (2026-09-09 重建, 9/4+ 工作丢失后)
-//   1 个 mode (Normal/Maximized) + 1 个 size (m_normalSize)
-//   setMode 统一切 m_mode + showMaximized/showNormal + 按钮文字
-//   Normal 模式用 m_normalSize, Maximized 模式用 Qt 默认行为
-//   不做 sanity check / fullscreenish 检测 / 复杂 fallback
+// 窗口状态机 (2026-09-09 重建, Q4.1 2026-09-23 真正落地 "统一入口")
+//   INVARIANT (Q4.1 拍板):
+//     - setMode() 是修改 m_mode / 切 Normal<->Maximized 的唯一允许入口.
+//     - 任何代码禁止直接调 showMaximized() / showNormal() / setGeometry()
+//       影响窗口 mode. mousePress/Move/DoubleClick 标题栏拖动, 工具栏按钮,
+//       系统快捷键 (Win+Up/Down 等), QSettings 启动加载, 异常恢复流程 —
+//       全部必须走 setMode().
+//     - 唯一允许绕过 setMode 的: showMinimized() (Qt 标准最小化不涉及 mode).
+//
+//   状态: 1 个 mode (Normal/Maximized) + 1 个 size (m_normalSize=1280x800)
+//   - Normal 模式用 m_normalSize 居中显示.
+//   - Maximized 模式用 Qt 默认行为.
 // =============================================================
 void MainWindow::setMode(WindowMode m)
 {
-    LOG_INFO("[State] setMode({}) enter, current m_mode={} m_normalSize={}x{}",
-             static_cast<int>(m), static_cast<int>(m_mode), m_normalSize.width(), m_normalSize.height());
+    // ---- Invariant: 进入 setMode 之前记旧状态, 便于回溯谁在外面偷偷切 mode ----
+    const WindowMode oldMode = m_mode;
+    const bool oldIsMaximized = isMaximized();
+    const QSize oldSize = size();
+    LOG_INFO("[State] setMode({}) enter: oldMode={} oldIsMaximized={} oldSize={}x{} normalSize={}x{}",
+             static_cast<int>(m),
+             static_cast<int>(oldMode), oldIsMaximized,
+             oldSize.width(), oldSize.height(),
+             m_normalSize.width(), m_normalSize.height());
+
     m_mode = m;
     if (m == WindowMode::Maximized) {
-        // 用 Qt 标准 showMaximized(). 不要在 Frameless window 上自己 setGeometry
-        //   (Frameless + WM 在切状态时偶尔把窗口拉到 (0,0))
+        // 唯一允许调 showMaximized() 的地方
         showMaximized();
     } else {
-        // Qt 标准 showNormal() 把窗口拉到 maximized 之前的 normal geometry
-        //   如果这是从初始 maximized 状态第一次切到 normal, Qt 不知道 saved geometry
-        //   退到 (0,0). 我们显式 setGeometry 居中当前屏幕
+        // 唯一允许调 showNormal() 的地方
         showNormal();
         QScreen *scr = QGuiApplication::screenAt(frameGeometry().center());
         if (!scr) scr = windowHandle() ? windowHandle()->screen() : screen();
@@ -1041,15 +1053,22 @@ void MainWindow::setMode(WindowMode m)
         m_btnMax->setText(m == WindowMode::Maximized ? QStringLiteral("\u2750")
                                                     : QStringLiteral("\u25A1"));
     }
-    LOG_INFO("[State] setMode({}) exit, current m_mode={} isMaximized={} size={}x{}",
-             static_cast<int>(m), static_cast<int>(m_mode), isMaximized(),
+    // changeEvent 会同步 m_isMaximized — 但这里立刻同步一份, 避免 setMode 返回前
+    // 任何 caller 读 m_isMaximized 拿到旧值 (race).
+    m_isMaximized = isMaximized();
+    LOG_INFO("[State] setMode({}) exit: m_mode={} m_isMaximized={} size={}x{}",
+             static_cast<int>(m), static_cast<int>(m_mode), m_isMaximized,
              size().width(), size().height());
 }
 
 void MainWindow::loadWindowState()
 {
     QSettings s;
-    const int modeInt = s.value(QStringLiteral("window/mode"), int(WindowMode::Maximized)).toInt();
+    // Q4.1 (2026-09-23): 默认值 Normal (之前 Maximized).
+    //   冷启动 / "上次异常退出 + 用户选不恢复" 等没有 QSettings 的路径,
+    //   应该 Normal 居中显示 1280x800, 而不是强制 Maximized. 这就是用户
+    //   反复看到的"取消恢复也会最大化"根因.
+    const int modeInt = s.value(QStringLiteral("window/mode"), int(WindowMode::Normal)).toInt();
     m_mode = (modeInt == int(WindowMode::Normal)) ? WindowMode::Normal : WindowMode::Maximized;
     // m_normalSize 不持久化 (2026-09-09 user 拍板: 1280x800 写死, 不让 QSettings 污染)
     //   始终用构造函数初始化的默认 1280x800
@@ -2822,8 +2841,10 @@ void MainWindow::mouseMoveEvent(QMouseEvent *e)
             const QPoint delta = e->globalPosition().toPoint() - m_titlePressGlobal;
             if (delta.manhattanLength() > 4) {
                 const qreal ratioX = (m_titleDragStartLocal.x() - 0.0) / qreal(width());
-                // 标题栏拖动还原 — showNormal 让窗口回到 saved geometry
-                showNormal();
+                // 标题栏拖动还原 — 走 setMode(Normal) 统一入口 (Q4.1 修复)
+                //   之前直接 showNormal() 绕过 setMode → m_mode 没更新 → 下次点
+                //   最大化按钮 / 双击标题栏 / QSettings 写入 → 窗口又被强制 Maximized
+                setMode(WindowMode::Normal);
                 const QPoint newPos = e->globalPosition().toPoint()
                                       - QPoint(int(width() * ratioX), m_titleDragStartLocal.y());
                 move(newPos);

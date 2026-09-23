@@ -71,6 +71,15 @@ private slots:
     //    nowhere else in mainwindow.cpp.
     void test_setMode_isSoleEntryForShowMaximizedShowNormal();
 
+    // Q4.1 (2026-09-23) — 5 new regression tests covering the unified-entry
+    //   invariant restoration. Previous 4 tests verified *which paths*
+    //   exist; the new tests verify *which paths must NOT exist*.
+    void test_loadWindowState_defaultModeIsNormal();              // 5
+    void test_mouseMoveEvent_dragRestoresVia_setModeNormal();      // 6
+    void test_setMode_logInvariant_includesOldAndNewState();      // 7
+    void test_mainwindow_h_documentsUnifiedEntryInvariant();      // 8
+    void test_showMinimized_isTheOnlyException();                 // 9
+
 private:
     QString m_mainwindowCpp;   // absolute path
     QString m_mainwindowH;
@@ -272,13 +281,16 @@ void tst_WindowMode::test_setMode_isSoleEntryForShowMaximizedShowNormal()
     QCOMPARE(setModeCodeOnly.count(QStringLiteral("showNormal()")), 1);
 
     // Outside setMode: zero showMaximized() (drag handler does not maximize,
-    // it only restores to normal). One showNormal() is allowed and must
-    // live in mouseMoveEvent (titleBar drag-to-restore gesture, which is
-    // event-driven, not a programmatic entry point).
+    // it only restores to normal via setMode(Normal)).
+    // Q4.1 (2026-09-23): 之前 mouseMoveEvent drag-to-restore 直接调 showNormal()
+    //   绕过 setMode → m_mode 没更新 → 下次点 Maximized 按钮 / 双击 / QSettings
+    //   启动加载都会强制 Maximized. 现在统一走 setMode(Normal).
+    //   唯一允许的 showMaximized()/showNormal() 调用必须在 setMode body 里.
     QCOMPARE(totalShowMax, 1);
-    QCOMPARE(totalShowNormal, 2);
+    QCOMPARE(totalShowNormal, 1);
 
-    // Verify the second showNormal() lives in mouseMoveEvent's drag handler.
+    // Verify mouseMoveEvent drag handler no longer contains showNormal() —
+    // it must go through setMode(Normal) for the invariant to hold.
     const QString dragBody = extractFunctionBody(cpp,
         QStringLiteral("void MainWindow::mouseMoveEvent(QMouseEvent"));
     QVERIFY2(!dragBody.isEmpty(),
@@ -287,7 +299,176 @@ void tst_WindowMode::test_setMode_isSoleEntryForShowMaximizedShowNormal()
     dragCodeOnly.replace(reLineComment, QString());
     dragCodeOnly.replace(reBlockComment, QString());
     dragCodeOnly.replace(reStringLiteral, QStringLiteral("\"\""));
-    QCOMPARE(dragCodeOnly.count(QStringLiteral("showNormal()")), 1);
+    QCOMPARE(dragCodeOnly.count(QStringLiteral("showNormal()")), 0);
+    QVERIFY2(dragCodeOnly.contains(QStringLiteral("setMode(WindowMode::Normal)")),
+             "mouseMoveEvent drag-to-restore must call setMode(WindowMode::Normal) "
+             "to keep m_mode in sync (Q4.1 invariant)");
+}
+
+// ---------------------------------------------------------------------------
+// Q4.1 (2026-09-23) regression tests — 5 invariants guarding the
+//   "all mode changes go through setMode" restoration. Together with the
+//   4 pre-existing tests, these form a tight fence around the state machine.
+// ---------------------------------------------------------------------------
+
+// Test 5: loadWindowState must default to Normal (not Maximized) so that
+//   cold-start and "abnormal-exit + user-cancels-recovery" both fall into
+//   setMode(Normal) → centered 1280x800, instead of being force-maximized.
+void tst_WindowMode::test_loadWindowState_defaultModeIsNormal()
+{
+    const QString cpp = readOrEmpty(m_mainwindowCpp);
+    QVERIFY2(!cpp.isEmpty(), qPrintable(QString("cannot open ") + m_mainwindowCpp));
+
+    // Strip ONLY comments (NOT string literals — we want to match the
+    // "window/mode" key inside QStringLiteral(...)).
+    static const QRegularExpression reLineComment(QStringLiteral("//[^\n]*"));
+    static const QRegularExpression reBlockComment(
+        QStringLiteral("/\\*.*?\\*/"), QRegularExpression::DotMatchesEverythingOption);
+
+    // Locate the loadWindowState body and inspect the QSettings.value() default.
+    const QString body = extractFunctionBody(cpp,
+        QStringLiteral("void MainWindow::loadWindowState()"));
+    QVERIFY2(!body.isEmpty(),
+             "void MainWindow::loadWindowState() definition not found");
+
+    QString bodyStrip = body;
+    bodyStrip.replace(reLineComment, QString());
+
+    // Must contain "window/mode" key (read access).
+    QVERIFY2(bodyStrip.contains(QStringLiteral("window/mode")),
+             "loadWindowState must read the \"window/mode\" QSettings key");
+
+    // The QSettings.value() default value must be WindowMode::Normal (Q4.1).
+    //   The form is: s.value("window/mode", int(WindowMode::Normal)).toInt();
+    // Use a 2-step check: locate the window/mode substring, then inspect the
+    // next ~80 chars (the default argument).
+    const int keyPos = bodyStrip.indexOf(QStringLiteral("window/mode"));
+    QVERIFY2(keyPos >= 0, "loadWindowState must reference window/mode QSettings key");
+    // Window covers the whole s.value(...) call expression — up to ~80 chars
+    // is enough to span `(QStringLiteral("window/mode"), int(WindowMode::Normal))`.
+    const QString afterKey = bodyStrip.mid(keyPos,
+        qMin(80, bodyStrip.size() - keyPos));
+    QVERIFY2(afterKey.contains(QStringLiteral("WindowMode::Normal")),
+             "loadWindowState QSettings.value default for window/mode must be "
+             "int(WindowMode::Normal) — Q4.1 fix changed default from Maximized "
+             "to Normal so cold-start + 'cancel-recovery' paths fall into "
+             "setMode(Normal) instead of being force-maximized.");
+    QVERIFY2(!afterKey.contains(QStringLiteral("WindowMode::Maximized")),
+             "loadWindowState QSettings.value default must NOT be Maximized "
+             "(Q4.1: this was the root cause of 'cancel-recovery also maximizes')");
+}
+
+// Test 6: mouseMoveEvent drag-to-restore must call setMode(WindowMode::Normal),
+//   not showNormal() directly. Guards against reintroduction of the bypass
+//   that caused m_mode to drift out of sync with the actual window state.
+void tst_WindowMode::test_mouseMoveEvent_dragRestoresVia_setModeNormal()
+{
+    const QString cpp = readOrEmpty(m_mainwindowCpp);
+    QVERIFY2(!cpp.isEmpty(), qPrintable(QString("cannot open ") + m_mainwindowCpp));
+
+    const QString dragBody = extractFunctionBody(cpp,
+        QStringLiteral("void MainWindow::mouseMoveEvent(QMouseEvent"));
+    QVERIFY2(!dragBody.isEmpty(),
+             "void MainWindow::mouseMoveEvent(QMouseEvent) definition not found");
+
+    QVERIFY2(dragBody.contains(QStringLiteral("setMode(WindowMode::Normal)")),
+             "mouseMoveEvent drag-to-restore must call setMode(WindowMode::Normal) "
+             "to keep m_mode in sync (Q4.1)");
+
+    // Must NOT directly call showNormal (bypass invariant).
+    static const QRegularExpression reLineComment(QStringLiteral("//[^\n]*"));
+    static const QRegularExpression reBlockComment(
+        QStringLiteral("/\\*.*?\\*/"), QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression reStringLiteral(
+        QStringLiteral("\"([^\"\\\\]|\\\\.)*\""));
+    QString dragCodeOnly = dragBody;
+    dragCodeOnly.replace(reLineComment, QString());
+    dragCodeOnly.replace(reBlockComment, QString());
+    dragCodeOnly.replace(reStringLiteral, QStringLiteral("\"\""));
+    QCOMPARE(dragCodeOnly.count(QStringLiteral("showNormal()")), 0);
+    QCOMPARE(dragCodeOnly.count(QStringLiteral("showMaximized()")), 0);
+}
+
+// Test 7: setMode() must log both old and new state at enter/exit, so that
+//   future "who called setMode without updating m_mode?" bugs are easy to
+//   trace from the log alone. Guards against accidental log simplification.
+void tst_WindowMode::test_setMode_logInvariant_includesOldAndNewState()
+{
+    const QString cpp = readOrEmpty(m_mainwindowCpp);
+    QVERIFY2(!cpp.isEmpty(), qPrintable(QString("cannot open ") + m_mainwindowCpp));
+
+    const QString body = extractFunctionBody(cpp,
+        QStringLiteral("void MainWindow::setMode(WindowMode"));
+    QVERIFY2(!body.isEmpty(), "setMode body not found");
+
+    // enter log line should mention oldMode (so we can trace regressions).
+    QVERIFY2(body.contains(QStringLiteral("oldMode")),
+             "setMode enter log must include 'oldMode' for regression tracing (Q4.1)");
+    // exit log line should mention m_mode (new value).
+    QVERIFY2(body.contains(QStringLiteral("m_mode")),
+             "setMode body must mention m_mode (Q4.1 log invariant)");
+
+    // Immediate m_isMaximized sync at the end (so callers reading
+    // m_isMaximized right after setMode see the new value, not the old one).
+    QVERIFY2(body.contains(QStringLiteral("m_isMaximized = isMaximized()")),
+             "setMode must sync m_isMaximized before returning "
+             "(Q4.1: avoid race for callers reading m_isMaximized immediately)");
+}
+
+// Test 8: mainwindow.h must document the unified-entry invariant, with
+//   explicit ALLOWED / FORBIDDEN / EXCEPTION lists. This is the architectural
+//   contract — without the documentation, future devs will not know what
+//   the invariant is or why it matters.
+void tst_WindowMode::test_mainwindow_h_documentsUnifiedEntryInvariant()
+{
+    const QString h = readOrEmpty(m_mainwindowH);
+    QVERIFY2(!h.isEmpty(), qPrintable(QString("cannot open ") + m_mainwindowH));
+
+    QVERIFY2(h.contains(QStringLiteral("INVARIANT")),
+             "mainwindow.h must label setMode invariant with 'INVARIANT' marker");
+    QVERIFY2(h.contains(QStringLiteral("ALLOWED")),
+             "mainwindow.h invariant doc must list ALLOWED entry points");
+    QVERIFY2(h.contains(QStringLiteral("FORBIDDEN")),
+             "mainwindow.h invariant doc must list FORBIDDEN callers");
+    QVERIFY2(h.contains(QStringLiteral("EXCEPTION")),
+             "mainwindow.h invariant doc must note the showMinimized() exception");
+    // Explicitly: showMaximized()/showNormal() outside setMode are forbidden.
+    QVERIFY2(h.contains(QStringLiteral("showMaximized()"))
+          && h.contains(QStringLiteral("showNormal()")),
+             "mainwindow.h invariant doc must name the forbidden Qt calls");
+}
+
+// Test 9: showMinimized() is the only Qt-show call allowed outside setMode
+//   (because minimizing doesn't touch Normal/Maximized mode). Any other
+//   .showMaximized() / .showNormal() / .setGeometry() (window mode) on
+//   the main window anywhere in src/ is a regression.
+void tst_WindowMode::test_showMinimized_isTheOnlyException()
+{
+    // Scan src/app/mainwindow.cpp for direct showMinimized() calls —
+    // these are tolerated (Qt standard minimize, not mode-changing).
+    const QString cpp = readOrEmpty(m_mainwindowCpp);
+    QVERIFY2(!cpp.isEmpty(), qPrintable(QString("cannot open ") + m_mainwindowCpp));
+
+    static const QRegularExpression reLineComment(QStringLiteral("//[^\n]*"));
+    static const QRegularExpression reBlockComment(
+        QStringLiteral("/\\*.*?\\*/"), QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression reStringLiteral(
+        QStringLiteral("\"([^\"\\\\]|\\\\.)*\""));
+    QString codeOnly = cpp;
+    codeOnly.replace(reLineComment, QString());
+    codeOnly.replace(reBlockComment, QString());
+    codeOnly.replace(reStringLiteral, QStringLiteral("\"\""));
+
+    // showMinimized is the only Qt show call allowed outside setMode.
+    // Confirm at least one exists (so the test isn't trivially passing).
+    QVERIFY2(codeOnly.contains(QStringLiteral("showMinimized")),
+             "expected showMinimized() somewhere in mainwindow.cpp");
+    // No setGeometry() call directly in mainwindow.cpp that targets the
+    // window itself (the canvas/painter-internal setGeometry calls inside
+    // child widgets don't appear in mainwindow.cpp body).
+    QVERIFY2(!codeOnly.contains(QStringLiteral("this->setGeometry")),
+             "mainwindow.cpp must not call this->setGeometry directly — "
+             "setMode is the only path allowed to size/place the window");
 }
 
 QTEST_MAIN(tst_WindowMode)

@@ -43,10 +43,28 @@ public:
     // 窗口模式 (2026-09-09 简单状态机: 1 mode + 1 size)
     void setMode(WindowMode m);
     void loadWindowState();
-    // Apply current m_mode through setMode(). External code (e.g. main.cpp splash timer)
-    //   must NEVER call showMaximized()/showNormal() directly. Always go through
-    //   this so the Normal branch's centered setGeometry runs and button text syncs.
-    // P1.4.6 fix (2026-09-17): unify all 3 showMaximized/showNormal entry points.
+    // Apply current m_mode through setMode().
+    //
+    // Q4.1 (2026-09-23) INVARIANT — 任何修改窗口 mode / 触发 Normal<->Maximized 切换的代码,
+    //   必须走 setMode() 这一个入口, 禁止直接调 showMaximized()/showNormal()/setGeometry():
+    //
+    //     ALLOWED entry points (singleton):
+    //       setMode(Maximized)         — 切到最大化, 内部唯一允许调 showMaximized()
+    //       setMode(Normal)            — 切到正常 + 居中 m_normalSize, 内部唯一允许调 showNormal()
+    //       applyWindowMode()          — 等价 setMode(m_mode), splash 启动时统一入口
+    //       onMaximizeRestore()        — 双击标题栏 / 最大化按钮 → setMode 切换
+    //
+    //     FORBIDDEN callers (任何后续功能开发都不许直接调):
+    //       - showMaximized()          — 调 setMode(Maximized) 替代
+    //       - showNormal()             — 调 setMode(Normal) 替代
+    //       - setGeometry() (影响 mode) — Normal 时 setMode(Normal) 内部会做居中 setGeometry
+    //
+    //     EXCEPTION (only):
+    //       - showMinimized()          — Qt 标准最小化, 不涉及 Normal/Maximized 切换, 保留直接调用
+    //       - mouseMoveEvent drag      — 调 setMode(Normal) 后继续 move() 覆盖 (drag 内置)
+    //
+    //   监控: setMode 进入/退出有 LOG_INFO [State] setMode(...) enter/exit, 含 oldMode/IsMaximized/Size
+    //   便于将来出 bug 时 grep log 找谁在外面偷偷切 mode.
     void applyWindowMode() { setMode(m_mode); }
     WindowMode mode() const { return m_mode; }
 
