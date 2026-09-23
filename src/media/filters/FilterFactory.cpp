@@ -29,6 +29,9 @@ std::unique_ptr<FilterStrategy> FilterFactory::createFilter(FilterKind kind)
     case FilterKind::HighPass:       return std::make_unique<HighPassFilter>();
     case FilterKind::Solarize:       return std::make_unique<SolarizeFilter>();
     case FilterKind::FilterGallery:  return std::make_unique<FilterGalleryFilter>();
+    case FilterKind::AddNoise:       return std::make_unique<AddNoiseFilter>();
+    case FilterKind::ReduceNoise:    return std::make_unique<ReduceNoiseFilter>();
+    case FilterKind::MedianNoise:    return std::make_unique<MedianNoiseFilter>();
     }
     return nullptr;
 }

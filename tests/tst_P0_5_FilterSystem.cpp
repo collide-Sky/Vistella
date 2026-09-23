@@ -43,12 +43,15 @@ class tst_P0_5_FilterSystem : public QObject
     Q_OBJECT
 private slots:
     void factory_createsAll20Kinds();
+    void factory_createsAll23Kinds();        // P3.3: +3 Noise
     void filterName_returnsValidForAllKinds();
+    void filterName_returnsValidForAll23Kinds();  // P3.3
     void blur_4_filters_changeImage();
     void sharpen_3_filters_changeImage();
     void style_3_filters_changeImage();
     void color_5_filters_changeImage();
     void other_5_filters_changeImage();
+    void noise_3_filters_changeImage();      // P3.3
     void command_redoUndo();
     void filterDialog_emitSignals();
     void hasParam_consistent();
@@ -89,12 +92,35 @@ void tst_P0_5_FilterSystem::factory_createsAll20Kinds()
     }
 }
 
+// P3.3 (2026-09-22): 23 filter (20 + 3 Noise)
+void tst_P0_5_FilterSystem::factory_createsAll23Kinds()
+{
+    for (int i = 0; i <= 22; ++i) {
+        auto f = FilterFactory::createFilter(static_cast<FilterKind>(i));
+        QVERIFY2(f != nullptr, qPrintable(QString("filter kind=%1 null").arg(i)));
+        QCOMPARE(static_cast<int>(f->kind()), i);
+    }
+}
+
 void tst_P0_5_FilterSystem::filterName_returnsValidForAllKinds()
 {
     for (int i = 0; i <= 19; ++i) {
         const char* n = filterName(static_cast<FilterKind>(i));
         QVERIFY(n != nullptr);
         QVERIFY(QString::fromUtf8(n).isEmpty() == false);
+        auto f = FilterFactory::createFilter(static_cast<FilterKind>(i));
+        QCOMPARE(f->name(), QString::fromUtf8(n));
+    }
+}
+
+// P3.3 (2026-09-22): 23 filter 名称覆盖
+void tst_P0_5_FilterSystem::filterName_returnsValidForAll23Kinds()
+{
+    for (int i = 0; i <= 22; ++i) {
+        const char* n = filterName(static_cast<FilterKind>(i));
+        QVERIFY(n != nullptr);
+        QVERIFY2(QString::fromUtf8(n).isEmpty() == false,
+                 qPrintable(QString("filterName kind=%1 empty").arg(i)));
         auto f = FilterFactory::createFilter(static_cast<FilterKind>(i));
         QCOMPARE(f->name(), QString::fromUtf8(n));
     }
@@ -184,6 +210,47 @@ void tst_P0_5_FilterSystem::other_5_filters_changeImage()
         auto f = FilterFactory::createFilter(k);
         f->apply(in, out);
         QVERIFY2(!out.empty(), "other filter output empty");
+    }
+}
+
+// P3.3 (2026-09-22): 3 Noise filter — AddNoise 加噪点 (图像有变),
+//   ReduceNoise 降噪 (bilateral filter 跑通), MedianNoise 中值降噪 (ksize odd)
+void tst_P0_5_FilterSystem::noise_3_filters_changeImage()
+{
+    cv::Mat in = makeTestImage();
+    cv::Mat out;
+
+    // AddNoise: cv::randn 加 Gaussian 噪声, 输出跟原图明显不同
+    {
+        auto f = FilterFactory::createFilter(FilterKind::AddNoise);
+        auto *a = static_cast<AddNoiseFilter*>(f.get());
+        a->stddev = 30.0;
+        f->apply(in, out);
+        QVERIFY(!out.empty());
+        QVERIFY2(imageDiff(in, out) > 1.0,
+                 qPrintable(QString("AddNoise stddev=30 should differ from input, got diff=%1")
+                            .arg(imageDiff(in, out))));
+    }
+
+    // ReduceNoise: bilateral filter, 输出非空 (灰度 fallback to medianBlur)
+    {
+        auto f = FilterFactory::createFilter(FilterKind::ReduceNoise);
+        auto *r = static_cast<ReduceNoiseFilter*>(f.get());
+        r->d = 5; r->sigmaColor = 25.0; r->sigmaSpace = 25.0;
+        f->apply(in, out);
+        QVERIFY(!out.empty());
+    }
+
+    // MedianNoise: ksize odd 强制, medianBlur 输出非空
+    {
+        auto f = FilterFactory::createFilter(FilterKind::MedianNoise);
+        auto *m = static_cast<MedianNoiseFilter*>(f.get());
+        m->ksize = 5;
+        f->apply(in, out);
+        QVERIFY(!out.empty());
+        QVERIFY2(imageDiff(in, out) > 0.0,
+                 qPrintable(QString("MedianNoise ksize=5 should differ from input, got diff=%1")
+                            .arg(imageDiff(in, out))));
     }
 }
 

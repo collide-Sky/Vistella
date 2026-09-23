@@ -55,6 +55,10 @@ enum class FilterKind {
     HighPass       = 17,
     Solarize       = 18,
     FilterGallery  = 19,
+    // Noise (3) — 20..22 (P3.3 2026-09-22)
+    AddNoise       = 20,    // 加 Gaussian 噪声 (cv::randn)
+    ReduceNoise    = 21,    // bilateral 降噪 (PS Noise > Reduce Noise 简化)
+    MedianNoise    = 22,    // Median 降噪 (复用 MedianBlurFilter,PS Noise > Median 别名)
 };
 
 // 中文显示名 (PS 风格: 模糊/锐化/浮雕...)
@@ -260,10 +264,47 @@ class FilterGalleryFilter : public FilterStrategy {
 public:
     FilterKind kind() const override { return FilterKind::FilterGallery; }
     QString name() const override { return QStringLiteral("滤镜画廊"); }
-    void apply(const cv::Mat& in, cv::Mat& out) override;
+    void apply(const cv::Mat& in, cv::Mat &out) override;
     // P0 阶段: 简化 placeholder, P1 接具体算法
     bool hasParam() const override { return false; }
     QString paramText() const override;
+};
+
+// ===== Noise (3) — P3.3 (2026-09-22) =====
+
+// AddNoise: 加 Gaussian 噪声. mean=0 (默认), stddev 控制强度
+class AddNoiseFilter : public FilterStrategy {
+public:
+    FilterKind kind() const override { return FilterKind::AddNoise; }
+    QString name() const override { return QStringLiteral("添加噪点"); }
+    void apply(const cv::Mat& in, cv::Mat& out) override;
+    bool hasParam() const override { return true; }
+    QString paramText() const override;
+    double stddev = 12.0;   // 1..100 (PS Add Noise: 0.1..400%)
+};
+
+// ReduceNoise: bilateral 降噪. d/sigmaColor/sigmaSpace 控制强度
+class ReduceNoiseFilter : public FilterStrategy {
+public:
+    FilterKind kind() const override { return FilterKind::ReduceNoise; }
+    QString name() const override { return QStringLiteral("减少噪点"); }
+    void apply(const cv::Mat& in, cv::Mat& out) override;
+    bool hasParam() const override { return true; }
+    QString paramText() const override;
+    int    d          = 5;     // 邻域直径
+    double sigmaColor = 25.0;  // 颜色 sigma
+    double sigmaSpace = 25.0;  // 空间 sigma
+};
+
+// MedianNoise: Median 降噪. 复用 MedianBlurField 算法, PS Noise > Median 别名菜单
+class MedianNoiseFilter : public FilterStrategy {
+public:
+    FilterKind kind() const override { return FilterKind::MedianNoise; }
+    QString name() const override { return QStringLiteral("中值降噪"); }
+    void apply(const cv::Mat& in, cv::Mat& out) override;
+    bool hasParam() const override { return true; }
+    QString paramText() const override;
+    int ksize = 3;   // 1..31 odd
 };
 
 } // namespace filter

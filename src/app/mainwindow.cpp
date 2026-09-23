@@ -819,6 +819,16 @@ void MainWindow::buildActions()
     addFilterAction(mFilterOther, tr("滤镜画廊..."),         filter::FilterKind::FilterGallery);
 
     mFilter->addSeparator();
+
+    // P3.3 (2026-09-22): Noise submenu — 3 个 (AddNoise / ReduceNoise / MedianNoise)
+    //   AddNoise 加 Gaussian 噪声, ReduceNoise 用 bilateral filter 降噪,
+    //   MedianNoise 用 median blur 降噪 (PS Filter > Noise > Median 别名菜单)
+    QMenu *mFilterNoise = mFilter->addMenu(tr("噪点"));
+    addFilterAction(mFilterNoise, tr("添加噪点..."),         filter::FilterKind::AddNoise);
+    addFilterAction(mFilterNoise, tr("减少噪点..."),         filter::FilterKind::ReduceNoise);
+    addFilterAction(mFilterNoise, tr("中值降噪..."),         filter::FilterKind::MedianNoise);
+
+    mFilter->addSeparator();
     // P0 leftover 5 (2026-09-21): Curves / Levels / B&W / ChannelMixer
     //   standalone dialogs. Each entry pops a non-modal dialog via the
     //   active ImageWindow's DialogMediator. dialog->applied is routed to

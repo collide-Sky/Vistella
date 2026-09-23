@@ -36,6 +36,9 @@ const char* filterName(FilterKind k)
     case FilterKind::HighPass:      return "高反差保留";
     case FilterKind::Solarize:      return "曝光过度";
     case FilterKind::FilterGallery: return "滤镜画廊";
+    case FilterKind::AddNoise:      return "添加噪点";
+    case FilterKind::ReduceNoise:   return "减少噪点";
+    case FilterKind::MedianNoise:   return "中值降噪";
     }
     return "未知滤镜";
 }
@@ -336,5 +339,55 @@ void FilterGalleryFilter::apply(const cv::Mat& in, cv::Mat& out)
     in.copyTo(out);
 }
 QString FilterGalleryFilter::paramText() const { return QStringLiteral("P1 阶段实装"); }
+
+// ===== Noise (3) — P3.3 (2026-09-22) =====
+
+// AddNoise: 加 Gaussian 噪声到原图 (PS Filter > Noise > Add Noise)
+//   mean=0 (默认), stddev 控制强度. cv::randn 产生 mean=0 stddev=1 噪声,
+//   multiply stddev 后加到原图.
+void AddNoiseFilter::apply(const cv::Mat& in, cv::Mat& out)
+{
+    if (in.empty()) return;
+    cv::Mat noise(in.size(), in.type());
+    cv::randn(noise, cv::Scalar::all(0), cv::Scalar::all(stddev));
+    cv::add(in, noise, out, cv::noArray(), in.type());
+}
+QString AddNoiseFilter::paramText() const
+{
+    return QStringLiteral("stddev=%1").arg(stddev);
+}
+
+// ReduceNoise: bilateral filter 降噪 (PS Filter > Noise > Reduce Noise 简化版)
+//   cv::bilateralFilter 比 median 保留边缘更好, 但比 PS Reduce Noise 简单
+//   (PS 用复杂 Non-Local Means 算法).
+void ReduceNoiseFilter::apply(const cv::Mat& in, cv::Mat& out)
+{
+    if (in.empty()) return;
+    if (in.channels() == 3 || in.channels() == 4) {
+        cv::bilateralFilter(in, out, d, sigmaColor, sigmaSpace);
+    } else {
+        // 灰度图: bilateral 不支持 1 通道. fallback 到 medianBlur
+        cv::medianBlur(in, out, std::max(3, d | 1));
+    }
+}
+QString ReduceNoiseFilter::paramText() const
+{
+    return QStringLiteral("d=%1, sigmaColor=%2, sigmaSpace=%3")
+        .arg(d).arg(sigmaColor).arg(sigmaSpace);
+}
+
+// MedianNoise: Median 降噪 (PS Filter > Noise > Median, 跟 Blur > Median Blur
+//  算法相同, 不同菜单入口). 复用 MedianBlur 字段 (ksize odd).
+void MedianNoiseFilter::apply(const cv::Mat& in, cv::Mat& out)
+{
+    if (in.empty()) return;
+    // MedianBlur 要求 ksize 奇数 >= 3
+    const int k = std::max(3, ksize | 1);
+    cv::medianBlur(in, out, k);
+}
+QString MedianNoiseFilter::paramText() const
+{
+    return QStringLiteral("ksize=%1").arg(ksize);
+}
 
 } // namespace filter
