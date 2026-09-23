@@ -178,7 +178,7 @@ void ImageIOController::onExport()
     //   - opts.embedIcc + iccProfilePath 有效
     //   - format 是 PNG -> embedIccToPng (iCCP chunk)
     //   - format 是 JPEG -> embedIccToJpeg (APP2 marker)
-    //   - TIFF embed 是 TODO (P0-8.4 follow-up)
+    //   - format 是 TIFF -> embedIccToTiff (ICCProfile tag in IFD, P0-8.4)
     if (opts.embedIcc && !opts.iccProfilePath.isEmpty()) {
         QSharedPointer<media::icc::Profile> profile;
         if (opts.iccProfilePath.compare(QStringLiteral("sRGB"), Qt::CaseInsensitive) == 0
