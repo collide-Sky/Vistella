@@ -51,8 +51,9 @@ void tst_LeftToolBar::test_default_8_buttons()
     LeftToolBar bar;
     // F-L (2026-09-10): 8 按钮 (Move / RectSelect / Lasso / MagicWand / Crop / Text / Brush / Eyedropper)
     //   P0-9.4 (2026-09-15): +6 按钮 (Shape / Pen / Clone / Heal / Patch / RedEye) = 14
+    //   Q4.2.1 (2026-09-23): +1 按钮 (MaskBrush P1.3.4 像素蒙版画笔) = 15
     auto btns = bar.findChildren<QToolButton*>();
-    QCOMPARE(btns.size(), 14);
+    QCOMPARE(btns.size(), 15);
 }
 
 void tst_LeftToolBar::test_button_letter_codes()

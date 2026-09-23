@@ -34,9 +34,10 @@ void tst_ImageOptionBar::ctor_have9Pages()
     ImageOptionBar bar;
     QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
     QVERIFY(stack != nullptr);
-    // 16 pages: None(0) + 15 tools (None/Move/.../Eyedropper/Transform/Shape/Pen/Clone/Heal/Patch/RedEye)
+    // 17 pages: None(0) + 16 tools (None/Move/.../Eyedropper/Transform/Shape/Pen/Clone/Heal/Patch/RedEye)
     //   P0-9 (2026-09-15): +7 pages for Shape/Pen/Clone/Heal/Patch/RedEye (was 9)
-    QCOMPARE(stack->count(), 16);
+    //   Q4.2.1 (2026-09-23): +1 page (MaskBrush P1.3.4 像素蒙版画笔, page16) = 17
+    QCOMPARE(stack->count(), 17);
 }
 
 void tst_ImageOptionBar::ctor_defaultPageIsNone()

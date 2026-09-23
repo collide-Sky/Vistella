@@ -12,6 +12,7 @@
 #include "HealTool.h"
 #include "PatchTool.h"
 #include "RedEyeTool.h"
+#include "MaskBrushTool.h"
 #include "logger.h"
 
 #include <QComboBox>
@@ -59,6 +60,8 @@ void ImageOptionBar::onToolChanged(mediators::ToolId id)
     const int idx = static_cast<int>(id);
     if (idx < 0 || idx >= ui->stackedWidget->count()) {
         // P0-6.11 (2026-09-14): Transform tool (idx=9) 动态加 page + 4 mode combo
+        // Q4.2.1 (2026-09-23): MaskBrush (idx=16) 也走动态 addPage 路径
+        //   跟 Transform 一样 — MaskBrushTool::optionPage() 返回 MaskOptionsPanel
         if (id == mediators::ToolId::Transform) {
             // 检查是否已经 addPage
             const int transformIdx = static_cast<int>(mediators::ToolId::Transform);
@@ -75,6 +78,21 @@ void ImageOptionBar::onToolChanged(mediators::ToolId id)
                 }
             }
             ui->stackedWidget->setCurrentIndex(static_cast<int>(mediators::ToolId::Transform));
+        } else if (id == mediators::ToolId::MaskBrush) {
+            // Q4.2.1: MaskBrush dynamic addPage, ui 已经预留 page16 占位 (跟 ui 一致)
+            const int maskIdx = static_cast<int>(mediators::ToolId::MaskBrush);
+            if (maskIdx >= ui->stackedWidget->count()) {
+                if (m_ctx) {
+                    if (auto* tool = dynamic_cast<MaskBrushTool*>(m_ctx->currentState())) {
+                        if (QWidget* page = tool->optionPage(this)) {
+                            page->setObjectName("pageMaskBrush");
+                            ui->stackedWidget->addWidget(page);
+                            LOG_INFO("[OptionBar] added MaskBrush page (MaskOptionsPanel)");
+                        }
+                    }
+                }
+            }
+            ui->stackedWidget->setCurrentIndex(maskIdx);
         } else {
             LOG_WARN("[OptionBar] toolChanged id={} out of range (count={})", idx, ui->stackedWidget->count());
         }

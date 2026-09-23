@@ -13,6 +13,10 @@
 #include "imagewindow/MosaicTool.h"
 #include "imagewindow/ImageIOController.h"
 #include "imagewindow/ImageCanvas.h"
+// Q4.2.1 (2026-09-23): LeftToolBar + ImageOptionBar 接入左侧 dock
+//   之前 F-D/F-E (2026-09-09) 写完 cpp/h/ui 但 ctor 从没创建 — 真实接入, 不放占位
+#include "tools/LeftToolBar.h"
+#include "tools/ImageOptionBar.h"
 // P0-3.2 (2026-09-08): 新组件 AdjustmentPanel (5 tab 色彩调整)
 #include "imagewindow/AdjustmentPanel.h"
 #include "mediators/DialogMediator.h"
@@ -403,6 +407,52 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   attach 后 LeftToolBar/ImageOptionBar 可以通过 toolContext() 拿到
     m_ctx = std::make_unique<tools::ToolContext>(this);
     m_ctx->attach(this, m_toolMed.get());
+
+    // Q4.2.1 (2026-09-23): LeftToolBar 接入左侧 dock (PS 风格 14 工具图标栏)
+    //   之前 F-D (2026-09-09) LeftToolBar.cpp/.h/.ui 写完但 ctor 从没创建,
+    //   整个图片阶段做完左侧 panel 只有 imagewindow.ui 硬编码的 groupMosaic + groupText.
+    //   Q4.2.1 拍板"真实接入", 不放占位 stub. attach(toolMed, ctx) 后 14 工具按钮
+    //   可切换: button click -> Mediator.switchTool(id) -> onToolMediatorSwitched
+    //   -> ctx->setState(createXxxTool()) 走 ToolState factory.
+    m_leftToolBar = std::make_unique<tools::LeftToolBar>();
+    m_leftToolBar->attach(m_toolMed.get(), m_ctx.get());
+
+    m_leftDockContainer = new QDockWidget(this);
+    m_leftDockContainer->setObjectName(QStringLiteral("leftDockContainer"));
+    m_leftDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    // 隐藏 title bar (PS 风格面板无标题栏, 跟右侧 dock 一致)
+    auto* leftEmptyTitle = new QWidget();
+    leftEmptyTitle->setFixedHeight(0);
+    m_leftDockContainer->setTitleBarWidget(leftEmptyTitle);
+    // release() 转移所有权给 QDockWidget (跟 m_rightDock 模式一致)
+    m_leftDockContainer->setWidget(m_leftToolBar.release());
+
+    addDockWidget(Qt::LeftDockWidgetArea, m_leftDockContainer);
+    // PS 风格工具栏宽 64px (2 列 32px 按钮 + 4px margin)
+    resizeDocks({m_leftDockContainer}, {64}, Qt::Horizontal);
+
+    // Q4.2.1 (2026-09-23): ImageOptionBar 接入左侧 dock (LeftToolBar 下方)
+    //   二级属性面板, 监听 ToolContext::toolChanged, 根据 toolId 切到对应 page.
+    //   MaskBrush (P1.3.4) 跟 TransformTool 一样走动态 addPage 路径, page16
+    //   装 MaskOptionsPanel. 其他工具 page 默认空 (ToolState::optionPage 返 nullptr,
+    //   Q4.2.2 跟 Q4.2.3 会逐个实装). 注意: imagewindow.ui 占位 groupMosaic +
+    //   groupText 是 MosaicTool/TextOverlay 的旧 UI (跟 ToolMediator 无关),
+    //   Q4.2.2 单独 commit 做迁移, 本次只接入 LeftToolBar + ImageOptionBar.
+    m_imageOptionBar = std::make_unique<tools::ImageOptionBar>();
+    m_imageOptionBar->attach(m_ctx.get());
+
+    m_imageOptionDockContainer = new QDockWidget(this);
+    m_imageOptionDockContainer->setObjectName(QStringLiteral("imageOptionDockContainer"));
+    m_imageOptionDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    auto* optionEmptyTitle = new QWidget();
+    optionEmptyTitle->setFixedHeight(0);
+    m_imageOptionDockContainer->setTitleBarWidget(optionEmptyTitle);
+    m_imageOptionDockContainer->setWidget(m_imageOptionBar.release());
+
+    addDockWidget(Qt::LeftDockWidgetArea, m_imageOptionDockContainer);
+    // ImageOptionBar 在 LeftToolBar 下方垂直排 (splitDockWidget)
+    splitDockWidget(m_leftDockContainer, m_imageOptionDockContainer, Qt::Vertical);
+    resizeDocks({m_imageOptionDockContainer}, {220}, Qt::Vertical);
 
     // P0-4 (2026-09-10): SelectionModel 实例化
     //   ImageCanvas 拿 selection 引用, drawForeground 画 marching ants 边界

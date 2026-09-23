@@ -67,6 +67,11 @@ namespace dialogs { class AdjustDialogBase; }
 #include "mediators/ToolMediator.h"
 // F-N (2026-09-10): ToolContext forward decl (state machine for tools)
 namespace tools { class ToolContext; }
+// Q4.2.1 (2026-09-23): LeftToolBar + ImageOptionBar 实装接入 (之前 P1.1 follow-up
+//   写完 cpp/h/ui 但 ctor 从没创建 — 整个图片阶段做完, 左侧 panel 只有 imagewindow.ui
+//   硬编码 groupMosaic + groupText 占位). 真实 include 进来用, 不 forward decl.
+#include "tools/LeftToolBar.h"
+#include "tools/ImageOptionBar.h"
 // P0-4 (2026-09-10): SelectionModel forward decl (selection state holder)
 namespace selection { class SelectionModel; }
 // P0-5 (2026-09-10): FilterStrategy forward decl (20 滤镜 PS 同款)
@@ -461,6 +466,23 @@ private:
     //   之前 setGeometry 浮动覆盖 centralWidget, 跟 canvas 抢位置, resize 不联动
     //   现在用 Qt 原生 dock 机制, resizeDocks 设初始宽度 340, 后续跟着 centralWidget 缩放
     QDockWidget *m_rightDockContainer = nullptr;
+
+    // Q4.2.1 (2026-09-23): 左侧 PS 风格工具栏 (LeftToolBar) + 二级属性面板
+    //   (ImageOptionBar). 之前 P1.1 follow-up 写完 cpp/h/ui 但 ctor 从没创建,
+    //   整个图片阶段做完, 左侧 panel 只有 imagewindow.ui 里硬编码的 groupMosaic
+    //   + groupText 占位. 真实接入 LeftToolBar + ImageOptionBar, Q4.2.1 删
+    //   占位 group + 迁移 MosaicTool/TextOverlay 参数到 ImageOptionBar.
+    //
+    //   m_leftDockContainer 装 LeftToolBar (左侧 dock 上方, PS 风格 64px 宽图标栏)
+    //   m_imageOptionDockContainer 装 ImageOptionBar (左侧 dock 下方,
+    //   splitDockWidget 垂直排, 默认 200px 高 — 显示当前工具的属性 panel)
+    //
+    //   注意: release() 转移所有权给 QDockWidget (跟 m_rightDock 模式一致),
+    //   unique_ptr 在 release 后变 null, QDockWidget 销毁时 delete 内部 widget.
+    std::unique_ptr<tools::LeftToolBar>    m_leftToolBar;
+    QDockWidget                           *m_leftDockContainer = nullptr;
+    std::unique_ptr<tools::ImageOptionBar> m_imageOptionBar;
+    QDockWidget                           *m_imageOptionDockContainer = nullptr;
 
     // F-N (2026-09-10): Tool state context — owns current ToolState, receives eventFilter forwards
     std::unique_ptr<tools::ToolContext>     m_ctx;

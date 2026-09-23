@@ -165,6 +165,17 @@
      <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
     </widget>
    </item>
+   <!-- Q4.2.1 (2026-09-23): MaskBrush 按钮 (P1.3.4 像素蒙版画笔), 之前 cpp 注释说没加到 ui -->
+   <item row="7" column="0">
+    <widget class="QToolButton" name="btnMaskBrush">
+     <property name="text"><string>MB</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Mask Brush (paint layer mask)</string></property>
+     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
+     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <resources/>

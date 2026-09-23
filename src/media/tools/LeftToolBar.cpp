@@ -35,8 +35,9 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     m_buttons[mediators::ToolId::Heal]       = ui->btnHeal;
     m_buttons[mediators::ToolId::Patch]      = ui->btnPatch;
     m_buttons[mediators::ToolId::RedEye]     = ui->btnRedEye;
-    // P1.3.4 (2026-09-17): MaskBrush 按钮暂未加到 ui,
-    //   但 mediator.switchTool(ToolId::MaskBrush) 仍走 case 分支触发.
+    // Q4.2.1 (2026-09-23): MaskBrush 按钮加到 ui (P1.3.4 之前只 switchTool
+    //   路由没按钮 — Q4.2 拍板"不放注释",所以 MaskBrush 也必须有可见入口)
+    m_buttons[mediators::ToolId::MaskBrush]  = ui->btnMaskBrush;
 }
 
 LeftToolBar::~LeftToolBar()

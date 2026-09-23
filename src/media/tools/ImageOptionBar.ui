@@ -33,6 +33,9 @@
    <widget class="QWidget" name="page13"/>
    <widget class="QWidget" name="page14"/>
    <widget class="QWidget" name="page15"/>
+   <!-- Q4.2.1 (2026-09-23): MaskBrush page (P1.3.4 像素蒙版画笔, idx=16)
+        跟 Transform 一样走动态 addPage 路径, MaskOptionsPanel 替换 -->
+   <widget class="QWidget" name="page16"/>
   </widget>
  </widget>
  <resources/>
