@@ -168,3 +168,11 @@ add_vistella_test(tst_AdjustmentDispatcher)
 #   Lasso: feathering (integral-image box blur) + anti-alias
 #   MarchingAnts phase cycle
 add_vistella_test(tst_LassoMagicWand)
+
+# P3.1.4 (2026-09-22): FilterDialog parameter UI 单测
+#   - 11 hasParam=true filter 创建 dialog + strategy() 取出来
+#   - 9 hasParam=false filter 创建 dialog (Sharpen 等无 slider)
+#   - GaussianBlur ksize spinbox 改动 -> strategy 字段同步
+#   - UnsharpMask amount spinbox 改动 -> strategy 字段同步
+#   - Sharpen 显示 (无参数) placeholder
+add_vistella_test(tst_P3_1_FilterDialog)

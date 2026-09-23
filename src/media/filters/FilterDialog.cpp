@@ -113,6 +113,7 @@ FilterDialog::FilterDialog(ImageWindow *host, FilterKind kind, QWidget *parent)
 
     // 当前参数摘要
     m_paramLabel = new QLabel(this);
+    m_paramLabel->setObjectName(QStringLiteral("paramLabel"));
     m_paramLabel->setStyleSheet("color: gray;");
     refreshParamText();
     layout->addWidget(m_paramLabel);
@@ -180,8 +181,8 @@ void FilterDialog::buildParamWidgets()
             spin->setValue(nv);
         });
         connect(spin, QOverload<int>::of(&QSpinBox::valueChanged),
-                this, [this, slider](int nv) {
-                    int* fp = static_cast<int*>(slider->property("intField").value<void*>());
+                this, [this, spin, slider](int nv) {
+                    int* fp = static_cast<int*>(spin->property("intField").value<void*>());
                     if (fp) *fp = nv;
                     slider->setValue(nv);
                     refreshParamText();
@@ -213,8 +214,8 @@ void FilterDialog::buildParamWidgets()
             spin->setValue(dv);
         });
         connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                this, [this, slider, lo, hi](double dv) {
-                    double* fp = static_cast<double*>(slider->property("dblField").value<void*>());
+                this, [this, spin, slider, lo, hi](double dv) {
+                    double* fp = static_cast<double*>(spin->property("dblField").value<void*>());
                     if (fp) *fp = dv;
                     constexpr int SLIDER_MAX = 1000;
                     double ratio = (hi > lo) ? (dv - lo) / (hi - lo) : 0.0;

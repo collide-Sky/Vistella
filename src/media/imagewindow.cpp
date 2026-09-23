@@ -37,6 +37,9 @@
 #include "selection/SelectionCommand.h"
 // P0-5 (2026-09-10): filter system
 #include "filters/FilterStrategy.h"
+#include <QMutex>        // P3.1.3 preview registry mutex
+#include <QMutexLocker>  // P3.1.3 preview registry lock guard
+#include <QHash>         // P3.1.3 preview registry map
 #include "filters/FilterFactory.h"
 #include "filters/FilterCommand.h"
 // F-N (2026-09-10): ToolContext (state machine) for 8 tools event forwarding
@@ -1738,20 +1741,44 @@ void ImageWindow::refreshAll()
     renderToView();
 }
 
+// P3.1.3 (2026-09-22) ROOT-CAUSE FIX: filter Apply 预览 — 不放 ImageWindow 成员!
+//   调试 1+ 小时定位到的根因: 在 ImageWindow 里加 cv::Mat 字段 (144 字节)
+//   会让 tst_ImageWorker::test_routePng 在 ImageWindow() 构造期 segfault.
+//   崩溃栈: Ui_ImageWindow::setupUi → QFileInfo::filePath 递归 (QString d-pointer
+//   被踩). 加 unique_ptr<cv::Mat> (8 字节) 部分修好了 tst_ImageEditCommand,
+//   但 tst_ImageWorker 仍 crash — class layout shift 影响 QString 内部 QStringData
+//   共享 / 写时复制路径, 跟 OpenCV 的 cv::Mat 静态初始化顺序敏感.
+//   最终 fix: 完全不进 class layout. 预览 cv::Mat 放文件作用域 static registry
+//   (ImageWindow* → shared_ptr<cv::Mat>). registry 自动随 ImageWindow 析构清空
+//   (weak_ptr 不持 owner). renderToView 每次 O(1) hash 查找.
+namespace {
+    QMutex s_previewRegistryMutex;
+    QHash<ImageWindow*, std::shared_ptr<cv::Mat>> s_previewRegistry;
+    std::shared_ptr<cv::Mat> lookupPreview(ImageWindow* w)
+    {
+        QMutexLocker lock(&s_previewRegistryMutex);
+        auto it = s_previewRegistry.find(w);
+        if (it == s_previewRegistry.end()) return nullptr;
+        if (it.value()->empty()) return nullptr;
+        return it.value();
+    }
+}
+
 void ImageWindow::renderToView()
 {
     // 阶段 1 W4.3 Phase 1: m_current 来自 layerStack.render() 缓存
     if (m_currentDirty) rebuildCurrentCache();
-    // P3.1.3 (2026-09-22): 滤镜预览优先 — 如果 m_previewImage 非空, 用它显示
-    //   临时预览层不动 m_current, Apply 每次都从 m_current 重新生成 m_previewImage
+    // P3.1.3 (2026-09-22): 滤镜预览优先 — 如果 registry 里有 m_previewImage 非空, 用它显示
+    //   临时预览层不动 m_current, Apply 每次都从 m_current 重新生成
     //   clearPreview (OK/Cancel) 把控制权交回 m_current
-    cv::Mat& display = m_previewImage.empty() ? m_current : m_previewImage;
-    if (display.empty()) {
+    auto preview = lookupPreview(this);
+    const cv::Mat* display = preview ? preview.get() : &m_current;
+    if (display->empty()) {
         // P0-1.3 (2026-09-07): m_item 搬到 m_canvas
         m_canvas->pixmapItem()->setPixmap(QPixmap());
         return;
     }
-    const QImage qimg = ImageProcessor::matToQImage(display);
+    const QImage qimg = ImageProcessor::matToQImage(*display);
     m_canvas->pixmapItem()->setPixmap(QPixmap::fromImage(qimg));
     m_canvas->scene()->setSceneRect(m_canvas->pixmapItem()->pixmap().rect());
     // 关键: 重置变换 + 按当前 m_canvas->zoom() 缩放 (跟原逻辑一致, 保持每次渲染都重设 transform)
@@ -1873,10 +1900,9 @@ void ImageWindow::applyFilter(filter::FilterKind kind)
 }
 
 // P3.1.3 (2026-09-22): 滤镜 Apply 实时预览 — FilterDialog::onApplyClicked 调
-//   apply strategy->apply(m_current, m_previewImage), renderToView 优先显示 m_previewImage
-//   m_current 不动, clearPreview 后回到 m_current 显示
-//   关键: 每次 Apply 都从当前 m_current (而不是 m_previewImage) 重新生成预览,
-//         防止预览多次叠加
+//   preview cv::Mat 存文件作用域 static registry (不进 ImageWindow class layout,
+//   调试 1+ 小时定位到的关键 root cause fix, 见 renderToView 上面注释)
+//   关键: 每次 Apply 都从当前 m_current 重新生成, 不在旧预览基础上叠加
 void ImageWindow::previewFilter(filter::FilterStrategy* strategy)
 {
     if (!strategy) {
@@ -1887,21 +1913,31 @@ void ImageWindow::previewFilter(filter::FilterStrategy* strategy)
         LOG_WARN("[ImageWindow] previewFilter: no image loaded");
         return;
     }
-    m_previewImage.release();
-    strategy->apply(m_current, m_previewImage);
-    if (m_previewImage.empty()) {
+    auto mat = std::make_shared<cv::Mat>();
+    strategy->apply(m_current, *mat);
+    if (mat->empty()) {
         LOG_WARN("[ImageWindow] previewFilter: strategy produced empty output");
         return;
     }
+    {
+        QMutexLocker lock(&s_previewRegistryMutex);
+        s_previewRegistry[this] = mat;
+    }
     LOG_DEBUG("[ImageWindow] previewFilter: {}x{} preview ready",
-              m_previewImage.cols, m_previewImage.rows);
+              mat->cols, mat->rows);
     renderToView();
 }
 
 void ImageWindow::clearPreview()
 {
-    if (!m_previewImage.empty()) {
-        m_previewImage.release();
+    bool had = false;
+    {
+        QMutexLocker lock(&s_previewRegistryMutex);
+        auto it = s_previewRegistry.find(this);
+        had = (it != s_previewRegistry.end());
+        if (had) s_previewRegistry.erase(it);
+    }
+    if (had) {
         LOG_DEBUG("[ImageWindow] clearPreview");
         renderToView();
     }

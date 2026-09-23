@@ -475,11 +475,6 @@ private:
 
     cv::Mat   m_original;
     cv::Mat   m_current;
-    // P3.1.3 (2026-09-22): filter Apply 实时预览层
-    //   previewFilter() apply strategy->apply(m_current, m_previewImage)
-    //   renderToView() 优先用 m_previewImage 显示 (空时用 m_current)
-    //   clearPreview() 释放 m_previewImage (回到 m_current 显示)
-    cv::Mat   m_previewImage;
     QString   m_filePath;
     bool      m_ctrlDown = false;
 

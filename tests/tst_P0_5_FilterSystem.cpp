@@ -22,6 +22,8 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include <set>
+#include <tuple>
 
 #include "../src/media/filters/FilterStrategy.h"
 #include "../src/media/filters/FilterFactory.h"
@@ -51,15 +53,22 @@ private slots:
     void filterDialog_emitSignals();
     void hasParam_consistent();
     void determinism_sameInputSameOutput();
+
+    // P3.1.4 (2026-09-22) 参数化 filter 测试
+    void test_paramSetter_gaussian_ksize();
+    void test_paramSetter_posterize_levels();
+    void test_paramSetter_bilateral_d();
+    void test_paramSetter_unsharp_amount();
+    void test_paramSetter_threshold_level();
 };
 
-// Helper: 构造测试图 (noise + 边缘, 对 filter 敏感)
-static cv::Mat makeTestImage(int w = 32, int h = 32)
+// Helper: 构造测试图 (noise + 大块黑色方块, 对 filter 敏感)
+static cv::Mat makeTestImage(int w = 64, int h = 64)
 {
-    cv::Mat img(h, w, CV_8UC3);
-    cv::randu(img, cv::Scalar(0, 0, 0), cv::Scalar(255, 255, 255));
-    // 加明显边缘让 sharpen 也能触发
-    cv::rectangle(img, cv::Rect(8, 8, 16, 16), cv::Scalar(0, 0, 0), -1);
+    cv::Mat img(h, w, CV_8UC3, cv::Scalar(220, 220, 220));
+    cv::randu(img, cv::Scalar(0, 0, 0), cv::Scalar(80, 80, 80));
+    // 加明显黑色方块 (16x16), 让 filter 模糊/锐化效果差异清晰
+    cv::rectangle(img, cv::Rect(16, 16, 32, 32), cv::Scalar(0, 0, 0), -1);
     return img;
 }
 
@@ -225,6 +234,116 @@ void tst_P0_5_FilterSystem::determinism_sameInputSameOutput()
     f1->apply(in, out1);
     f2->apply(in, out2);
     QCOMPARE(imageDiff(out1, out2), 0.0);  // 完全一致
+}
+
+// ===== P3.1.4 (2026-09-22) 参数化 filter 测试 =====
+// 验证: 改 strategy 的公有字段 (ksize/levels/d/amount/level) 后, apply 输出
+// 跟默认值不同 (filter 真的用了用户参数, 不是 PS 默认值)
+void tst_P0_5_FilterSystem::test_paramSetter_gaussian_ksize()
+{
+    cv::Mat in = makeTestImage();
+    cv::Mat out5, out15;
+    // ksize=5 (默认)
+    {
+        auto f = FilterFactory::createFilter(FilterKind::GaussianBlur);
+        auto *gb = static_cast<GaussianBlurFilter*>(f.get());
+        QCOMPARE(gb->ksize, 5);  // 确认默认 5
+        f->apply(in, out5);
+    }
+    // ksize=15 + sigma=2.5 (跟默认 1.0 区别更大)
+    {
+        auto f = FilterFactory::createFilter(FilterKind::GaussianBlur);
+        auto *gb = static_cast<GaussianBlurFilter*>(f.get());
+        gb->ksize = 15;  // P3.1.1 dialog slider 改的就是这个字段
+        gb->sigma = 2.5;
+        f->apply(in, out15);
+    }
+    QVERIFY(!out5.empty());
+    QVERIFY(!out15.empty());
+    // ksize=15 + sigma=2.5 模糊更强, 跟 ksize=5 + sigma=1.0 输出有差异
+    QVERIFY2(imageDiff(out5, out15) > 1.0,
+             qPrintable(QString("ksize 5 sigma 1.0 vs ksize 15 sigma 2.5 should differ, got diff=%1")
+                        .arg(imageDiff(out5, out15))));
+}
+
+void tst_P0_5_FilterSystem::test_paramSetter_posterize_levels()
+{
+    // 验证 P3.1.1 dialog slider 改 levels 字段后, 输出跟默认 levels 不同
+    cv::Mat in = makeTestImage();
+    cv::Mat out2, out4;
+    {
+        auto f = FilterFactory::createFilter(FilterKind::Posterize);
+        auto *p = static_cast<PosterizeFilter*>(f.get());
+        p->levels = 2;  // P3.1.1 dialog slider 改的就是这个字段
+        f->apply(in, out2);
+    }
+    {
+        auto f = FilterFactory::createFilter(FilterKind::Posterize);
+        auto *p = static_cast<PosterizeFilter*>(f.get());
+        p->levels = 4;  // 默认
+        f->apply(in, out4);
+    }
+    QVERIFY(!out2.empty());
+    QVERIFY(!out4.empty());
+    QVERIFY2(imageDiff(out2, out4) > 0.0,
+             "Posterize levels=2 vs levels=4 should produce different output");
+}
+
+void tst_P0_5_FilterSystem::test_paramSetter_bilateral_d()
+{
+    cv::Mat in = makeTestImage();
+    cv::Mat out;
+    auto f = FilterFactory::createFilter(FilterKind::BilateralBlur);
+    auto *bb = static_cast<BilateralBlurFilter*>(f.get());
+    bb->d = 15;  // P3.1.1 dialog slider 改的就是这个字段
+    QCOMPARE(bb->d, 15);  // setter 生效
+    f->apply(in, out);
+    QVERIFY(!out.empty());
+    cv::Mat out9;
+    auto f2 = FilterFactory::createFilter(FilterKind::BilateralBlur);
+    f2->apply(in, out9);
+    QVERIFY(imageDiff(out, out9) > 0.0);
+}
+
+void tst_P0_5_FilterSystem::test_paramSetter_unsharp_amount()
+{
+    cv::Mat in = makeTestImage();
+    cv::Mat out;
+    auto f = FilterFactory::createFilter(FilterKind::UnsharpMask);
+    auto *us = static_cast<UnsharpMaskFilter*>(f.get());
+    us->amount = 3.0;  // P3.1.1 dialog slider 改的就是这个字段 (范围 0.5..3.0)
+    QCOMPARE(us->amount, 3.0);  // setter 生效
+    f->apply(in, out);
+    QVERIFY(!out.empty());
+    cv::Mat out1;
+    auto f2 = FilterFactory::createFilter(FilterKind::UnsharpMask);
+    f2->apply(in, out1);
+    QVERIFY(imageDiff(out, out1) > 0.0);
+}
+
+void tst_P0_5_FilterSystem::test_paramSetter_threshold_level()
+{
+    cv::Mat in = makeTestImage();
+    cv::Mat out;
+    auto f = FilterFactory::createFilter(FilterKind::Threshold);
+    auto *th = static_cast<ThresholdFilter*>(f.get());
+    th->level = 200.0;  // P3.1.1 dialog slider 改的就是这个字段
+    QCOMPARE(th->level, 200.0);  // setter 生效
+    f->apply(in, out);
+    QVERIFY(!out.empty());
+    // 二值化输出: 只有 0 和 255 两个值
+    std::set<int> uniqueVals;
+    for (int y = 0; y < out.rows; ++y) {
+        for (int x = 0; x < out.cols; ++x) {
+            const cv::Vec3b v = out.at<cv::Vec3b>(y, x);
+            uniqueVals.insert(v[0]);
+            uniqueVals.insert(v[1]);
+            uniqueVals.insert(v[2]);
+        }
+    }
+    QVERIFY2(uniqueVals.size() <= 2,
+             qPrintable(QString("Threshold level=200 should give <=2 unique values, got %1")
+                        .arg(uniqueVals.size())));
 }
 
 QTEST_MAIN(tst_P0_5_FilterSystem)
