@@ -223,7 +223,8 @@ void Brush::paintSingleStamp(ImageWindow* host, const QPointF& scenePos, double 
     // Paint stamp onto m_current
     const int ix = int(std::round(scenePos.x()));
     const int iy = int(std::round(scenePos.y()));
-    brushes::BrushEngine::applyStamp(target, cv::Point(ix, iy), stamp, m_paintColor, opacity, flow);
+    // Q4.2.3: pass m_blendMode through to applyStamp (0=Normal default, 1=Multiply, 2=Screen).
+    brushes::BrushEngine::applyStamp(target, cv::Point(ix, iy), stamp, m_paintColor, opacity, flow, 0, m_blendMode);
 }
 
 void Brush::finalizeStroke(ImageWindow* host)

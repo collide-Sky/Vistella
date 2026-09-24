@@ -75,6 +75,7 @@ namespace tools { class ToolContext; }
 //   硬编码 groupMosaic + groupText 占位). 真实 include 进来用, 不 forward decl.
 #include "tools/LeftToolBar.h"
 #include "tools/ImageOptionBar.h"
+#include "tools/ModeSelectorBar.h"
 // P0-4 (2026-09-10): SelectionModel forward decl (selection state holder)
 namespace selection { class SelectionModel; }
 // P0-5 (2026-09-10): FilterStrategy forward decl (20 滤镜 PS 同款)
@@ -486,6 +487,12 @@ private:
     QDockWidget                           *m_leftDockContainer = nullptr;
     std::unique_ptr<tools::ImageOptionBar> m_imageOptionBar;
     QDockWidget                           *m_imageOptionDockContainer = nullptr;
+    // Q4.2.3 (2026-09-24): ModeSelectorBar 二级模式选择栏 (LeftToolBar 和 ImageOptionBar 之间)
+    //   监听 ToolContext::toolChanged, 切到对应 tool 时显示 mode 按钮组.
+    //   5 tools (Crop/MagicWand/Lasso/Brush/Eyedropper) 共享 1 个 widget, 按
+    //   currentToolId 切到对应 page (selection mode / aspect / blend / sample size).
+    std::unique_ptr<tools::ModeSelectorBar> m_modeSelectorBar;
+    QDockWidget                            *m_modeSelectorDockContainer = nullptr;
 
     // Q4.2.2 (2026-09-24): MosaicTool + TextOverlayController 专属属性面板
     //   之前 imagewindow.ui 硬编码 groupMosaic + groupText (P0-1.2 占位),

@@ -65,6 +65,11 @@ void MagicWand::onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF&
     auto* sel = host->selectionModel();
     if (!sel) return;
     auto mode = selection::SelectionModel::modifierKeyToMode(e->modifiers());
+    if (mode == selection::SelectionModel::Mode::Replace) {
+        // Q4.2.3: no modifier held -> use explicit selection mode (ModeSelectorBar
+        //   button state). Modifier keys (Shift/Alt) still override when held.
+        mode = m_selectionMode;
+    }
     sel->setMask(mask, mode);
     LOG_INFO("[MagicWand] onMouseRelease: mask={}x{} mode={}",
              mask.width(), mask.height(), static_cast<int>(mode));

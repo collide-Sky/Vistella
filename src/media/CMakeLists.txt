@@ -146,6 +146,12 @@ add_library(vistella_media STATIC
     tools/BrushOptionsPanel.cpp
     tools/BrushOptionsPanel.ui
 
+    # Q4.2.3 (2026-09-24): ModeSelectorBar 二级模式选择栏
+    #   5 tools (Crop/MagicWand/Lasso/Brush/Eyedropper) 共享一个 widget,
+    #   按当前 tool 切到对应 page. 装到 LeftToolBar 和 ImageOptionBar 之间.
+    tools/ModeSelectorBar.h
+    tools/ModeSelectorBar.cpp
+
     # F-G (2026-09-09): RightPanelStack 右侧 panel 3 dock (颜色/属性/图层)
     docks/RightPanelStack.h
     docks/RightPanelStack.cpp

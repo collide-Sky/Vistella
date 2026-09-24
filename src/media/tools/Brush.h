@@ -57,6 +57,11 @@ public:
     void setPaintColor(const QColor &c);
     QColor paintColor() const;
 
+    // Q4.2.3: blend mode (for ModeSelectorBar buttons).
+    //   0=Normal (default), 1=Multiply, 2=Screen. PS standard top modes.
+    void setBlendMode(int m) { m_blendMode = m; }
+    int blendMode() const { return m_blendMode; }
+
     // Getters for UI panels
     brushes::StrokeSmoother* smoother() const { return m_smoother; }
     brushes::PressureCurve*  pressureCurve() const { return m_pressureCurve; }
@@ -69,6 +74,9 @@ private:
     brushes::PressureCurve*   m_pressureCurve;
     brushes::StrokeSmoother* m_smoother;
     QColor                    m_paintColor;
+
+    // Q4.2.3: blend mode (0=Normal default, 1=Multiply, 2=Screen).
+    int                       m_blendMode = 0;
 
     // Stroke state
     bool                      m_active = false;

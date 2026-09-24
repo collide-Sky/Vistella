@@ -4,11 +4,15 @@
 //
 // PS-style MagicWand tool. P2.1: option page (tolerance slider + Contiguous)
 // now wired to the strategy; click -> flood fill mask from seed pixel.
+// Q4.2.3 (2026-09-24): explicit selection mode (Replace/Add/Subtract/Intersect)
+//   for ModeSelectorBar. Modifier keys (Shift/Alt) still override per-click.
 //
 #pragma once
 
 #include "ToolState.h"
 #include <memory>
+
+#include "../selection/SelectionModel.h"
 
 class QCursor;
 class QWidget;
@@ -43,6 +47,12 @@ public:
     void setTolerance(int t);
     void setContiguous(bool c);
 
+    // Q4.2.3: selection mode (for ModeSelectorBar buttons).
+    //   Default Replace. Modifier keys at click time still override
+    //   (Shift -> Add, Alt -> Subtract, Shift+Alt -> Intersect).
+    void setSelectionMode(selection::SelectionModel::Mode m) { m_selectionMode = m; }
+    selection::SelectionModel::Mode selectionMode() const { return m_selectionMode; }
+
 private:
     std::unique_ptr<selection::MagicWandSelectionStrategy> m_strategy;
 
@@ -50,6 +60,11 @@ private:
     QSlider*  m_tolSlider   = nullptr;
     QCheckBox* m_contiguous = nullptr;
     QSpinBox*  m_sampleAll  = nullptr;   // P1 reserved (disabled)
+
+    // Q4.2.3: explicit selection mode (Replace/Add/Subtract/Intersect).
+    //   Modifier keys override per-click; this is the default mode
+    //   when user clicks without modifier.
+    selection::SelectionModel::Mode m_selectionMode = selection::SelectionModel::Mode::Replace;
 };
 
 } // namespace tools

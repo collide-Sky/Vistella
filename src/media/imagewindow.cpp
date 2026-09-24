@@ -436,7 +436,28 @@ ImageWindow::ImageWindow(QWidget *parent)
     // PS 风格工具栏宽 64px (2 列 32px 按钮 + 4px margin)
     resizeDocks({m_leftDockContainer}, {64}, Qt::Horizontal);
 
-    // Q4.2.1 (2026-09-23): ImageOptionBar 接入左侧 dock (LeftToolBar 下方)
+    // Q4.2.3 (2026-09-24): ModeSelectorBar 二级模式选择栏 (LeftToolBar 下方, ImageOptionBar 上方)
+    //   5 tools (Crop/MagicWand/Lasso/Brush/Eyedropper) 共享 1 个 widget, 按 currentToolId
+    //   切到对应 page (selection mode / aspect / blend / sample size). 紧凑按钮栏 32px 高,
+    //   LeftToolBar 和 ImageOptionBar 之间. 监听 ToolContext::toolChanged, 切换 tool 时
+    //   自动切 page + refresh 按钮状态 (从 tool.getter 读).
+    m_modeSelectorBar = std::make_unique<tools::ModeSelectorBar>();
+    m_modeSelectorBar->attach(m_ctx.get());
+
+    m_modeSelectorDockContainer = new QDockWidget(this);
+    m_modeSelectorDockContainer->setObjectName(QStringLiteral("modeSelectorDockContainer"));
+    m_modeSelectorDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    auto* modeEmptyTitle = new QWidget();
+    modeEmptyTitle->setFixedHeight(0);
+    m_modeSelectorDockContainer->setTitleBarWidget(modeEmptyTitle);
+    m_modeSelectorDockContainer->setWidget(m_modeSelectorBar.release());
+
+    addDockWidget(Qt::LeftDockWidgetArea, m_modeSelectorDockContainer);
+    // ModeSelectorBar 在 LeftToolBar 下方垂直排 (splitDockWidget), ImageOptionBar 在 ModeSelectorBar 下方
+    splitDockWidget(m_leftDockContainer, m_modeSelectorDockContainer, Qt::Vertical);
+    resizeDocks({m_modeSelectorDockContainer}, {36}, Qt::Vertical);  // 36px 高, 紧凑按钮栏
+
+    // Q4.2.1 (2026-09-23): ImageOptionBar 接入左侧 dock (ModeSelectorBar 下方)
     //   二级属性面板, 监听 ToolContext::toolChanged, 根据 toolId 切到对应 page.
     //   MaskBrush (P1.3.4) 跟 TransformTool 一样走动态 addPage 路径, page16
     //   装 MaskOptionsPanel. 其他工具 page 默认空 (ToolState::optionPage 返 nullptr,
@@ -455,8 +476,8 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_imageOptionDockContainer->setWidget(m_imageOptionBar.release());
 
     addDockWidget(Qt::LeftDockWidgetArea, m_imageOptionDockContainer);
-    // ImageOptionBar 在 LeftToolBar 下方垂直排 (splitDockWidget)
-    splitDockWidget(m_leftDockContainer, m_imageOptionDockContainer, Qt::Vertical);
+    // ImageOptionBar 在 ModeSelectorBar 下方垂直排 (splitDockWidget)
+    splitDockWidget(m_modeSelectorDockContainer, m_imageOptionDockContainer, Qt::Vertical);
     resizeDocks({m_imageOptionDockContainer}, {220}, Qt::Vertical);
 
     // Q4.2.2.1 fix (2026-09-24): MosaicOptionPanel + TextOptionPanel 改回 leftPanel
