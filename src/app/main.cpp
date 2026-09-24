@@ -269,11 +269,17 @@ int main(int argc, char *argv[])
             SessionManager::instance().saveOpenFiles({});
             SessionManager::instance().saveActiveFile(QString());
             SessionManager::instance().setLastExitClean(true);
+            // Q4.2.2.1 fix (2026-09-24): 强制 Normal. Q4.1 只把 loadWindowState() 默认改 Normal,
+            //   但 QSettings 仍可能存 "window/mode=1" (上次关窗时是 Maximized). 不恢复路径
+            //   语义上就是"重新开始", 应该是 Normal 居中 1280x800, 不沿用上次最大化.
+            //   走 setMode 唯一入口 (跟 Q4.1 INVARIANT 一致).
+            w.setMode(WindowMode::Normal);
             // mainStack ctor 默认 page 0 (HomePage), 不需要额外切
         }
-        // 不管恢复 / 不恢复, 最后都用唯一入口 applyWindowMode (= setMode(m_mode))
-        //   修复 9/17 报告的 cancel-recovery → maximized → 不能 normal 路径
-        w.applyWindowMode();
+        // 恢复路径 (上面已 setMode / restoreSessionFiles) + 不恢复路径 (上面已 setMode Normal)
+        //   都已显式调 setMode, 这里不再统一 applyWindowMode, 避免用 QSettings 里的旧 Maximized
+        //   把刚 setMode(Normal) 的状态覆盖回去. 修复 9/24 报告的"不恢复还最大化"路径.
+        // w.applyWindowMode();
         } catch (const std::exception &e) {
             LOG_EXCEPTION(vistella::LogLevel::Error, "5s splash timer", e);
         } catch (...) {

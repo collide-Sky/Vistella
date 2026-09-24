@@ -459,41 +459,25 @@ ImageWindow::ImageWindow(QWidget *parent)
     splitDockWidget(m_leftDockContainer, m_imageOptionDockContainer, Qt::Vertical);
     resizeDocks({m_imageOptionDockContainer}, {220}, Qt::Vertical);
 
-    // Q4.2.2 (2026-09-24): MosaicOptionPanel 装到 ImageOptionBar 下方
-    //   之前 imagewindow.ui 硬编码 groupMosaic 占位 (slider/button/hint), 现在
-    //   升级成独立 OptionPanel. MosaicTool 是 imagewindow 私有工具, 不走
-    //   ToolMediator, 所以这个 panel 永远显示 (跟 ImageOptionBar "切工具切 page"
-    //   不同). Panel 自己 connect MosaicTool 信号双向同步状态.
+    // Q4.2.2.1 fix (2026-09-24): MosaicOptionPanel + TextOptionPanel 改回 leftPanel
+    //   Q4.2.2 commit (1f10637) 把这俩 OptionPanel 装成 ImageOptionBar 下方永久 dock,
+    //   但用户截图反馈: 左侧 dock 多出两块永久面板 (ImageOptionBar 下方 200+200 px),
+    //   "为什么这两块东西还在这里". 原来 groupMosaic + groupText 是在 imagewindow.ui
+    //   top-left 的 leftPanel (scrollArea 容器里), 升级成 OptionPanel 应当放回原位,
+    //   而不是新增 dock. leftPanel 里 gridLayout_4 现在接 MosaicOptionPanel +
+    //   TextOptionPanel (垂直排). 后续 Q4.2.3 二级模式选择栏 用 imagewindow.ui 的
+    //   新 widget 区域, 不再动 gridLayout_4.
     m_mosaicOptionPanel = std::make_unique<MosaicOptionPanel>(m_mosaicTool.get());
-    m_mosaicOptionDockContainer = new QDockWidget(this);
-    m_mosaicOptionDockContainer->setObjectName(QStringLiteral("mosaicOptionDockContainer"));
-    m_mosaicOptionDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    auto* mosaicEmptyTitle = new QWidget();
-    mosaicEmptyTitle->setFixedHeight(0);
-    m_mosaicOptionDockContainer->setTitleBarWidget(mosaicEmptyTitle);
-    m_mosaicOptionDockContainer->setWidget(m_mosaicOptionPanel.release());
-
-    addDockWidget(Qt::LeftDockWidgetArea, m_mosaicOptionDockContainer);
-    splitDockWidget(m_imageOptionDockContainer, m_mosaicOptionDockContainer, Qt::Vertical);
-    resizeDocks({m_mosaicOptionDockContainer}, {200}, Qt::Vertical);
-
-    // Q4.2.2 (2026-09-24): TextOptionPanel 装到 MosaicOptionPanel 下方
-    //   之前 imagewindow.ui 硬编码 groupText 占位 (font/size/color/Bold/Italic/
-    //   content), 同样升级成独立 OptionPanel. TextOverlayController 是
-    //   imagewindow 私有工具, 永远显示. Panel 监听 TextOverlayController::currentChanged
-    //   同步当前 item 状态.
     m_textOptionPanel = std::make_unique<TextOptionPanel>(m_textCtrl.get());
-    m_textOptionDockContainer = new QDockWidget(this);
-    m_textOptionDockContainer->setObjectName(QStringLiteral("textOptionDockContainer"));
-    m_textOptionDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    auto* textEmptyTitle = new QWidget();
-    textEmptyTitle->setFixedHeight(0);
-    m_textOptionDockContainer->setTitleBarWidget(textEmptyTitle);
-    m_textOptionDockContainer->setWidget(m_textOptionPanel.release());
-
-    addDockWidget(Qt::LeftDockWidgetArea, m_textOptionDockContainer);
-    splitDockWidget(m_mosaicOptionDockContainer, m_textOptionDockContainer, Qt::Vertical);
-    resizeDocks({m_textOptionDockContainer}, {200}, Qt::Vertical);
+    if (ui->gridLayout_4) {
+        // MosaicOptionPanel 在 row 0, TextOptionPanel 在 row 1. 两面板都用
+        // sizePolicy Preferred/Expanding, scrollArea 让内容超出时可滚.
+        ui->gridLayout_4->addWidget(m_mosaicOptionPanel.get(), 0, 0);
+        ui->gridLayout_4->addWidget(m_textOptionPanel.get(), 1, 0);
+    }
+    // Q4.2.2.1: 删永久 dock container 字段, 改用 leftPanel 内 gridLayout_4.
+    // m_mosaicOptionPanel / m_textOptionPanel 仍 unique_ptr 持有, dtor 正常析构.
+    // 不再 addDockWidget + splitDockWidget.
 
     // P0-4 (2026-09-10): SelectionModel 实例化
     //   ImageCanvas 拿 selection 引用, drawForeground 画 marching ants 边界

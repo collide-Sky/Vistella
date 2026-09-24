@@ -278,7 +278,11 @@ private:
     // 简单窗口模式 (2026-09-09 重建)
     //   m_mode 唯一可信状态, setMode 统一切 m_mode + showMaximized/showNormal
     //   m_normalSize 仅在 Normal 时使用, 默认 1280x800, 启动后从 QSettings 读
-    WindowMode    m_mode         = WindowMode::Maximized;
+    // Q4.2.2.1 fix (2026-09-24): 默认 Normal. Q4.1 只改了 loadWindowState() 的默认值,
+    //   ctor 字段默认仍是 Maximized. 任何 splash 之前的代码读 m_mode 都会拿到 Maximized
+    //   并可能持久化回去. 改成 Normal 把这个 foot-gun 拔掉, splash 之后 applyWindowMode
+    //   会按 QSettings 决定最终 mode, 但默认安全值是 Normal.
+    WindowMode    m_mode         = WindowMode::Normal;
     QSize         m_normalSize   = QSize(1280, 800);
 
     QAction *m_actNew      = nullptr;

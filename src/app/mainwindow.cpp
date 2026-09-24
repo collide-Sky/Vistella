@@ -234,10 +234,17 @@ void MainWindow::closeEvent(QCloseEvent *e)
     SessionManager::instance().setLastExitClean(true);
     saveSession();
     // 只保存 mode (2026-09-09 user 拍板: m_normalSize 写死 1280x800, 不持久化)
+    // Q4.2.2.1 fix (2026-09-24): 如果用户关闭时是 Maximized, 存 Normal. 上次关窗 Maximized
+    //   会让下次启动 splash 之前 loadWindowState 读 "window/mode=1", 不恢复路径虽然显式
+    //   setMode(Normal) 覆盖, 但其他路径 (clean 启动) 还是会读 Maximized 起来. 改:
+    //   Maximized 时落 Normal 到 QSettings. 行为: 关闭前 Maximized → 下次冷启动也是
+    //   Normal 居中 1280x800. 用户再次手动最大化后下次冷启动会恢复 Maximized.
     {
         QSettings s;
-        s.setValue(QStringLiteral("window/mode"), int(m_mode));
-        LOG_INFO("[State] closeEvent save m_mode={} (m_normalSize not persisted)", static_cast<int>(m_mode));
+        const WindowMode saveMode = (m_mode == WindowMode::Maximized) ? WindowMode::Normal : m_mode;
+        s.setValue(QStringLiteral("window/mode"), int(saveMode));
+        LOG_INFO("[State] closeEvent save m_mode={} -> persisted={} (Maximized coerced to Normal)",
+                 static_cast<int>(m_mode), static_cast<int>(saveMode));
     }
     QMainWindow::closeEvent(e);
 }

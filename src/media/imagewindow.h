@@ -492,12 +492,11 @@ private:
     //   现在升级成独立 OptionPanel widget, 装到左侧 dock 下方 (splitDockWidget
     //   跟在 ImageOptionBar 后面). 用户可拖动调整顺序/位置 (NoDockWidgetFeatures
     //   隐藏 close/float 按钮, 跟左侧其他 dock 一致).
-    //   这俩 panel 永远显示 (跟 ImageOptionBar 的 "切工具切 page" 不同 —
-    //   MosaicTool/TextOverlayController 是 imagewindow 私有工具, 不走 ToolMediator).
+    // Q4.2.2.1 fix (2026-09-24): Mosaic/Text OptionPanel 改放 leftPanel 顶部
+    //   (imagewindow.ui gridLayout_4), 不再作为永久 dock. 保留 unique_ptr 持有所有权,
+    //   dtor 正常析构. QDockWidget 字段已删.
     std::unique_ptr<MosaicOptionPanel>    m_mosaicOptionPanel;
-    QDockWidget                           *m_mosaicOptionDockContainer = nullptr;
     std::unique_ptr<TextOptionPanel>      m_textOptionPanel;
-    QDockWidget                           *m_textOptionDockContainer = nullptr;
 
     // F-N (2026-09-10): Tool state context — owns current ToolState, receives eventFilter forwards
     std::unique_ptr<tools::ToolContext>     m_ctx;
