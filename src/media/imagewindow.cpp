@@ -313,9 +313,11 @@ ImageWindow::ImageWindow(QWidget *parent)
     // 笔刷光标 (默认隐藏, 鼠标移进 viewport 才显示)
     //   P0-1.3: m_brushCursor 加到 m_canvas->scene() (原 m_scene)
     {
-        const int r0 = ui->sliderMosaicSize->value() / 2;
+        // Q4.2.2 (2026-09-24): 默认 30 px (跟 MosaicOptionPanel slider 默认一致)
+        const int initialSize = 30;
+        const int r0 = initialSize / 2;
         m_brushCursor = m_canvas->scene()->addEllipse(-r0, -r0,
-            ui->sliderMosaicSize->value(), ui->sliderMosaicSize->value());
+            initialSize, initialSize);
         QPen pen(QColor(76, 175, 128, 220));    // 浅绿
         pen.setWidth(2);
         pen.setCosmetic(true);  // 不随缩放变化
@@ -330,18 +332,21 @@ ImageWindow::ImageWindow(QWidget *parent)
 
     // P0-1.2 (2026-09-07): 实例化 5 个组件
     //   这一轮 P0-1.2 只用 m_textCtrl + m_mosaicTool, 其他 nullptr 占位等下一轮
+    // Q4.2.2 (2026-09-24): 默认值硬编码 (之前从 ui 占位控件读)
+    //   - 字体 Microsoft YaHei UI (跟 TextOverlayController::m_textFont 默认一致)
+    //   - 字号 24 (跟 P0-7 默认一致)
+    //   - 涂抹 size 30 (跟 .ui sliderMosaicSize 默认一致)
+    //   - 涂抹 type Pixelate=0 (跟 MosaicTool::m_type 默认一致)
     m_textCtrl    = std::make_unique<TextOverlayController>(this);
     m_textCtrl->setHost(this);
-    // 同步左面板的字体/字号到组件 (createTextItem 用)
-    m_textCtrl->setTextFont(ui->comboTextFont->currentFont().family());
-    m_textCtrl->setTextSize(ui->spinTextSize->value());
+    m_textCtrl->setTextFont(QStringLiteral("Microsoft YaHei UI"));
+    m_textCtrl->setTextSize(24);
     m_textCtrl->setTextColor(QColor(Qt::white));
 
     m_mosaicTool  = std::make_unique<MosaicTool>(this);
     m_mosaicTool->setHost(this);
-    // 同步左面板的涂抹 size/type 到组件
-    m_mosaicTool->setSize(ui->sliderMosaicSize->value());
-    m_mosaicTool->setType(static_cast<MosaicTool::Type>(ui->comboMosaicType->currentIndex()));
+    m_mosaicTool->setSize(30);
+    m_mosaicTool->setType(MosaicTool::Pixelate);
 
     // P0-1.4 (2026-09-07): IO 控制器 (open / save / saveAs / close) 实例化
     //   接管原 ImageWindow::onOpen / onSave / onSaveAs / onClose 4 个 slot
@@ -454,6 +459,42 @@ ImageWindow::ImageWindow(QWidget *parent)
     splitDockWidget(m_leftDockContainer, m_imageOptionDockContainer, Qt::Vertical);
     resizeDocks({m_imageOptionDockContainer}, {220}, Qt::Vertical);
 
+    // Q4.2.2 (2026-09-24): MosaicOptionPanel 装到 ImageOptionBar 下方
+    //   之前 imagewindow.ui 硬编码 groupMosaic 占位 (slider/button/hint), 现在
+    //   升级成独立 OptionPanel. MosaicTool 是 imagewindow 私有工具, 不走
+    //   ToolMediator, 所以这个 panel 永远显示 (跟 ImageOptionBar "切工具切 page"
+    //   不同). Panel 自己 connect MosaicTool 信号双向同步状态.
+    m_mosaicOptionPanel = std::make_unique<MosaicOptionPanel>(m_mosaicTool.get());
+    m_mosaicOptionDockContainer = new QDockWidget(this);
+    m_mosaicOptionDockContainer->setObjectName(QStringLiteral("mosaicOptionDockContainer"));
+    m_mosaicOptionDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    auto* mosaicEmptyTitle = new QWidget();
+    mosaicEmptyTitle->setFixedHeight(0);
+    m_mosaicOptionDockContainer->setTitleBarWidget(mosaicEmptyTitle);
+    m_mosaicOptionDockContainer->setWidget(m_mosaicOptionPanel.release());
+
+    addDockWidget(Qt::LeftDockWidgetArea, m_mosaicOptionDockContainer);
+    splitDockWidget(m_imageOptionDockContainer, m_mosaicOptionDockContainer, Qt::Vertical);
+    resizeDocks({m_mosaicOptionDockContainer}, {200}, Qt::Vertical);
+
+    // Q4.2.2 (2026-09-24): TextOptionPanel 装到 MosaicOptionPanel 下方
+    //   之前 imagewindow.ui 硬编码 groupText 占位 (font/size/color/Bold/Italic/
+    //   content), 同样升级成独立 OptionPanel. TextOverlayController 是
+    //   imagewindow 私有工具, 永远显示. Panel 监听 TextOverlayController::currentChanged
+    //   同步当前 item 状态.
+    m_textOptionPanel = std::make_unique<TextOptionPanel>(m_textCtrl.get());
+    m_textOptionDockContainer = new QDockWidget(this);
+    m_textOptionDockContainer->setObjectName(QStringLiteral("textOptionDockContainer"));
+    m_textOptionDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    auto* textEmptyTitle = new QWidget();
+    textEmptyTitle->setFixedHeight(0);
+    m_textOptionDockContainer->setTitleBarWidget(textEmptyTitle);
+    m_textOptionDockContainer->setWidget(m_textOptionPanel.release());
+
+    addDockWidget(Qt::LeftDockWidgetArea, m_textOptionDockContainer);
+    splitDockWidget(m_mosaicOptionDockContainer, m_textOptionDockContainer, Qt::Vertical);
+    resizeDocks({m_textOptionDockContainer}, {200}, Qt::Vertical);
+
     // P0-4 (2026-09-10): SelectionModel 实例化
     //   ImageCanvas 拿 selection 引用, drawForeground 画 marching ants 边界
     //   setSize 在 loadFile 后调, 跟 image 像素对齐
@@ -498,8 +539,8 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   LayersDock 现在是第 3 tab, 只装 LayerPanel (F-G.3 集成)
     //   ChannelPathPanel 已经在 RightPanelDock ctor 创建
 
-    // 兜底: 显式关闭马赛克按钮, 避免 .ui 默认状态导致启动就进入涂抹
-    ui->btnMosaicMode->setChecked(false);
+    // 兜底: 显式关闭马赛克按钮, 避免启动就进入涂抹
+    //   Q4.2.2 (2026-09-24): 删 ui->btnMosaicMode 引用, MosaicOptionPanel 默认 unchecked
     m_mosaicTool->setEnabled(false);
     // 兜底: 文字 item 都不锁双击 (启动时非涂抹模式)
     for (auto *ti : m_textCtrl->textItems()) { if (ti) ti->setBlockDoubleClickEdit(false); }
@@ -2047,31 +2088,24 @@ void ImageWindow::onRedo()
     if (m_undoStack) m_undoStack->redo();
 }
 
-// --- 离散操作 (马赛克改为拖动涂抹) ---
-
-// 笔刷大小变 -> 圆圈跟着变
-//   P0-1.2 (2026-09-07): 委托给 m_mosaicTool, 组件自己管 brush cursor
+// Q4.2.2 (2026-09-24): 4 个占位 slot 已删, 由 MosaicOptionPanel / TextOptionPanel
+//   自己接管信号 (panel 直接 connect MosaicTool / TextOverlayController).
+//   onMosaicSizeChanged / onMosaicModeToggled / onTextSizeChanged /
+//   onTextColorClicked / onTextFontChanged 全在 imagewindow.h/.cpp 删除.
+//   buildActions 里对应的 4 个 connect 也删. 这里保留 no-op stub 防其他
+//   派生类还在用 (虽然目前没有 ImageWindow 派生类, 但 ImageEditCommand friend).
 void ImageWindow::onMosaicSizeChanged(int v)
 {
-    ui->lblMosaicSizeVal->setText(QStringLiteral("%1 px").arg(v));
-    if (m_mosaicTool) m_mosaicTool->setSize(v);
+    // MosaicOptionPanel 接管: slider valueChanged -> MosaicOptionPanel::onSizeSliderChanged
+    //   -> m_mosaicTool->setSize. ImageWindow 不用再管.
+    (void)v;
 }
 
-// 马赛克模式切换 - 主流做法: 涂抹和文字编辑互斥
-//   进马赛克: 锁所有文字 item 的双击编辑 (setBlockDoubleClickEdit=true)
-//             退出当前文字 item 的编辑状态 (避免边涂抹边编辑)
-//   退马赛克: 解锁所有文字 item 的双击编辑
-//   拖动/resize/rotate 文字 item 在马赛克模式下仍可用 (主流做法: 滤镜激活时, 文字图层仍可 transform)
-//   P0-1.2 (2026-09-07): 主体逻辑迁到 MosaicTool::setEnabled, 这里只剩按钮文字 + 调组件
 void ImageWindow::onMosaicModeToggled(bool on)
 {
-    if (m_mosaicTool) m_mosaicTool->setEnabled(on);
-    if (m_brushCursor) m_brushCursor->setVisible(false);  // 默认隐藏, 进入图区再显示
-    if (on) {
-        ui->btnMosaicMode->setText(tr("✓  涂抹中 (再点退出)"));
-    } else {
-        ui->btnMosaicMode->setText(tr("●  进入涂抹模式 (再点退出)"));
-    }
+    // MosaicOptionPanel 接管: btnMosaicMode toggled -> MosaicOptionPanel::onModeButtonToggled
+    //   -> m_mosaicTool->setEnabled.
+    (void)on;
 }
 
 // =============================================================
@@ -2091,12 +2125,12 @@ void ImageWindow::connectTextItemSignals(GraphicsTextItem *item)
 }
 
 // P0-1.2 (2026-09-07): 委托给 m_textCtrl
+//   Q4.2.2 (2026-09-24): 字体/字号从 TextOptionPanel 同步过来 (createTextItem
+//   用 m_textFont/m_textSize, TextOptionPanel 在 font/size 变化时调
+//   setTextFont/setTextSize. 这里只调 createTextItem 即可.
 GraphicsTextItem *ImageWindow::createTextItem(const QPointF &scenePos)
 {
     if (!m_textCtrl) return nullptr;
-    // 同步左面板的字体/字号到组件 (createTextItem 内部读 m_textFont/m_textSize)
-    m_textCtrl->setTextFont(ui->comboTextFont->currentFont().family());
-    m_textCtrl->setTextSize(ui->spinTextSize->value());
     return m_textCtrl->createTextItem(scenePos);
 }
 
@@ -2125,31 +2159,30 @@ void ImageWindow::flattenText()
 
 // 字体变化 -> 应用到 m_currentTextItem
 //   P0-1.2 (2026-09-07): 委托给 m_textCtrl
+// Q4.2.2 (2026-09-24): TextOptionPanel 接管字体/字号/颜色变化, 这里 no-op
 void ImageWindow::onTextFontChanged()
 {
-    if (!m_textCtrl) return;
-    m_textCtrl->onFontChanged(ui->comboTextFont->currentFont().family());
+    // TextOptionPanel 接管: comboTextFont currentFontChanged -> onFontComboChanged
+    //   -> m_textCtrl->setTextFont + applyStyleToCurrent
 }
 
 // 字号变化 -> 应用到 m_currentTextItem
 //   P0-1.2 (2026-09-07): 委托给 m_textCtrl
+// Q4.2.2 (2026-09-24): TextOptionPanel 接管字号变化, 这里 no-op
 void ImageWindow::onTextSizeChanged(int v)
 {
-    if (m_textCtrl) m_textCtrl->onSizeChanged(v);
+    // TextOptionPanel 接管: spinTextSize valueChanged -> onSizeSpinChanged
+    //   -> m_textCtrl->setTextSize + applyStyleToCurrent
+    (void)v;
 }
 
 // 文字颜色按钮 -> 应用到 m_currentTextItem
 //   P0-1.2 (2026-09-07): 调 QColorDialog 拿颜色, 委托给 m_textCtrl
+// Q4.2.2 (2026-09-24): TextOptionPanel 接管颜色 button + dialog, 这里 no-op
 void ImageWindow::onTextColorClicked()
 {
-    if (!m_textCtrl) return;
-    const QColor cur = m_textCtrl->textColor();
-    QColor c = QColorDialog::getColor(cur, this, tr("选择文字颜色"));
-    if (!c.isValid()) return;
-    m_textCtrl->onColorSelected(c);
-    statusBar()->showMessage(
-        tr("文字颜色: RGB(%1,%2,%3)").arg(c.red()).arg(c.green()).arg(c.blue()),
-        2000);
+    // TextOptionPanel 接管: btnTextColor clicked -> onColorClicked -> QColorDialog
+    //   -> m_textCtrl->setTextColor. 这里不再重复弹 dialog.
 }
 
 // eventFilter 集中处理: 文字输入框 Escape 取消 + viewport 鼠标滚轮拖动涂抹
@@ -2166,41 +2199,11 @@ void ImageWindow::buildActions()
     connect(ui->actResetZoom, &QAction::triggered, this, &ImageWindow::onResetZoom);
 
     // Stage B (2026-09-15): 撤销 P0-1.2 5 toggle + 10 slider UI, ImageAdjustmentPanel 类已删
-
-    // 离散操作按钮
-    connect(ui->sliderMosaicSize, &QSlider::valueChanged, this, &ImageWindow::onMosaicSizeChanged);
-    connect(ui->btnMosaicMode,   &QToolButton::toggled, this, &ImageWindow::onMosaicModeToggled);
-    // 关键: 不再 connect btnApplyText — 文字编辑改为"双击图片直接进入"模式, 无需按钮开关
-    connect(ui->btnTextColor,    &QToolButton::clicked, this, &ImageWindow::onTextColorClicked);
-
-    // P0-1.2 (2026-09-07): comboMosaicType 变化 -> 同步到 m_mosaicTool
-    //   原代码: eventFilter 每次 applyMosaic 读 ui->comboMosaicType->currentIndex()
-    //   现在: 组件管 m_type, host 同步过来
-    if (m_mosaicTool && ui->comboMosaicType) {
-        connect(ui->comboMosaicType, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                m_mosaicTool.get(), [this](int idx) {
-                    m_mosaicTool->setType(static_cast<MosaicTool::Type>(idx));
-                });
-    }
-
-    // 文字字体/字号变化 -> 应用到当前选中/正在编辑的 item
-    connect(ui->comboTextFont, &QFontComboBox::currentFontChanged,
-            this, &ImageWindow::onTextFontChanged);
-    connect(ui->spinTextSize, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &ImageWindow::onTextSizeChanged);
-
-    // Stage B (2026-09-15): 撤销旧 5 toggle + 10 slider 滑条范围设置 (UI 已删)
-
-    // 字体下拉默认填几个常用中文字体 (QFontComboBox 已经默认装了系统字体, 这里补充几个中文)
-    if (ui->comboTextFont->findText(QStringLiteral("Microsoft YaHei UI")) < 0) {
-        ui->comboTextFont->addItem(QStringLiteral("Microsoft YaHei UI"));
-    }
-    if (ui->comboTextFont->findText(QStringLiteral("SimSun")) < 0) {
-        ui->comboTextFont->addItem(QStringLiteral("SimSun"));
-    }
-    if (ui->comboTextFont->findText(QStringLiteral("Microsoft YaHei")) < 0) {
-        ui->comboTextFont->addItem(QStringLiteral("Microsoft YaHei"));
-    }
+    // Q4.2.2 (2026-09-24): 删 5 个 connect (sliderMosaicSize / btnMosaicMode /
+    //   comboMosaicType / btnTextColor / comboTextFont / spinTextSize), 全部
+    //   移到 MosaicOptionPanel + TextOptionPanel 内部直接 connect 业务组件.
+    //   buildActions 只剩顶层 toolbar/action 路由 (zoom 4 个), 不再管 imagewindow.ui
+    //   占位 group (slider/button/combo), 那些 widget 已经从 .ui 删除 (Q4.2.2).
 }
 
 void ImageWindow::applyPanelTheme()

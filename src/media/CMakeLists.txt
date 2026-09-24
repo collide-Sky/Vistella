@@ -15,8 +15,12 @@ add_library(vistella_media STATIC
     imagewindow/ImageCanvas.cpp
     imagewindow/MosaicTool.h
     imagewindow/MosaicTool.cpp
+    imagewindow/MosaicOptionPanel.h
+    imagewindow/MosaicOptionPanel.cpp
     imagewindow/TextOverlayController.h
     imagewindow/TextOverlayController.cpp
+    imagewindow/TextOptionPanel.h
+    imagewindow/TextOptionPanel.cpp
     imagewindow/ImageIOController.h
     imagewindow/ImageIOController.cpp
 

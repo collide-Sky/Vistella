@@ -57,6 +57,9 @@ class GraphicsTextItem;
 class AdjustmentPanel;
 class MosaicTool;
 class TextOverlayController;
+// Q4.2.2 (2026-09-24): OptionPanel 完整 include (unique_ptr 需要完整类型, 析构能正确 delete)
+#include "imagewindow/MosaicOptionPanel.h"
+#include "imagewindow/TextOptionPanel.h"
 // F-G.3 Fix (2026-09-10): RightPanelDock forward decl (右侧 panel 1 widget 4+1 tab)
 namespace docks { class RightPanelDock; }
 namespace mediators { class WorkspaceMediator; class DialogMediator; }
@@ -483,6 +486,18 @@ private:
     QDockWidget                           *m_leftDockContainer = nullptr;
     std::unique_ptr<tools::ImageOptionBar> m_imageOptionBar;
     QDockWidget                           *m_imageOptionDockContainer = nullptr;
+
+    // Q4.2.2 (2026-09-24): MosaicTool + TextOverlayController 专属属性面板
+    //   之前 imagewindow.ui 硬编码 groupMosaic + groupText (P0-1.2 占位),
+    //   现在升级成独立 OptionPanel widget, 装到左侧 dock 下方 (splitDockWidget
+    //   跟在 ImageOptionBar 后面). 用户可拖动调整顺序/位置 (NoDockWidgetFeatures
+    //   隐藏 close/float 按钮, 跟左侧其他 dock 一致).
+    //   这俩 panel 永远显示 (跟 ImageOptionBar 的 "切工具切 page" 不同 —
+    //   MosaicTool/TextOverlayController 是 imagewindow 私有工具, 不走 ToolMediator).
+    std::unique_ptr<MosaicOptionPanel>    m_mosaicOptionPanel;
+    QDockWidget                           *m_mosaicOptionDockContainer = nullptr;
+    std::unique_ptr<TextOptionPanel>      m_textOptionPanel;
+    QDockWidget                           *m_textOptionDockContainer = nullptr;
 
     // F-N (2026-09-10): Tool state context — owns current ToolState, receives eventFilter forwards
     std::unique_ptr<tools::ToolContext>     m_ctx;
