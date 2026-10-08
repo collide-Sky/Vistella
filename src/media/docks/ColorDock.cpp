@@ -201,9 +201,13 @@ void ColorDock::setPatternPreset(int idx)
 void ColorDock::setupPalette()
 {
     if (!ui || !ui->paletteGrid) return;
+    // Q4.3 (2026-10-08): grid 拉伸 — 4 列平均分 dock 宽度, cells 跟随 stretch.
+    //   之前 setFixedSize(20, 20) 把 cell 写死, grid 不能 stretch, dock 加宽时右边留空.
+    for (int col = 0; col < 4; ++col) ui->paletteGrid->setColumnStretch(col, 1);
     for (int i = 0; i < 12; ++i) {
         QFrame* cell = new QFrame(ui->paletteContainer);
-        cell->setFixedSize(20, 20);
+        cell->setMinimumSize(20, 20);          // 最小尺寸, 不允许缩太小
+        cell->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);  // stretch 跟随
         cell->setFrameShape(QFrame::Box);
         cell->setAutoFillBackground(true);
         QPalette p = cell->palette();
@@ -220,6 +224,8 @@ void ColorDock::setupPalette()
 void ColorDock::setupGradientPresets()
 {
     if (!ui || !ui->gradientPresetsGrid) return;
+    // Q4.3 (2026-10-08): 跟 setupPalette 同样, 4 列 stretch 1 平均分.
+    for (int col = 0; col < 4; ++col) ui->gradientPresetsGrid->setColumnStretch(col, 1);
     for (int i = 0; i < 8; ++i) {
         QFrame* cell = new QFrame(ui->gradientPresetsContainer);
         cell->setFixedSize(40, 16);
@@ -240,9 +246,12 @@ void ColorDock::setupGradientPresets()
 void ColorDock::setupPatternPresets()
 {
     if (!ui || !ui->patternPresetsGrid) return;
+    // Q4.3 (2026-10-08): 3 列 stretch 1 平均分 dock 宽度 (3 cols x 2 rows = 6 cells).
+    for (int col = 0; col < 3; ++col) ui->patternPresetsGrid->setColumnStretch(col, 1);
     for (int i = 0; i < kPatternCount; ++i) {
         QFrame* cell = new QFrame(ui->patternPresetsContainer);
-        cell->setFixedSize(40, 40);
+        cell->setMinimumSize(40, 40);          // 最小 40x40
+        cell->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);  // stretch 跟随
         cell->setFrameShape(QFrame::NoFrame);
         cell->setAutoFillBackground(true);
         cell->setProperty("patternIndex", i);

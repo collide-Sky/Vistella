@@ -58,6 +58,9 @@ public:
     // P1.4.3 (2026-09-17): LayersDock 暴露 (ImageWindow::loadFile 实例化 LayerPanel + 注入 tab 0)
     LayersDock* layersDock() const { return m_layersDock; }
 
+    // Q4.3 (2026-10-08): PropertiesDock 暴露 (ImageWindow::loadFile 注入 filePath/WxH/format/dpi)
+    PropertiesDock* propertiesDock() const { return m_propsDock; }
+
     // 浮动位置 (imagewindow 右上角, 跟 m_rightPanel 同样模式)
     QSize sizeHint() const override { return QSize(340, 600); }
 

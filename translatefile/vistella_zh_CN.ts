@@ -913,57 +913,57 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1809"/>
+        <location filename="../src/media/imagewindow.cpp" line="1824"/>
         <source>未命名图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2544"/>
-        <location filename="../src/media/imagewindow.cpp" line="2630"/>
-        <location filename="../src/media/imagewindow.cpp" line="2646"/>
-        <location filename="../src/media/imagewindow.cpp" line="2662"/>
-        <location filename="../src/media/imagewindow.cpp" line="2678"/>
-        <location filename="../src/media/imagewindow.cpp" line="2694"/>
+        <location filename="../src/media/imagewindow.cpp" line="2559"/>
+        <location filename="../src/media/imagewindow.cpp" line="2645"/>
+        <location filename="../src/media/imagewindow.cpp" line="2661"/>
+        <location filename="../src/media/imagewindow.cpp" line="2677"/>
+        <location filename="../src/media/imagewindow.cpp" line="2693"/>
+        <location filename="../src/media/imagewindow.cpp" line="2709"/>
         <source>当前页面没有图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2599"/>
+        <location filename="../src/media/imagewindow.cpp" line="2614"/>
         <source>已应用 SmartObject 变换</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2606"/>
+        <location filename="../src/media/imagewindow.cpp" line="2621"/>
         <source>ToolContext 未初始化</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2624"/>
+        <location filename="../src/media/imagewindow.cpp" line="2639"/>
         <source>自由变换 — 拖动 8 handle 或中心点 (Esc 退出)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2637"/>
+        <location filename="../src/media/imagewindow.cpp" line="2652"/>
         <source>水平翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2653"/>
+        <location filename="../src/media/imagewindow.cpp" line="2668"/>
         <source>垂直翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2669"/>
+        <location filename="../src/media/imagewindow.cpp" line="2684"/>
         <source>旋转 90° 顺时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2685"/>
+        <location filename="../src/media/imagewindow.cpp" line="2700"/>
         <source>旋转 90° 逆时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2701"/>
+        <location filename="../src/media/imagewindow.cpp" line="2716"/>
         <source>旋转 180°</source>
         <translation type="unfinished"></translation>
     </message>

@@ -1773,6 +1773,21 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     }
 
     emit filePathChanged(m_filePath);
+    // Q4.3 (2026-10-08): PropertiesDock.setImageInfo 接入.
+    //   之前 loadFile 完全没调 setImageInfo, PropertiesDock 始终显示 "(无)".
+    //   现在从 m_filePath (QFileInfo 取后缀得 format, 默认 dpi=72) + img.size 注入.
+    if (m_rightDock) {
+        if (auto* propsDock = m_rightDock->propertiesDock()) {
+            docks::PropertiesDock::ImageInfo info;
+            info.filePath = m_filePath;
+            info.width    = img.cols;
+            info.height   = img.rows;
+            const QString suffix = QFileInfo(m_filePath).suffix().toUpper();
+            info.format   = suffix.isEmpty() ? QStringLiteral("Unknown") : suffix;
+            info.dpi      = 72;  // 默认 dpi, 后续 P0-8 ICC embed 流程可读 EXIF
+            propsDock->setImageInfo(info);
+        }
+    }
     // Stage F (2026-09-15): 补回 renderToView 触发
     //   Stage B 删 m_adjustment->syncApplyCurrentParams(true) 时连带漏了渲染触发
     //     旧: syncApplyCurrentParams -> setCurrentImage -> renderToView
