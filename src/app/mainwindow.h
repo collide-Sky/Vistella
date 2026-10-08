@@ -20,7 +20,7 @@ class ImageWindow;
 class HomePage;
 namespace filter { enum class FilterKind : int; }
 namespace layers { class LayerStack; }
-namespace mediators { class WorkspaceMediator; }
+namespace mediators { class WorkspaceMediator; class ToolMediator; enum class ToolId : int; }
 class QMouseEvent;
 QT_END_NAMESPACE
 
@@ -116,6 +116,8 @@ private slots:
     void onImageSelectAll();
     void onImageDeselect();
     void onImageInverse();
+    // Q4.4 (2026-10-08): 工具菜单转发 (Tools menu -> 活动 ImageWindow -> m_toolMed)
+    void onSwitchTool(mediators::ToolId id);
 
     // 视图
     void onToggleTheme();

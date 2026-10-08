@@ -457,6 +457,39 @@ void MainWindow::buildActions()
     // (3D 模块已移除, 模式菜单删除, 2026-09-02)
 
     QMenu *mTools = mb->addMenu(tr("工具"));
+    // Q4.4 (2026-10-08): 工具栏 15 个工具入口 (PS 标准快捷键).
+    //   之前 Tools 菜单只有 Settings/Lang/Theme/Login 4 项, 现在补上 15 个工具.
+    //   点击通过 onSwitchTool(ToolId) 转发到活动 ImageWindow 的 m_toolMed.
+    {
+        struct Entry { const char* text; mediators::ToolId id; const char* shortcut; };
+        const Entry toolEntries[] = {
+            {"移动 (Move)",           mediators::ToolId::Move,       "V"},
+            {"矩形选框 (RectSelect)", mediators::ToolId::RectSelect, "M"},
+            {"套索 (Lasso)",          mediators::ToolId::Lasso,      "L"},
+            {"魔棒 (Magic Wand)",     mediators::ToolId::MagicWand,  "W"},
+            {"裁剪 (Crop)",           mediators::ToolId::Crop,       "C"},
+            {"文字 (Text)",           mediators::ToolId::Text,       "T"},
+            {"画笔 (Brush)",          mediators::ToolId::Brush,      "B"},
+            {"吸管 (Eyedropper)",     mediators::ToolId::Eyedropper, "I"},
+            {"形状 (Shape)",          mediators::ToolId::Shape,      "U"},
+            {"钢笔 (Pen)",            mediators::ToolId::Pen,        "P"},
+            {"仿制图章 (Clone)",      mediators::ToolId::Clone,      "S"},
+            {"修复画笔 (Heal)",       mediators::ToolId::Heal,       "J"},
+            {"修补 (Patch)",          mediators::ToolId::Patch,      ""},
+            {"红眼 (RedEye)",         mediators::ToolId::RedEye,     ""},
+            {"蒙版画笔 (MaskBrush)",  mediators::ToolId::MaskBrush,  ""},
+        };
+        for (const auto& e : toolEntries) {
+            auto* act = mTools->addAction(tr(e.text));
+            if (e.shortcut && e.shortcut[0]) {
+                act->setShortcut(QKeySequence(QString::fromLatin1(e.shortcut)));
+            }
+            connect(act, &QAction::triggered, this, [this, id = e.id]() {
+                onSwitchTool(id);
+            });
+        }
+        mTools->addSeparator();
+    }
     QAction *aSettings = mTools->addAction(tr("首选项..."));
     connect(aSettings, &QAction::triggered, this, &MainWindow::onSettings);
     QAction *aLang = mTools->addAction(tr("语言"));
@@ -1937,6 +1970,28 @@ void MainWindow::onSettings()
 {
     SettingsDialog dlg(this);
     dlg.exec();
+}
+
+// =============================================================
+// Q4.4 (2026-10-08): 工具菜单转发 — 找活动 ImageWindow, 调 m_toolMed.switchTool
+//   Tools 菜单 15 个 action (Move/RectSelect/Lasso/MagicWand/Crop/Text/Brush/
+//   Eyedropper/Shape/Pen/Clone/Heal/Patch/RedEye/MaskBrush) 全部走这个入口.
+//   找不到活动 ImageWindow 时 statusBar 提示, 不 crash.
+// =============================================================
+void MainWindow::onSwitchTool(mediators::ToolId id)
+{
+    auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!iw) {
+        statusBar()->showMessage(tr("没有活动的图片窗口"), 2000);
+        return;
+    }
+    auto* med = iw->toolMediator();
+    if (!med) {
+        statusBar()->showMessage(tr("当前图片窗口未连接工具中介"), 2000);
+        return;
+    }
+    med->switchTool(id);
+    LOG_INFO("[MainWindow] onSwitchTool: {}", static_cast<int>(id));
 }
 
 // =============================================================

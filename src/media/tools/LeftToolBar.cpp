@@ -12,6 +12,7 @@
 #include <QToolButton>
 #include <QGridLayout>
 #include <QIcon>
+#include <QStyle>
 
 namespace tools {
 
@@ -19,6 +20,32 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
 {
     ui = new Ui::LeftToolBar;
     ui->setupUi(this);
+    // Q4.4 (2026-10-08): 用 QStyle standardIcon 替换字母 placeholder.
+    //   没 SVG 资源的情况下, Qt 内置 standard pixmap (cross / arrow / file) 视觉比
+    //   "M/R/L/W/C/T/B/I" 强得多. 后续 P5 接 SVG 图标, 直接 setIcon(SVG) 即可.
+    auto styleIcon = [this](QStyle::StandardPixmap sp){
+        return style()->standardIcon(sp);
+    };
+    ui->btnMove->setIcon(styleIcon(QStyle::SP_ArrowRight));
+    ui->btnRectSelect->setIcon(styleIcon(QStyle::SP_FileDialogContentsView));
+    ui->btnLasso->setIcon(styleIcon(QStyle::SP_FileDialogDetailedView));
+    ui->btnMagicWand->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
+    ui->btnCrop->setIcon(styleIcon(QStyle::SP_DialogResetButton));
+    ui->btnText->setIcon(styleIcon(QStyle::SP_FileDialogInfoView));
+    ui->btnBrush->setIcon(styleIcon(QStyle::SP_DialogOkButton));
+    ui->btnEyedropper->setIcon(styleIcon(QStyle::SP_ArrowRight));
+    ui->btnShape->setIcon(styleIcon(QStyle::SP_DialogYesButton));
+    ui->btnPen->setIcon(styleIcon(QStyle::SP_DirIcon));
+    ui->btnClone->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
+    ui->btnHeal->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
+    ui->btnPatch->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
+    ui->btnRedEye->setIcon(styleIcon(QStyle::SP_MessageBoxWarning));
+    ui->btnMaskBrush->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
+    for (auto* b : findChildren<QToolButton*>()) {
+        b->setIconSize(QSize(16, 16));
+        b->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    }
+
     // F-L (2026-09-10): 8 工具 button 映射 (PS 风格 4 行 2 列)
     m_buttons[mediators::ToolId::Move]       = ui->btnMove;
     m_buttons[mediators::ToolId::RectSelect] = ui->btnRectSelect;
