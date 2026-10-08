@@ -515,13 +515,9 @@ void MainWindow::buildActions()
 
     // F-J (2026-09-09): 6 主菜单加子菜单 (图像/图层/文字/选择/滤镜)
     //   F-L/F-N 阶段 action 接实际功能
-    //   当前 placeholder: action triggered → LOG_INFO + statusBar message (统一 notImpl lambda)
-    auto notImpl = [this](const QString& menuName, const QString& actionName) {
-        return [this, menuName, actionName]() {
-            LOG_INFO("[F-J] {} > {} 触发 (待 F-L/F-N 实装)", menuName.toStdString(), actionName.toStdString());
-            statusBar()->showMessage(tr("%1 > %2 将在后续版本实现").arg(menuName, actionName), 3000);
-        };
-    };
+    // Q4.5 (2026-10-08): 删 dead notImpl lambda. 之前 F-J 阶段所有 menu action
+    //   都用 notImpl 占位, P2.x 全部接成真接. 现在没有调用方, 编译 warning -Wunused-lambda
+    //   也不会有 (C++ lambda 不强制 unused warning), 但 dead code 留着浪费阅读时间.
 
     // ---- 图像 (Image) ----
     QMenu *mImage = mb->addMenu(tr("图像"));
