@@ -570,6 +570,109 @@ void MainWindow::buildActions()
     mImage->addAction(m_actImageRotate90CW);
     mImage->addAction(m_actImageRotate90CCW);
     mImage->addAction(m_actImageRotate180);
+    mImage->addSeparator();
+
+    // P5 (2026-10-08): 图像菜单补齐 — PS 模式 / 画布大小 / 裁切 / 全部显示.
+    //   Mode (RGB/Grayscale/CMYK) 走 cv::cvtColor 转换, 简单实用.
+    //   Canvas Size 跟 Image Size 区别: Image Size 缩放像素, Canvas Size 加 padding.
+    //   Trim 自动裁切透明边缘 (cv::findNonZero boundingRect).
+    //   Reveal All 切到 fit 缩放, 跟 PS 行为一致.
+    {
+        // ---- Mode (RGB / Grayscale) ----
+        QMenu* mMode = mImage->addMenu(tr("模式"));
+        QAction* aModeRgb = mMode->addAction(tr("RGB 颜色"));
+        connect(aModeRgb, &QAction::triggered, this, [this]() {
+            auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+            if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+            cv::Mat src = iw->currentImage().clone();
+            if (src.channels() == 1) { statusBar()->showMessage(tr("已经是灰度模式"), 2000); return; }
+            cv::Mat dst;
+            cv::cvtColor(src, dst, cv::COLOR_BGR2RGB);
+            cv::cvtColor(dst, dst, cv::COLOR_RGB2GRAY);
+            cv::cvtColor(dst, dst, cv::COLOR_GRAY2BGR);  // 保持 3 通道
+            if (iw->undoStack()) {
+                iw->undoStack()->push(new ImageEditCommand(iw, src, dst, tr("转换为 RGB 灰度")));
+            }
+            iw->setCurrentImage(dst);
+        });
+        QAction* aModeGray = mMode->addAction(tr("灰度"));
+        connect(aModeGray, &QAction::triggered, this, [this]() {
+            auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+            if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+            cv::Mat src = iw->currentImage().clone();
+            if (src.channels() == 1) { statusBar()->showMessage(tr("已经是灰度"), 2000); return; }
+            cv::Mat dst;
+            cv::cvtColor(src, dst, cv::COLOR_BGR2GRAY);
+            // ImageProcessor / LayerStack 期望 3 通道, 灰度转 3 通道保持一致
+            cv::cvtColor(dst, dst, cv::COLOR_GRAY2BGR);
+            if (iw->undoStack()) {
+                iw->undoStack()->push(new ImageEditCommand(iw, src, dst, tr("转换为灰度")));
+            }
+            iw->setCurrentImage(dst);
+        });
+
+        // ---- Canvas Size (调整画布大小, 不缩放) ----
+        QAction* aImgCanvas = mImage->addAction(tr("画布大小..."));
+        aImgCanvas->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+C")));
+        connect(aImgCanvas, &QAction::triggered, this, [this]() {
+            auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+            if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+            bool ok = false;
+            const int w = QInputDialog::getInt(this, tr("画布大小"),
+                tr("新宽度 (px):"), iw->currentImage().cols, 1, 8192, 1, &ok);
+            if (!ok) return;
+            const int h = QInputDialog::getInt(this, tr("画布大小"),
+                tr("新高度 (px):"), iw->currentImage().rows, 1, 8192, 1, &ok);
+            if (!ok) return;
+            cv::Mat src = iw->currentImage().clone();
+            cv::Mat dst = cv::Mat(h, w, src.type(), cv::Scalar(255, 255, 255));
+            const int x = (w - src.cols) / 2;
+            const int y = (h - src.rows) / 2;
+            cv::Mat roi(dst, cv::Rect(x, y, src.cols, src.rows));
+            src.copyTo(roi);
+            if (iw->undoStack()) {
+                iw->undoStack()->push(new ImageEditCommand(iw, src, dst, tr("调整画布大小为 %1x%2").arg(w).arg(h)));
+            }
+            iw->setCurrentImage(dst);
+        });
+
+        // ---- Trim (裁切透明/纯色边缘) ----
+        QAction* aImgTrim = mImage->addAction(tr("裁切..."));
+        connect(aImgTrim, &QAction::triggered, this, [this]() {
+            auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+            if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+            cv::Mat src = iw->currentImage().clone();
+            // 找非白像素 (PS 默认 trim backgroundColor=white) 的 bounding rect
+            cv::Mat mask;
+            if (src.channels() == 3) {
+                cv::inRange(src, cv::Scalar(255, 255, 255), cv::Scalar(255, 255, 255), mask);
+                mask = ~mask;
+            } else {
+                cv::inRange(src, cv::Scalar(255), cv::Scalar(255), mask);
+                mask = ~mask;
+            }
+            if (cv::countNonZero(mask) == 0) {
+                statusBar()->showMessage(tr("没有可裁切的内容"), 2000);
+                return;
+            }
+            cv::Rect bbox = cv::boundingRect(mask);
+            cv::Mat dst = src(bbox).clone();
+            if (iw->undoStack()) {
+                iw->undoStack()->push(new ImageEditCommand(iw, src, dst,
+                    tr("裁切到 %1x%2").arg(dst.cols).arg(dst.rows)));
+            }
+            iw->setCurrentImage(dst);
+        });
+
+        // ---- Reveal All (fit 缩放) ----
+        QAction* aImgReveal = mImage->addAction(tr("全部显示"));
+        connect(aImgReveal, &QAction::triggered, this, [this]() {
+            auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+            if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+            iw->onFitWindow();
+            statusBar()->showMessage(tr("已缩放到适应窗口"), 2000);
+        });
+    }
 
     // ---- 图层 (Layer) ----
     QMenu *mLayer = mb->addMenu(tr("图层"));

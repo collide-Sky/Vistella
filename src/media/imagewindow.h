@@ -395,6 +395,10 @@ public slots:
     void onImageRotate90CCW();
     void onImageRotate180();
 
+    // P5 (2026-10-08): onFitWindow 提升到 public slots (MainWindow 图像 > 全部显示
+    //   "Reveal All" 菜单触发, 跟 PS 行为一致 — fit 缩放)
+    void onFitWindow();
+
     // P0-6.6: 应用 QTransform 矩阵到当前 image, 生成 TransformCommand 推 undoStack
     //   (PS 风格通用入口, 4 mode + 翻转 + 旋转都走这个)
     void applyImageTransform(const QTransform& t, const QString& text);
@@ -418,7 +422,6 @@ private slots:
     //   仅作 saveAsPublic / savePublic 转发目标, 转发也搬到 m_io->onSaveAs / m_io->onSave
     void onZoomIn();
     void onZoomOut();
-    void onFitWindow();
     void onResetZoom();
 
     // 撤销/重做

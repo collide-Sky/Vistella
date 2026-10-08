@@ -202,6 +202,23 @@ qt_add_resources(Vistella "vistella_styles"
         src/app/styles/Vistella.qss
 )
 
+# ---- P5 (2026-10-08): 工具 SVG 图标库 (9 个 16x16 工具图标) ----
+#   LeftToolBar setIcon 加载. 后续 P5+ 替换 QStyle 占位 icon.
+qt_add_resources(Vistella "vistella_tool_icons"
+    PREFIX "/icons/tools"
+    BASE "src/media/tools/icons"
+    FILES
+        src/media/tools/icons/tool-move.svg
+        src/media/tools/icons/tool-rectselect.svg
+        src/media/tools/icons/tool-lasso.svg
+        src/media/tools/icons/tool-magicwand.svg
+        src/media/tools/icons/tool-crop.svg
+        src/media/tools/icons/tool-text.svg
+        src/media/tools/icons/tool-brush.svg
+        src/media/tools/icons/tool-eyedropper.svg
+        src/media/tools/icons/tool-shape.svg
+)
+
 # 把 QML 复制到 build 目录 (跟 exe 同级), main.cpp 用 applicationDirPath() 加载,
 # 避开 qrc 资源路径在不同 Qt 版本里变化的问题
 add_custom_command(TARGET Vistella POST_BUILD

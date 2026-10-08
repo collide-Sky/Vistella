@@ -23,18 +23,26 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     // Q4.4 (2026-10-08): 用 QStyle standardIcon 替换字母 placeholder.
     //   没 SVG 资源的情况下, Qt 内置 standard pixmap (cross / arrow / file) 视觉比
     //   "M/R/L/W/C/T/B/I" 强得多. 后续 P5 接 SVG 图标, 直接 setIcon(SVG) 即可.
+    // P5 (2026-10-08): 用 SVG 资源替换 QStyle 占位, 9 个工具有自绘 SVG (Move/RectSelect/
+    //   Lasso/MagicWand/Crop/Text/Brush/Eyedropper/Shape). 资源通过 vistella_tool_icons
+    //   qt_add_resources 加载, PREFIX /icons/tools, setIcon(QIcon(":/icons/tools/tool-xxx.svg")).
+    //   剩下 6 个工具 (Pen/Clone/Heal/Patch/RedEye/MaskBrush) 暂时用 QStyle 占位, 后续 P5+ 补 SVG.
+    auto svgIcon = [](const QString& name) {
+        return QIcon(QStringLiteral(":/icons/tools/") + name);
+    };
     auto styleIcon = [this](QStyle::StandardPixmap sp){
         return style()->standardIcon(sp);
     };
-    ui->btnMove->setIcon(styleIcon(QStyle::SP_ArrowRight));
-    ui->btnRectSelect->setIcon(styleIcon(QStyle::SP_FileDialogContentsView));
-    ui->btnLasso->setIcon(styleIcon(QStyle::SP_FileDialogDetailedView));
-    ui->btnMagicWand->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
-    ui->btnCrop->setIcon(styleIcon(QStyle::SP_DialogResetButton));
-    ui->btnText->setIcon(styleIcon(QStyle::SP_FileDialogInfoView));
-    ui->btnBrush->setIcon(styleIcon(QStyle::SP_DialogOkButton));
-    ui->btnEyedropper->setIcon(styleIcon(QStyle::SP_ArrowRight));
-    ui->btnShape->setIcon(styleIcon(QStyle::SP_DialogYesButton));
+    ui->btnMove->setIcon(svgIcon("tool-move.svg"));
+    ui->btnRectSelect->setIcon(svgIcon("tool-rectselect.svg"));
+    ui->btnLasso->setIcon(svgIcon("tool-lasso.svg"));
+    ui->btnMagicWand->setIcon(svgIcon("tool-magicwand.svg"));
+    ui->btnCrop->setIcon(svgIcon("tool-crop.svg"));
+    ui->btnText->setIcon(svgIcon("tool-text.svg"));
+    ui->btnBrush->setIcon(svgIcon("tool-brush.svg"));
+    ui->btnEyedropper->setIcon(svgIcon("tool-eyedropper.svg"));
+    ui->btnShape->setIcon(svgIcon("tool-shape.svg"));
+    // 6 个暂未实装 SVG 的工具, 用 QStyle 占位
     ui->btnPen->setIcon(styleIcon(QStyle::SP_DirIcon));
     ui->btnClone->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
     ui->btnHeal->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
