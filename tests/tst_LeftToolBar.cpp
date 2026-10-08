@@ -52,6 +52,7 @@ void tst_LeftToolBar::test_default_8_buttons()
     // F-L (2026-09-10): 8 按钮 (Move / RectSelect / Lasso / MagicWand / Crop / Text / Brush / Eyedropper)
     //   P0-9.4 (2026-09-15): +6 按钮 (Shape / Pen / Clone / Heal / Patch / RedEye) = 14
     //   Q4.2.1 (2026-09-23): +1 按钮 (MaskBrush P1.3.4 像素蒙版画笔) = 15
+    //   Q4.2.4 (2026-10-08): 数量不变, 仍 15
     auto btns = bar.findChildren<QToolButton*>();
     QCOMPARE(btns.size(), 15);
 }
@@ -59,11 +60,18 @@ void tst_LeftToolBar::test_default_8_buttons()
 void tst_LeftToolBar::test_button_letter_codes()
 {
     LeftToolBar bar;
-    // 8 工具 button text (PS 风格字母 placeholder, F-N 换 SVG icon)
-    QStringList expected = {"M", "R", "L", "W", "C", "T", "B", "I"};
+    // F-L (2026-09-10): 8 工具 button text (PS 风格字母 placeholder, F-N 换 SVG icon)
+    //   Q4.2.4 (2026-10-08): 加上 7 个新增 (Shape/Pen/Clone/Heal/Patch/RedEye/MaskBrush)
+    //   button text 仍用单字母 placeholder (后续 Q4.4 换 SVG icon)
+    QStringList expected = {
+        "M", "R", "L", "W", "C", "T", "B", "I",     // F-L 8 个
+        "Sh", "Pn", "Cl", "Hl", "Pt", "RE", "MB"   // P0-9.4 + Q4.2.1 共 7 个
+    };
     QStringList actual;
     for (auto* b : bar.findChildren<QToolButton*>()) actual << b->text();
-    for (const auto& t : expected) QVERIFY2(actual.contains(t), qPrintable("missing button text: " + t));
+    for (const auto& t : expected) {
+        QVERIFY2(actual.contains(t), qPrintable("missing button text: " + t));
+    }
 }
 
 void tst_LeftToolBar::test_attach_creates_MoveTool()

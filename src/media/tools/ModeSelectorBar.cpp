@@ -44,9 +44,11 @@ void ModeSelectorBar::setupUi()
     auto* root = new QHBoxLayout(this);
     root->setContentsMargins(4, 4, 4, 4);
     root->setSpacing(4);
-    root->addStretch(0);
-    // m_stacked lives as child widget; we don't store it - each page
-    //   owns its own widget and we toggle by setVisible on the page.
+    // Q4.2.4 fix: pages 装进 QStackedWidget, 由 setCurrentIndex 切换.
+    //   之前 page widgets 直接 new QWidget(this) 不挂 layout, show()/hide() 不生效,
+    //   test 里 button 永远 isVisible()=false.
+    m_stacked = new QStackedWidget(this);
+    root->addWidget(m_stacked);
 }
 
 void ModeSelectorBar::rebuildPages()
@@ -77,7 +79,7 @@ void ModeSelectorBar::rebuildPages()
     }
     connect(m_pageSelection.group, &QButtonGroup::idClicked,
             this, &ModeSelectorBar::onSelectionModeBtn);
-    m_pageSelection.widget->hide();
+    m_pageSelection.widget->setObjectName(QStringLiteral("pageSelection"));
 
     // ===== Page: Crop aspect ratio =====
     m_pageCrop.widget = new QWidget(this);
@@ -105,7 +107,7 @@ void ModeSelectorBar::rebuildPages()
     }
     connect(m_pageCrop.group, &QButtonGroup::idClicked,
             this, &ModeSelectorBar::onAspectBtn);
-    m_pageCrop.widget->hide();
+    m_pageCrop.widget->setObjectName(QStringLiteral("pageCrop"));
 
     // ===== Page: Brush blend mode =====
     m_pageBrush.widget = new QWidget(this);
@@ -132,7 +134,7 @@ void ModeSelectorBar::rebuildPages()
     }
     connect(m_pageBrush.group, &QButtonGroup::idClicked,
             this, &ModeSelectorBar::onBlendBtn);
-    m_pageBrush.widget->hide();
+    m_pageBrush.widget->setObjectName(QStringLiteral("pageBrush"));
 
     // ===== Page: Eyedropper sample size =====
     m_pageEyedropper.widget = new QWidget(this);
@@ -160,7 +162,7 @@ void ModeSelectorBar::rebuildPages()
     }
     connect(m_pageEyedropper.group, &QButtonGroup::idClicked,
             this, &ModeSelectorBar::onSampleBtn);
-    m_pageEyedropper.widget->hide();
+    m_pageEyedropper.widget->setObjectName(QStringLiteral("pageEyedropper"));
 
     // ===== Page: Empty (fallback for tools we don't handle) =====
     m_pageEmpty.widget = new QWidget(this);
@@ -170,7 +172,14 @@ void ModeSelectorBar::rebuildPages()
     hint->setStyleSheet(QStringLiteral("color: gray; font-size: 9pt;"));
     emptyLay->addWidget(hint);
     emptyLay->addStretch(1);
-    m_pageEmpty.widget->hide();
+
+    // Q4.2.4 fix: 把 5 个 page widget 全加到 QStackedWidget, showPageForTool 用
+    //   setCurrentIndex 切换. 顺序: selection(0)/crop(1)/brush(2)/sample(3)/empty(4)
+    m_stacked->addWidget(m_pageSelection.widget);  // idx 0
+    m_stacked->addWidget(m_pageCrop.widget);        // idx 1
+    m_stacked->addWidget(m_pageBrush.widget);       // idx 2
+    m_stacked->addWidget(m_pageEyedropper.widget);  // idx 3
+    m_stacked->addWidget(m_pageEmpty.widget);       // idx 4 (default)
 }
 
 void ModeSelectorBar::attach(ToolContext* ctx)
@@ -200,33 +209,29 @@ void ModeSelectorBar::onToolChanged(mediators::ToolId id)
 
 void ModeSelectorBar::showPageForTool(mediators::ToolId id)
 {
-    // Hide all pages, then show the relevant one (or empty).
-    m_pageSelection.widget->hide();
-    m_pageCrop.widget->hide();
-    m_pageBrush.widget->hide();
-    m_pageEyedropper.widget->hide();
-    m_pageEmpty.widget->hide();
-
-    QWidget* show = m_pageEmpty.widget;
+    // Q4.2.4 fix: QStackedWidget 用 setCurrentIndex 切 page, 不需要手动 hide().
+    //   之前手动 hide/show 失败是因为 page widgets 没挂 layout, show() 无效.
+    //   Page 顺序 (rebuildPages 末尾 addWidget): 0=selection, 1=crop, 2=brush, 3=sample, 4=empty.
+    int idx = 4;  // default empty
     switch (id) {
     case mediators::ToolId::MagicWand:
     case mediators::ToolId::Lasso:
-        show = m_pageSelection.widget;
+        idx = 0;
         break;
     case mediators::ToolId::Crop:
-        show = m_pageCrop.widget;
+        idx = 1;
         break;
     case mediators::ToolId::Brush:
-        show = m_pageBrush.widget;
+        idx = 2;
         break;
     case mediators::ToolId::Eyedropper:
-        show = m_pageEyedropper.widget;
+        idx = 3;
         break;
     default:
-        show = m_pageEmpty.widget;
+        idx = 4;
         break;
     }
-    show->show();
+    if (m_stacked) m_stacked->setCurrentIndex(idx);
 }
 
 void ModeSelectorBar::refreshButtonsFromTool()

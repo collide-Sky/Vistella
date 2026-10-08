@@ -25,6 +25,7 @@ class QHBoxLayout;
 class QToolButton;
 class QButtonGroup;
 
+
 namespace mediators { enum class ToolId : int; }
 namespace tools { class ToolContext; class MagicWand; class Lasso; class Crop; class Brush; class EyedropperTool; }
 
@@ -75,6 +76,7 @@ private:
     Page m_pageBrush;
     Page m_pageEyedropper;
     Page m_pageEmpty;
+    QStackedWidget*   m_stacked = nullptr;
 
     mediators::ToolId m_currentTool = static_cast<mediators::ToolId>(-1);
 };
