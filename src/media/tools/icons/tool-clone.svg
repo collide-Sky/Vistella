@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <circle cx="4" cy="4" r="2.2" fill="none" stroke="#202020" stroke-width="1.2"/>
+  <line x1="4" y1="1" x2="4" y2="2.4" stroke="#202020" stroke-width="1.0"/>
+  <line x1="4" y1="5.6" x2="4" y2="7" stroke="#202020" stroke-width="1.0"/>
+  <line x1="1" y1="4" x2="2.4" y2="4" stroke="#202020" stroke-width="1.0"/>
+  <line x1="5.6" y1="4" x2="7" y2="4" stroke="#202020" stroke-width="1.0"/>
+  <circle cx="4" cy="4" r="0.6" fill="#202020"/>
+  <path d="M10 9 L13 12 L12 13 L9 10 Z" fill="#4A90E2" stroke="#202020" stroke-width="1.1" stroke-linejoin="round"/>
+</svg>

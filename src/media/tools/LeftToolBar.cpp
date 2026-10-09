@@ -30,9 +30,6 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     auto svgIcon = [](const QString& name) {
         return QIcon(QStringLiteral(":/icons/tools/") + name);
     };
-    auto styleIcon = [this](QStyle::StandardPixmap sp){
-        return style()->standardIcon(sp);
-    };
     ui->btnMove->setIcon(svgIcon("tool-move.svg"));
     ui->btnRectSelect->setIcon(svgIcon("tool-rectselect.svg"));
     ui->btnLasso->setIcon(svgIcon("tool-lasso.svg"));
@@ -42,13 +39,14 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     ui->btnBrush->setIcon(svgIcon("tool-brush.svg"));
     ui->btnEyedropper->setIcon(svgIcon("tool-eyedropper.svg"));
     ui->btnShape->setIcon(svgIcon("tool-shape.svg"));
-    // 6 个暂未实装 SVG 的工具, 用 QStyle 占位
-    ui->btnPen->setIcon(styleIcon(QStyle::SP_DirIcon));
-    ui->btnClone->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
-    ui->btnHeal->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
-    ui->btnPatch->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
-    ui->btnRedEye->setIcon(styleIcon(QStyle::SP_MessageBoxWarning));
-    ui->btnMaskBrush->setIcon(styleIcon(QStyle::SP_DialogApplyButton));
+    // P5+ (2026-10-09): 6 个二线工具 SVG 补齐 (Pen/Clone/Heal/Patch/RedEye/MaskBrush).
+    //   跟 P5 9 个工具同款 16x16 + 蓝 #4A90E2 + 黑 #202020.
+    ui->btnPen->setIcon(svgIcon("tool-pen.svg"));
+    ui->btnClone->setIcon(svgIcon("tool-clone.svg"));
+    ui->btnHeal->setIcon(svgIcon("tool-heal.svg"));
+    ui->btnPatch->setIcon(svgIcon("tool-patch.svg"));
+    ui->btnRedEye->setIcon(svgIcon("tool-redeye.svg"));
+    ui->btnMaskBrush->setIcon(svgIcon("tool-maskbrush.svg"));
     for (auto* b : findChildren<QToolButton*>()) {
         b->setIconSize(QSize(16, 16));
         b->setToolButtonStyle(Qt::ToolButtonIconOnly);

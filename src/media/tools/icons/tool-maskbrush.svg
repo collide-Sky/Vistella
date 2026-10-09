@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <circle cx="8" cy="8" r="6" fill="none" stroke="#202020" stroke-width="1.2" stroke-dasharray="1.5 1.4"/>
+  <circle cx="8" cy="8" r="3" fill="#4A90E2" stroke="#202020" stroke-width="1.2"/>
+  <circle cx="8" cy="8" r="1" fill="white"/>
+  <rect x="11.5" y="1.5" width="2.5" height="3" fill="#4A90E2" stroke="#202020" stroke-width="1.0"/>
+</svg>

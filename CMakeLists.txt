@@ -202,8 +202,10 @@ qt_add_resources(Vistella "vistella_styles"
         src/app/styles/Vistella.qss
 )
 
-# ---- P5 (2026-10-08): 工具 SVG 图标库 (9 个 16x16 工具图标) ----
-#   LeftToolBar setIcon 加载. 后续 P5+ 替换 QStyle 占位 icon.
+# ---- P5 + P5.1 (2026-10-08) + P5+ (2026-10-09): 工具 SVG 图标库 ----
+#   9 个 P5 接 + 6 个 P5+ 补齐 (Pen/Clone/Heal/Patch/RedEye/MaskBrush).
+#   全部 16x16, 蓝 #4A90E2 + 黑 #202020. LeftToolBar setIcon 加载.
+#   没有 QStyle 占位, 视觉完整一致.
 qt_add_resources(Vistella "vistella_tool_icons"
     PREFIX "/icons/tools"
     BASE "src/media/tools/icons"
@@ -217,6 +219,12 @@ qt_add_resources(Vistella "vistella_tool_icons"
         src/media/tools/icons/tool-brush.svg
         src/media/tools/icons/tool-eyedropper.svg
         src/media/tools/icons/tool-shape.svg
+        src/media/tools/icons/tool-pen.svg
+        src/media/tools/icons/tool-clone.svg
+        src/media/tools/icons/tool-heal.svg
+        src/media/tools/icons/tool-patch.svg
+        src/media/tools/icons/tool-redeye.svg
+        src/media/tools/icons/tool-maskbrush.svg
 )
 
 # 把 QML 复制到 build 目录 (跟 exe 同级), main.cpp 用 applicationDirPath() 加载,
