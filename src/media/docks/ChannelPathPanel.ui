@@ -100,9 +100,41 @@
     <spacer name="mainSpacer">
      <property name="orientation">Qt::Vertical</property>
      <property name="sizeHint" stdset="0">
-      <size><width>20</width><height>40</height></size>
+      <size><width>20</width><height>20</height></size>
      </property>
     </spacer>
+   </item>
+
+   <!-- P6 (2026-10-09): Selection action row (Save / Load / Quick Mask) -->
+   <item>
+    <widget class="QGroupBox" name="selectionGroup">
+     <property name="title"><string>选区操作 (Selection)</string></property>
+     <layout class="QGridLayout" name="selectionLayout">
+      <property name="spacing">4</property>
+      <item row="0" column="0">
+       <widget class="QPushButton" name="saveSelBtn">
+        <property name="text"><string>保存选区...</string></property>
+        <property name="minimumSize"><size><width>80</width><height>24</height></size></property>
+        <property name="toolTip"><string>把当前选区保存为可重用的通道</string></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QPushButton" name="loadSelBtn">
+        <property name="text"><string>载入选区</string></property>
+        <property name="minimumSize"><size><width>80</width><height>24</height></size></property>
+        <property name="toolTip"><string>恢复之前保存的选区</string></property>
+       </widget>
+      </item>
+      <item row="1" column="0" colspan="2">
+       <widget class="QPushButton" name="quickMaskBtn">
+        <property name="text"><string>快速蒙版 (Q)</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="minimumSize"><size><width>0</width><height>24</height></size></property>
+        <property name="toolTip"><string>进入 / 退出 快速蒙版编辑模式 (切换为 MaskBrush)</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
   </layout>
  </widget>

@@ -65,6 +65,21 @@ public slots:
 signals:
     void channelSelected(const QString& name);
     void pathSelected(const QString& name);
+    // P6 (2026-10-09): selection save/load + Quick Mask toggle signals.
+    //   ImageWindow subscribes and routes them through cv::Mat / ToolMediator.
+    void saveSelectionRequested();
+    void loadSelectionRequested();
+    void quickMaskToggled(bool on);
+
+public slots:
+    // P6: external sync for the Quick Mask toggle (AppBar drives it too,
+    //   so we keep both endpoints in lockstep via setQuickMask).
+    void setQuickMask(bool on);
+
+private slots:
+    void onSaveSelectionClicked();
+    void onLoadSelectionClicked();
+    void onQuickMaskClicked(bool on);
 
 private:
     void setupChannels();

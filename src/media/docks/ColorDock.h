@@ -83,6 +83,9 @@ signals:
 private slots:
     void onPickColorClicked();
     void onGradientTypeChanged(int idx);
+    // P6 (2026-10-09): PS X / D 键等价入口
+    void onSwapClicked();
+    void onDefaultClicked();
 
 private:
     void setupPalette();

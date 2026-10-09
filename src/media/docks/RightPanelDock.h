@@ -61,6 +61,11 @@ public:
     // Q4.3 (2026-10-08): PropertiesDock 暴露 (ImageWindow::loadFile 注入 filePath/WxH/format/dpi)
     PropertiesDock* propertiesDock() const { return m_propsDock; }
 
+    // P6 (2026-10-09): ColorDock / ChannelPathPanel 暴露
+    //   让 ImageWindow 直接连 fg/bg/Channel 信号 + Save/Load selection.
+    ColorDock* colorDock() const { return m_colorDock; }
+    ChannelPathPanel* channelPathPanel() const { return m_chanPathPanel; }
+
     // 浮动位置 (imagewindow 右上角, 跟 m_rightPanel 同样模式)
     QSize sizeHint() const override { return QSize(340, 600); }
 

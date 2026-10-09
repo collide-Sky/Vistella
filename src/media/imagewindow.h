@@ -419,7 +419,16 @@ public slots:
     void applyScreenMode(int mode);
 
 
-    // P2.3 (2026-09-22): text color picker (MainWindow text menu calls this)
+    // P6 (2026-10-09): dock routing slots for RightPanelDock connectors.
+    //   Color fg/bg sync to Brush paint color, selection save/load to cv::Mat,
+    //   Quick Mask three-way sync (AppBar <-> ChannelPathPanel <-> ToolMediator).
+    void onForegroundColorChanged(const QColor& c);
+    void onSaveSelectionRequested();
+    void onLoadSelectionRequested();
+    void onChannelPathQuickMaskToggled(bool on);
+    void syncQuickMaskUi(bool on);
+
+
     //   Originally private; promoted to public slot so MainWindow::aTextColor
     //   connect can invoke it without friend declaration.
     void onTextColorClicked();
@@ -511,6 +520,10 @@ private:
     //   stores the previously active tool so onQuickMaskToggled(false) restores it.
     bool                                   m_quickMaskActive = false;
     mediators::ToolId                      m_quickMaskSavedToolId = mediators::ToolId::None;
+    // P6 (2026-10-09): saved selection (cv::Mat 1-channel mask 0/255). Persists
+    //   across sessions of the same ImageWindow; null until user clicks
+    //   "保存选区..." in the ChannelPathPanel.
+    std::shared_ptr<cv::Mat>               m_pSavedSelection;
 
     // Q4.2.2 (2026-09-24): MosaicTool + TextOverlayController 专属属性面板
     //   之前 imagewindow.ui 硬编码 groupMosaic + groupText (P0-1.2 占位),

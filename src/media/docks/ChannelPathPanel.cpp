@@ -39,6 +39,19 @@ ChannelPathPanel::ChannelPathPanel(QWidget* parent) : QWidget(parent)
             emit pathSelected(name);
         });
     }
+    // P6 (2026-10-09): wire selection action buttons.
+    if (ui->saveSelBtn) {
+        connect(ui->saveSelBtn, &QPushButton::clicked,
+                this, &ChannelPathPanel::onSaveSelectionClicked);
+    }
+    if (ui->loadSelBtn) {
+        connect(ui->loadSelBtn, &QPushButton::clicked,
+                this, &ChannelPathPanel::onLoadSelectionClicked);
+    }
+    if (ui->quickMaskBtn) {
+        connect(ui->quickMaskBtn, &QPushButton::toggled,
+                this, &ChannelPathPanel::onQuickMaskClicked);
+    }
 }
 
 ChannelPathPanel::~ChannelPathPanel()
@@ -82,6 +95,36 @@ void ChannelPathPanel::setSelectedPath(const QString& name)
             return;
         }
     }
+}
+
+// P6 (2026-10-09): Selection action handlers — emit signals for ImageWindow
+//   to route. Selection state itself stays in SelectionModel; this panel
+//   only surfaces the trigger.
+void ChannelPathPanel::onSaveSelectionClicked()
+{
+    LOG_INFO("[ChannelPathPanel] saveSelectionRequested");
+    emit saveSelectionRequested();
+}
+
+void ChannelPathPanel::onLoadSelectionClicked()
+{
+    LOG_INFO("[ChannelPathPanel] loadSelectionRequested");
+    emit loadSelectionRequested();
+}
+
+void ChannelPathPanel::onQuickMaskClicked(bool on)
+{
+    LOG_INFO("[ChannelPathPanel] quickMaskToggled: {}", on);
+    emit quickMaskToggled(on);
+}
+
+void ChannelPathPanel::setQuickMask(bool on)
+{
+    if (!ui || !ui->quickMaskBtn) return;
+    // Block signals to avoid echo when AppBar drives the toggle and vice-versa.
+    const bool wasBlocked = ui->quickMaskBtn->blockSignals(true);
+    ui->quickMaskBtn->setChecked(on);
+    ui->quickMaskBtn->blockSignals(wasBlocked);
 }
 
 void ChannelPathPanel::setupChannels()

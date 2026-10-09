@@ -72,6 +72,11 @@ ColorDock::ColorDock(QWidget* parent) : QWidget(parent)
 
     // F-H: pick button
     connect(ui->pickBtn, &QPushButton::clicked, this, &ColorDock::onPickColorClicked);
+    // P6 (2026-10-09): Swap (X) and Default (D) buttons surface the
+    //   foreground/background swap + reset behavior as visible PS-semantic
+    //   controls instead of the previous "D double-click swap" hint only.
+    connect(ui->swapBtn, &QPushButton::clicked, this, &ColorDock::onSwapClicked);
+    connect(ui->defaultBtn, &QPushButton::clicked, this, &ColorDock::onDefaultClicked);
 
     // F-M.1: gradient type combo (5 items, index 0..4)
     connect(ui->gradientTypeCombo,
@@ -120,6 +125,20 @@ void ColorDock::setBackgroundColor(const QColor& c)
         updateGradientPreview();
     }
     emit backgroundColorChanged(c);
+}
+
+// P6 (2026-10-09): PS X / D 键等价入口.
+void ColorDock::onSwapClicked()
+{
+    QColor tmp = m_foreground;
+    setForegroundColor(m_background);  // emits foregroundColorChanged
+    setBackgroundColor(tmp);           // emits backgroundColorChanged
+}
+
+void ColorDock::onDefaultClicked()
+{
+    setForegroundColor(Qt::black);     // emits foregroundColorChanged
+    setBackgroundColor(Qt::white);     // emits backgroundColorChanged
 }
 
 void ColorDock::onPickColorClicked()

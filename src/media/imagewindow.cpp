@@ -28,6 +28,8 @@
 #include "docks/ChannelPathPanel.h"
 #include "docks/PropertiesDock.h"
 #include "docks/HistoryDock.h"
+#include "docks/ColorDock.h"  // P6 (2026-10-09): RightPanelDock connectors
+#include "tools/Brush.h"      // P6: dynamic_cast to setPaintColor
 // P1.4.3 (2026-09-17): LayerPanel 实例化 + 注入 LayersDock tab 0
 //   LayerPanel 信号接通需要完整 LayerPanel.h + LayerCommand.h 定义
 #include "imageworker/layers/LayerPanel.h"
@@ -87,7 +89,8 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTextDocument>
-#include <QMenuBar>  // P5.5+: AppBar applyScreenMode uses menuBar()
+#include <QToolButton>  // P6: syncQuickMaskUi uses btn->blockSignals + setChecked
+#include <QMenuBar>     // P5.5+: AppBar applyScreenMode uses menuBar()
 #include <QWheelEvent>
 
 #include <opencv2/imgcodecs.hpp>
@@ -398,6 +401,22 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_rightDock = std::make_unique<docks::RightPanelDock>();
     // F-G.3: release() 转移所有权给 m_rightDock (QTabWidget::addTab reparent 后 Qt 析构会 delete 一次)
     m_rightDock->setAdjustmentPanel(m_adjustmentPanel.release());
+
+    // P6 (2026-10-09): wire RightPanelDock connectors that were dangling before.
+    //   Color fg/bg -> current Brush paint color; ChannelPathPanel selection
+    //   save/load + Quick Mask three-way sync (AppBar / ChannelPathPanel / tool).
+    if (auto* colorDock = m_rightDock->colorDock()) {
+        connect(colorDock, &docks::ColorDock::foregroundColorChanged,
+                this, &ImageWindow::onForegroundColorChanged);
+    }
+    if (auto* selPanel = m_rightDock->channelPathPanel()) {
+        connect(selPanel, &docks::ChannelPathPanel::saveSelectionRequested,
+                this, &ImageWindow::onSaveSelectionRequested);
+        connect(selPanel, &docks::ChannelPathPanel::loadSelectionRequested,
+                this, &ImageWindow::onLoadSelectionRequested);
+        connect(selPanel, &docks::ChannelPathPanel::quickMaskToggled,
+                this, &ImageWindow::onChannelPathQuickMaskToggled);
+    }
 
     m_rightDockContainer = new QDockWidget(this);
     m_rightDockContainer->setObjectName("rightDockContainer");
@@ -1867,6 +1886,7 @@ QString ImageWindow::displayTitle() const
 void ImageWindow::setCurrentImage(const cv::Mat &img)
 {
     m_current = img.clone();
+    m_original = img.clone();
     // 阶段 1 W4.3 Phase 1: 同步 base layer image (适用 setCurrentImage 流程)
     if (m_layerStack && m_layerStack->count() > 0) {
         auto base = m_layerStack->baseLayer();
@@ -2285,6 +2305,36 @@ void ImageWindow::onQuickMaskToggled(bool on)
         m_quickMaskSavedToolId = mediators::ToolId::None;
         statusBar()->showMessage(tr("快速蒙版: 关闭"), 2000);
     }
+    // P6 (2026-10-09): keep AppBar btn + ChannelPathPanel btn + tool state in
+    //   lockstep so any of the three sources the user clicks drives the same
+    //   composite mask mode toggle.
+    syncQuickMaskUi(on);
+}
+
+void ImageWindow::onChannelPathQuickMaskToggled(bool on)
+{
+    // ChannelPathPanel's "快速蒙版 (Q)" button emits the same logic as the
+    //   AppBar button — funnel through the unified handler.
+    onQuickMaskToggled(on);
+}
+
+void ImageWindow::syncQuickMaskUi(bool on)
+{
+    // Reflect state in the AppBar btnQuickMask AND the ChannelPathPanel btn
+    //   without re-triggering their toggled signals (block-signals wrapper).
+    if (m_appBar) {
+        auto* btn = m_appBar->findChild<QToolButton*>("btnQuickMask");
+        if (btn) {
+            const bool wasBlocked = btn->blockSignals(true);
+            btn->setChecked(on);
+            btn->blockSignals(wasBlocked);
+        }
+    }
+    if (m_rightDock) {
+        if (auto* sel = m_rightDock->channelPathPanel()) {
+            sel->setQuickMask(on);
+        }
+    }
 }
 
 void ImageWindow::onScreenModeSelected(int mode)
@@ -2361,6 +2411,75 @@ void ImageWindow::onCaptureRequested(int kind)
     } else {
         statusBar()->showMessage(tr("保存失败: %1").arg(filename), 4000);
     }
+}
+
+// ---------------- P6 (2026-10-09): RightPanelDock connectors ----------------
+
+void ImageWindow::onForegroundColorChanged(const QColor& c)
+{
+    // P6: Color dock foreground change -> push into the active painting tool.
+    //   Brush has setPaintColor(); dynamic_cast is fine because only Brush /
+    //   Pencil / similar paint tools carry m_paintColor. Move / Crop / Text
+    //   etc. ignore foreground color (matches PS behavior).
+    if (!m_ctx) return;
+    if (auto* brush = dynamic_cast<tools::Brush*>(m_ctx->currentState())) {
+        brush->setPaintColor(c);
+    }
+}
+
+void ImageWindow::onSaveSelectionRequested()
+{
+    // Snapshot current SelectionModel bounding rect into a 1-channel mask
+    //   sized to the current image. Persists on m_pSavedSelection until
+    //   the user saves again or closes the window.
+    if (!m_selection) {
+        statusBar()->showMessage(tr("保存选区失败: 没有选区模型"), 3000);
+        return;
+    }
+    QRect bbox = m_selection->boundingRect();
+    if (bbox.isEmpty()) {
+        statusBar()->showMessage(tr("保存选区失败: 选区为空"), 3000);
+        return;
+    }
+    if (m_current.empty()) {
+        statusBar()->showMessage(tr("保存选区失败: 没有加载图片"), 3000);
+        return;
+    }
+    cv::Mat mask = cv::Mat::zeros(m_current.rows, m_current.cols, CV_8UC1);
+    const int x0 = std::max(0, bbox.left());
+    const int y0 = std::max(0, bbox.top());
+    const int w  = std::max(1, std::min(m_current.cols - x0, bbox.width()));
+    const int h  = std::max(1, std::min(m_current.rows - y0, bbox.height()));
+    cv::rectangle(mask, cv::Point(x0, y0), cv::Point(x0 + w, y0 + h),
+                  cv::Scalar(255), cv::FILLED);
+    m_pSavedSelection = std::make_shared<cv::Mat>(std::move(mask));
+    statusBar()->showMessage(tr("选区已保存 (%1x%2)").arg(w).arg(h), 3000);
+}
+
+void ImageWindow::onLoadSelectionRequested()
+{
+    if (!m_selection) return;
+    if (!m_pSavedSelection || m_pSavedSelection->empty()) {
+        statusBar()->showMessage(tr("载入选区失败: 没有保存的选区"), 3000);
+        return;
+    }
+    cv::Mat m = *m_pSavedSelection;
+    if (m.channels() != 1 || m.depth() != CV_8U) {
+        statusBar()->showMessage(tr("载入选区失败: 保存格式不对"), 3000);
+        return;
+    }
+    // Find bounding rect of non-zero pixels.
+    cv::Rect bbox = cv::boundingRect(m);
+    if (bbox.area() <= 0) {
+        statusBar()->showMessage(tr("载入选区失败: 保存为空"), 3000);
+        return;
+    }
+    // Build a QImage (Format_Alpha8, 1 channel) from the saved mask and
+    //   push it into SelectionModel via setMask(Replace).
+    QImage qimg(m.data, m.cols, m.rows, m.step, QImage::Format_Alpha8);
+    m_selection->setSize(QSize(m.cols, m.rows));
+    m_selection->setMask(qimg, selection::SelectionModel::Mode::Replace);
+    statusBar()->showMessage(tr("选区已载入 (%1x%2)").arg(bbox.width).arg(bbox.height), 3000);
 }
 
 

@@ -99,6 +99,10 @@ add_vistella_test(tst_F_J_MainMenuStructure)
 add_vistella_test(tst_F_K_AdjustDialog)
 # F-M (2026-09-10): ColorDock 渐变 (5 类型 + 8 预设) + 图案 (6 预设) + ChannelPathPanel (6 通道 + 1 路径)
 add_vistella_test(tst_F_M_Dock_GradientPatternChannel)
+# P6 (2026-10-09): ColorDock Swap + Default button slot 测试
+add_vistella_test(tst_ColorDock)
+# P6 (2026-10-09): ChannelPathPanel Save / Load / Quick Mask 按钮 测试
+add_vistella_test(tst_ChannelPathPanel)
 # F-N (2026-09-10): 8 工具 cursor (Move/SizeAll + Text/IBeam + 6 cross) + ToolContext 事件转发
 add_vistella_test(tst_F_N_ToolCursor)
 # F-O (2026-09-10): Throttle 通用节流器 (200ms trailing) + PropertiesDock 集成
