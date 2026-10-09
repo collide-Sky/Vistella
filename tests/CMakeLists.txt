@@ -87,6 +87,8 @@ add_vistella_test(tst_ImageOptionBar)
 # Q4.2.4 (2026-10-08): ModeSelectorBar 5 tools (MagicWand/Lasso/Crop/Brush/Eyedropper)
 #   二级模式选择按钮组 + button click -> tool.setXxx + refresh 同步
 add_vistella_test(tst_ModeSelectorBar)
+# P5.5+ (2026-10-09): AppBar 三组 widget (Quick Mask / Screen Mode / Capture) 信号验证
+add_vistella_test(tst_AppBar)
 # F-F (2026-09-09): mainwindow 集成 WorkspaceMediator 4 工作区
 add_vistella_test(tst_F_F_MainWindowWorkspace)
 # F-G (2026-09-09): RightPanelStack 3 dock (颜色/属性/图层) 跟 WorkspaceMediator 联动

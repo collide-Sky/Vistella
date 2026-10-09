@@ -74,6 +74,7 @@ namespace tools { class ToolContext; }
 //   硬编码 groupMosaic + groupText 占位). 真实 include 进来用, 不 forward decl.
 #include "tools/LeftToolBar.h"
 #include "tools/ImageOptionBar.h"
+#include "tools/AppBar.h"
 #include "tools/ModeSelectorBar.h"
 // P0-4 (2026-09-10): SelectionModel forward decl (selection state holder)
 namespace selection { class SelectionModel; }
@@ -409,6 +410,15 @@ public slots:
     //   clears hasTransform (matches PS semantics).
     void applySmartObjectTransform(int idx, const QTransform& t);
 
+    // P5.5+ (2026-10-09): AppBar 3 个 slot (Quick Mask / Screen Mode / Capture).
+    //   Quick Mask 切换 MaskBrush 工具; Screen Mode 切窗口状态; Capture 走 QScreen 截图保存 PNG.
+    void onQuickMaskToggled(bool on);
+    void onScreenModeSelected(int mode);
+    void onCaptureRequested(int kind);  // tools::AppBar::CaptureKind
+    // Internal helper used by onScreenModeSelected.
+    void applyScreenMode(int mode);
+
+
     // P2.3 (2026-09-22): text color picker (MainWindow text menu calls this)
     //   Originally private; promoted to public slot so MainWindow::aTextColor
     //   connect can invoke it without friend declaration.
@@ -493,6 +503,14 @@ private:
     //   currentToolId 切到对应 page (selection mode / aspect / blend / sample size).
     std::unique_ptr<tools::ModeSelectorBar> m_modeSelectorBar;
     QDockWidget                            *m_modeSelectorDockContainer = nullptr;
+    // P5.5+ (2026-10-09): AppBar 三组全局 toggle (Quick Mask / Screen Mode / Capture),
+    //   装在 ImageOptionBar 下方. 不依赖 active tool.
+    std::unique_ptr<tools::AppBar>         m_appBar;
+    QDockWidget                            *m_appBarDockContainer = nullptr;
+    // Quick Mask mode: when on, MaskBrush paint mode is "switch into" until toggled off;
+    //   stores the previously active tool so onQuickMaskToggled(false) restores it.
+    bool                                   m_quickMaskActive = false;
+    mediators::ToolId                      m_quickMaskSavedToolId = mediators::ToolId::None;
 
     // Q4.2.2 (2026-09-24): MosaicTool + TextOverlayController 专属属性面板
     //   之前 imagewindow.ui 硬编码 groupMosaic + groupText (P0-1.2 占位),

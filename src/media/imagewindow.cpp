@@ -61,6 +61,13 @@
 //   QMessageBox (Yes / No so user can decide whether to refresh).
 #include <QFileInfo>
 #include <QMessageBox>
+// P5.5+ (2026-10-09): AppBar onCaptureRequested uses QPixmap + QStandardPaths + QDir + QDateTime.
+#include <QPixmap>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QStandardPaths>
+#include <QDir>
+#include <QDateTime>
 // P1.4.3 (2026-09-17): LayerPanel 信号接通需要 (EditSource 打开源 / Relink 选源 / URL 包装)
 #include <QDesktopServices>
 #include <QUrl>
@@ -80,6 +87,7 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTextDocument>
+#include <QMenuBar>  // P5.5+: AppBar applyScreenMode uses menuBar()
 #include <QWheelEvent>
 
 #include <opencv2/imgcodecs.hpp>
@@ -488,6 +496,32 @@ ImageWindow::ImageWindow(QWidget *parent)
     // ImageOptionBar 在 ModeSelectorBar 下方垂直排 (splitDockWidget)
     splitDockWidget(m_modeSelectorDockContainer, m_imageOptionDockContainer, Qt::Vertical);
     resizeDocks({m_imageOptionDockContainer}, {220}, Qt::Vertical);
+
+    // P5.5+ (2026-10-09): AppBar 三组全局 toggle (Quick Mask / Screen Mode / Capture),
+    //   装在 ImageOptionBar 下方. 不依赖 active tool, 是 PS 风格的 "always-on"
+    //   全局工具行. 32 px 高紧凑.
+    m_appBar = std::make_unique<tools::AppBar>();
+    connect(m_appBar.get(), &tools::AppBar::quickMaskToggled,
+            this, &ImageWindow::onQuickMaskToggled);
+    connect(m_appBar.get(), &tools::AppBar::screenModeSelected,
+            this, &ImageWindow::onScreenModeSelected);
+    connect(m_appBar.get(), &tools::AppBar::captureRequested,
+            this, &ImageWindow::onCaptureRequested);
+
+    m_appBarDockContainer = new QDockWidget(this);
+    m_appBarDockContainer->setObjectName(QString("appBarDockContainer"));
+    m_appBarDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    auto* appBarEmptyTitle = new QWidget();
+    appBarEmptyTitle->setFixedHeight(0);
+    m_appBarDockContainer->setTitleBarWidget(appBarEmptyTitle);
+    m_appBarDockContainer->setWidget(m_appBar.release());
+
+    addDockWidget(Qt::LeftDockWidgetArea, m_appBarDockContainer);
+    // AppBar 在 ImageOptionBar 下方垂直排 (splitDockWidget)
+    splitDockWidget(m_imageOptionDockContainer, m_appBarDockContainer, Qt::Vertical);
+    resizeDocks({m_appBarDockContainer}, {32}, Qt::Vertical);
+    // 初值: 标准屏幕模式 (P5.5+ 启动时默认).
+    applyScreenMode(tools::AppBar::ScreenStandard);
 
     // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel no longer hosted
     //   here. ImageOptionBar owns both and routes them per active tool
@@ -2228,6 +2262,108 @@ void ImageWindow::onZoomIn()    { m_canvas->onZoomIn(); }
 void ImageWindow::onZoomOut()   { m_canvas->onZoomOut(); }
 void ImageWindow::onResetZoom() { m_canvas->onResetZoom(); }
 void ImageWindow::onFitWindow() { m_canvas->onFitWindow(); }
+
+// ---------------- P5.5+ AppBar (Quick Mask / Screen Mode / Capture) ----------------
+
+void ImageWindow::onQuickMaskToggled(bool on)
+{
+    // Quick Mask toggle -> switch into MaskBrush (ToolId::MaskBrush) and
+    //   remember the previous tool to restore on toggle-off. PS behavior.
+    if (!m_ctx) return;
+    if (on && !m_quickMaskActive) {
+        m_quickMaskSavedToolId = m_ctx->currentToolId();
+        m_quickMaskActive = true;
+        if (m_toolMed) {
+            m_toolMed->switchTool(mediators::ToolId::MaskBrush);
+        }
+        statusBar()->showMessage(tr("快速蒙版: 启用 (Mask Brush active)"), 4000);
+    } else if (!on && m_quickMaskActive) {
+        m_quickMaskActive = false;
+        if (m_toolMed && m_quickMaskSavedToolId != mediators::ToolId::None) {
+            m_toolMed->switchTool(m_quickMaskSavedToolId);
+        }
+        m_quickMaskSavedToolId = mediators::ToolId::None;
+        statusBar()->showMessage(tr("快速蒙版: 关闭"), 2000);
+    }
+}
+
+void ImageWindow::onScreenModeSelected(int mode)
+{
+    applyScreenMode(mode);
+}
+
+void ImageWindow::applyScreenMode(int mode)
+{
+    // 0 = Standard, 1 = Full Screen, 2 = Full Screen with Menu Bar.
+    if (mode == tools::AppBar::ScreenStandard) {
+        showNormal();
+        if (menuBar()) menuBar()->show();
+        if (statusBar()) statusBar()->show();
+        // restore left + right dock visibility from settings (default visible).
+    } else if (mode == tools::AppBar::ScreenFullScreen) {
+        if (menuBar()) menuBar()->hide();
+        if (statusBar()) statusBar()->hide();
+        showFullScreen();
+    } else if (mode == tools::AppBar::ScreenFullScreenMenu) {
+        if (menuBar()) menuBar()->show();
+        if (statusBar()) statusBar()->hide();
+        showFullScreen();
+    }
+}
+
+void ImageWindow::onCaptureRequested(int kind)
+{
+    // 0 = Selected Region (use current selection bbox), 1 = This Window,
+    //   2 = Full Screen (primary screen).
+    QPixmap pix;
+    QString suffix;
+
+    auto* primaryScreen = QGuiApplication::primaryScreen();
+    if (!primaryScreen) {
+        statusBar()->showMessage(tr("截图失败: 无 primary screen"), 4000);
+        return;
+    }
+
+    if (kind == tools::AppBar::CaptureSelected) {
+        if (!m_selection) {
+            statusBar()->showMessage(tr("截图失败: 没有选区 (先 RectSelect)"), 4000);
+            return;
+        }
+        QRectF bbox = m_selection->boundingRect();
+        if (bbox.isEmpty()) {
+            statusBar()->showMessage(tr("截图失败: 选区为空"), 4000);
+            return;
+        }
+        pix = primaryScreen->grabWindow(winId(),
+                                        int(bbox.x()), int(bbox.y()),
+                                        int(bbox.width()), int(bbox.height()));
+        suffix = QString("selected");
+    } else if (kind == tools::AppBar::CaptureWindow) {
+        pix = primaryScreen->grabWindow(winId());
+        suffix = QString("window");
+    } else {
+        pix = primaryScreen->grabWindow(0);
+        suffix = QString("screen");
+    }
+
+    if (pix.isNull()) {
+        statusBar()->showMessage(tr("截图失败: 抓图为空"), 4000);
+        return;
+    }
+
+    QDir pictures(QStandardPaths::writableLocation(QStandardPaths::PicturesLocation));
+    if (!pictures.exists()) pictures.mkpath(QString("."));
+    const QString stamp = QDateTime::currentDateTime().toString(QString("yyyyMMdd-HHmmss"));
+    const QString filename = pictures.filePath(
+        QString("vistella-capture-%1-%2.png").arg(suffix, stamp));
+    if (pix.save(filename, "PNG")) {
+        statusBar()->showMessage(tr("已保存: %1").arg(filename), 6000);
+    } else {
+        statusBar()->showMessage(tr("保存失败: %1").arg(filename), 4000);
+    }
+}
+
+
 
 void ImageWindow::keyPressEvent(QKeyEvent *e)
 {

@@ -152,6 +152,12 @@ add_library(vistella_media STATIC
     tools/ModeSelectorBar.h
     tools/ModeSelectorBar.cpp
 
+    # P5.5+ (2026-10-09): AppBar 三组全局 toggle (Quick Mask / Screen Mode / Capture)
+    #   PS 风格 "above-canvas global toggle bar". 装到 ImageOptionBar 下方.
+    tools/AppBar.h
+    tools/AppBar.cpp
+    tools/AppBar.ui
+
     # F-G (2026-09-09): RightPanelStack 右侧 panel 3 dock (颜色/属性/图层)
     docks/RightPanelStack.h
     docks/RightPanelStack.cpp

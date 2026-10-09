@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AppBar</class>
+ <widget class="QWidget" name="AppBar">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>72</width>
+    <height>32</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>72</width>
+    <height>32</height>
+   </size>
+  </property>
+  <layout class="QHBoxLayout" name="hBox">
+   <property name="leftMargin">2</property>
+   <property name="topMargin">2</property>
+   <property name="rightMargin">2</property>
+   <property name="bottomMargin">2</property>
+   <property name="spacing">2</property>
+   <!-- Quick Mask toggle (mask-edit mode) -->
+   <item>
+    <widget class="QToolButton" name="btnQuickMask">
+     <property name="text"><string>QM</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Quick Mask (Q) — paint on layer mask</string></property>
+     <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+     <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+    </widget>
+   </item>
+   <!-- Screen Mode segmented selector (3 buttons in one ButtonGroup) -->
+   <item>
+    <widget class="QToolButton" name="btnScreenStd">
+     <property name="text"><string>S</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Screen Mode: Standard</string></property>
+     <property name="minimumSize"><size><width>20</width><height>22</height></size></property>
+     <property name="maximumSize"><size><width>20</width><height>22</height></size></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QToolButton" name="btnScreenFull">
+     <property name="text"><string>F</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Screen Mode: Full Screen</string></property>
+     <property name="minimumSize"><size><width>20</width><height>22</height></size></property>
+     <property name="maximumSize"><size><width>20</width><height>22</height></size></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QToolButton" name="btnScreenFullMenu">
+     <property name="text"><string>M</string></property>
+     <property name="checkable"><bool>true</bool></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Screen Mode: Full Screen with Menu Bar</string></property>
+     <property name="minimumSize"><size><width>20</width><height>22</height></size></property>
+     <property name="maximumSize"><size><width>20</width><height>22</height></size></property>
+    </widget>
+   </item>
+   <!-- Capture dropdown -->
+   <item>
+    <widget class="QToolButton" name="btnCapture">
+     <property name="text"><string>C</string></property>
+     <property name="popupMode"><enum>QToolButton::InstantPopup</enum></property>
+     <property name="autoRaise"><bool>true</bool></property>
+     <property name="toolTip"><string>Capture (PNG)</string></property>
+     <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+     <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
