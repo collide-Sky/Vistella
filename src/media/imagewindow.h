@@ -439,9 +439,7 @@ private slots:
 
 private:
     void buildActions();
-    void applyPanelTheme();
-
-    void renderToView();
+        void renderToView();
     void refreshAll();
 
     // 标记一个"已保存"的栈位置, 用于 isDirty 判断

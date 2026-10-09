@@ -13,67 +13,6 @@
   <widget class="QWidget" name="centralWidget">
    <layout class="QGridLayout" name="gridLayout_6">
     <item row="0" column="0">
-     <!-- P5.1 (2026-10-08): collapsed scrollLeft + leftPanel.
-          Previously this QScrollArea (350 px wide) sat in centralWidget
-          column 0 but only contained an empty leftPanel since Q4.2.2
-          migrated MosaicTool/TextOverlay settings out. The dock column
-          (LeftToolBar + ModeSelectorBar + ImageOptionBar) already
-          occupies Qt::LeftDockWidgetArea, so centralWidget has nothing to
-          show on the left. The 350-px chrome became ~30% wasted horizontal
-          space, visually inflating every docked widget. Setting width to
-          0 collapses the column; verticalLayout in row 0 col 1 then fills
-          the freed horizontal space for the canvas. -->
-     <widget class="QScrollArea" name="scrollLeft">
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>0</height>
-       </size>
-      </property>
-      <property name="maximumSize">
-       <size>
-        <width>0</width>
-        <height>16777215</height>
-       </size>
-      </property>
-      <property name="verticalScrollBarPolicy">
-       <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
-      </property>
-      <property name="widgetResizable">
-       <bool>true</bool>
-      </property>
-      <widget class="QWidget" name="scrollAreaWidgetContents">
-       <property name="geometry">
-        <rect>
-         <x>0</x>
-         <y>0</y>
-         <width>0</width>
-         <height>931</height>
-        </rect>
-       </property>
-       <layout class="QGridLayout" name="gridLayout_5">
-        <item row="0" column="0">
-         <widget class="QWidget" name="leftPanel" native="true">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>0</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <layout class="QGridLayout" name="gridLayout_4"/>
-         </widget>
-        </item>
-       </layout>
-      </widget>
-     </widget>
-    </item>
-    <item row="0" column="1">
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
        <widget class="QToolBar" name="toolbar">

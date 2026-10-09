@@ -502,22 +502,22 @@
 <context>
     <name>ImageWindow</name>
     <message>
-        <location filename="../src/media/imagewindow.ui" line="111"/>
+        <location filename="../src/media/imagewindow.ui" line="50"/>
         <source>放大</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.ui" line="116"/>
+        <location filename="../src/media/imagewindow.ui" line="55"/>
         <source>缩小</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.ui" line="121"/>
+        <location filename="../src/media/imagewindow.ui" line="60"/>
         <source>实际大小</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.ui" line="126"/>
+        <location filename="../src/media/imagewindow.ui" line="65"/>
         <source>适应窗口</source>
         <translation type="unfinished"></translation>
     </message>
@@ -918,52 +918,52 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2554"/>
-        <location filename="../src/media/imagewindow.cpp" line="2640"/>
-        <location filename="../src/media/imagewindow.cpp" line="2656"/>
-        <location filename="../src/media/imagewindow.cpp" line="2672"/>
-        <location filename="../src/media/imagewindow.cpp" line="2688"/>
-        <location filename="../src/media/imagewindow.cpp" line="2704"/>
+        <location filename="../src/media/imagewindow.cpp" line="2521"/>
+        <location filename="../src/media/imagewindow.cpp" line="2607"/>
+        <location filename="../src/media/imagewindow.cpp" line="2623"/>
+        <location filename="../src/media/imagewindow.cpp" line="2639"/>
+        <location filename="../src/media/imagewindow.cpp" line="2655"/>
+        <location filename="../src/media/imagewindow.cpp" line="2671"/>
         <source>当前页面没有图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2609"/>
+        <location filename="../src/media/imagewindow.cpp" line="2576"/>
         <source>已应用 SmartObject 变换</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2616"/>
+        <location filename="../src/media/imagewindow.cpp" line="2583"/>
         <source>ToolContext 未初始化</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2634"/>
+        <location filename="../src/media/imagewindow.cpp" line="2601"/>
         <source>自由变换 — 拖动 8 handle 或中心点 (Esc 退出)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2647"/>
+        <location filename="../src/media/imagewindow.cpp" line="2614"/>
         <source>水平翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2663"/>
+        <location filename="../src/media/imagewindow.cpp" line="2630"/>
         <source>垂直翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2679"/>
+        <location filename="../src/media/imagewindow.cpp" line="2646"/>
         <source>旋转 90° 顺时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2695"/>
+        <location filename="../src/media/imagewindow.cpp" line="2662"/>
         <source>旋转 90° 逆时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2711"/>
+        <location filename="../src/media/imagewindow.cpp" line="2678"/>
         <source>旋转 180°</source>
         <translation type="unfinished"></translation>
     </message>

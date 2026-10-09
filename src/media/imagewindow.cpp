@@ -328,7 +328,10 @@ ImageWindow::ImageWindow(QWidget *parent)
     }
 
     buildActions();
-    applyPanelTheme();
+    // P5.5 (2026-10-09): applyPanelTheme() removed — applied dead stylesheet
+    //   to the now-deleted imagewindow.ui leftPanel. Dock widgets pick up
+    //   their visuals from Qt theming instead. ThemeManager::themeChanged
+    //   signal connect below also removed.
 
     // P0-1.2 (2026-09-07): 实例化 5 个组件
     //   这一轮 P0-1.2 只用 m_textCtrl + m_mosaicTool, 其他 nullptr 占位等下一轮
@@ -561,10 +564,7 @@ ImageWindow::ImageWindow(QWidget *parent)
         }
     }
 
-    // 主题变化
-    connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, &ImageWindow::applyPanelTheme);
-}
+    }
 
 ImageWindow::~ImageWindow()
 {
@@ -2219,39 +2219,6 @@ void ImageWindow::buildActions()
     //   移到 MosaicOptionPanel + TextOptionPanel 内部直接 connect 业务组件.
     //   buildActions 只剩顶层 toolbar/action 路由 (zoom 4 个), 不再管 imagewindow.ui
     //   占位 group (slider/button/combo), 那些 widget 已经从 .ui 删除 (Q4.2.2).
-}
-
-void ImageWindow::applyPanelTheme()
-{
-    // 功能面板统一字体 9pt (user 要求)
-    QFont panelFont = ui->leftPanel->font();
-    panelFont.setPointSize(9);
-    ui->leftPanel->setFont(panelFont);
-
-    const auto &p = ThemeManager::instance().palette();
-    const QString css = QString(
-        "QWidget#leftPanel { background: %1; }"
-        "QWidget#leftPanel QGroupBox { color: %2; border: 1px solid %3; border-radius: 5px;"
-        "  margin-top: 14px; padding: 12px 6px 6px 6px; font-weight: 600; }"
-        "QWidget#leftPanel QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }"
-        "QWidget#leftPanel QLabel { color: %2; }"
-        "QWidget#leftPanel QToolButton {"
-        "  color: %2; background: transparent; border: 1px solid %3; border-radius: 4px; padding: 4px 8px;"
-        "}"
-        "QWidget#leftPanel QToolButton:hover { background: %4; }"
-        "QWidget#leftPanel QToolButton:checked { background: %5; border-color: %5; color: %6; }"
-        "QWidget#leftPanel QSlider::groove:horizontal { background: %3; height: 3px; border-radius: 1px; }"
-        "QWidget#leftPanel QSlider::handle:horizontal { background: %2; width: 8px; height: 8px; margin: -3px 0; border-radius: 4px; }"
-        "QWidget#leftPanel QSlider::sub-page:horizontal { background: %7; border-radius: 1px; }"
-    )
-    .arg(p.panelBg.name())
-    .arg(p.panelHeader.name())
-    .arg(p.panelBorder.name())
-    .arg(p.menuHover.name())
-    .arg(p.accent.name())
-    .arg(p.accentText.name())
-    .arg(p.accent.name());
-    ui->leftPanel->setStyleSheet(css);
 }
 
 // ---------------- 缩放 ----------------
