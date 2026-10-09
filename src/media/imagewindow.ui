@@ -13,16 +13,26 @@
   <widget class="QWidget" name="centralWidget">
    <layout class="QGridLayout" name="gridLayout_6">
     <item row="0" column="0">
+     <!-- P5.1 (2026-10-08): collapsed scrollLeft + leftPanel.
+          Previously this QScrollArea (350 px wide) sat in centralWidget
+          column 0 but only contained an empty leftPanel since Q4.2.2
+          migrated MosaicTool/TextOverlay settings out. The dock column
+          (LeftToolBar + ModeSelectorBar + ImageOptionBar) already
+          occupies Qt::LeftDockWidgetArea, so centralWidget has nothing to
+          show on the left. The 350-px chrome became ~30% wasted horizontal
+          space, visually inflating every docked widget. Setting width to
+          0 collapses the column; verticalLayout in row 0 col 1 then fills
+          the freed horizontal space for the canvas. -->
      <widget class="QScrollArea" name="scrollLeft">
       <property name="minimumSize">
        <size>
-        <width>330</width>
+        <width>0</width>
         <height>0</height>
        </size>
       </property>
       <property name="maximumSize">
        <size>
-        <width>350</width>
+        <width>0</width>
         <height>16777215</height>
        </size>
       </property>
@@ -37,7 +47,7 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>348</width>
+         <width>0</width>
          <height>931</height>
         </rect>
        </property>
@@ -46,26 +56,17 @@
          <widget class="QWidget" name="leftPanel" native="true">
           <property name="minimumSize">
            <size>
-            <width>300</width>
+            <width>0</width>
             <height>0</height>
            </size>
           </property>
           <property name="maximumSize">
            <size>
-            <width>300</width>
+            <width>0</width>
             <height>16777215</height>
            </size>
           </property>
-          <layout class="QGridLayout" name="gridLayout_4">
-           <!-- Q4.2.2 (2026-09-24): 删 groupMosaic + groupText 两个占位 group
-                (P0-1.2 时期的临时 UI, 一直没人接入业务). 现在 MosaicTool/TextOverlay
-                设置已经迁出 imagewindow.ui:
-                  - MosaicTool: MosaicOptionPanel (装到 ImageWindow 左侧 dock)
-                  - TextOverlay: TextOptionPanel (装到 ImageWindow 左侧 dock)
-                leftPanel 这个 QWidget 容器本身保留 (scrollArea 的尺寸约束),
-                但内部 layout 留空. 后续 Q4.2.3 二级模式选择栏 / Q4.2.4 关键属性实装
-                会重新填进 leftPanel. -->
-          </layout>
+          <layout class="QGridLayout" name="gridLayout_4"/>
          </widget>
         </item>
        </layout>

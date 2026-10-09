@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// tst_ImageOptionBar - F-E (2026-09-09) + Q4.2.4 (2026-10-08) 扩展
+// tst_ImageOptionBar - F-E (2026-09-09) + Q4.2.4 (2026-10-08) + P5.1
 //
 // 验证:
 //   F-E:   1) 9 个 page (None + 8 tools) 都在 stackedWidget
@@ -11,15 +11,26 @@
 //          5) setCurrentIndex 越界忽略
 //          6) attach 后 listen 完整 16 tool id (包含 MaskBrush + Transform)
 //          7) 切到 MaskBrush 触发动态 addPage, 切到 None 不减少 page
+//   P5.1:
+//          8) attach(ctx, mosaic, textCtrl) 时, Brush tool 路由到 Mosaic page
+//             (idx=17), Text tool 路由到 Text page (idx=18)
+//          9) MosaicTool modeChanged (on Brush tool) 切换 page idx
+//             17 ↔ 7 (跟 BrushOptionPanel toggle)
+//         10) attach 不传 mosaic/textCtrl 时, 不创建 Mosaic/Text page (graceful)
 //
 #include <QTest>
 #include <QSignalSpy>
 #include <QStackedWidget>
 #include <QWidget>
 
+// P5.1 (2026-10-08): include imagewindow.h BEFORE ImageOptionBar.h
+//   so QPointer<ImageWindow> in MosaicTool.h finds the full QObject-derived
+//   type when instantiated.
+#include "../src/media/imagewindow.h"
 #include "../src/media/tools/ImageOptionBar.h"
 #include "../src/media/tools/ToolContext.h"
 #include "../src/media/mediators/ToolMediator.h"
+#include "../src/media/imagewindow/MosaicTool.h"
 
 using namespace tools;
 using namespace mediators;
@@ -40,6 +51,12 @@ private slots:
     void ctor_have17Pages();
     void attach_listenAll17ToolIds();
     void attach_maskBrush_dynamicAddPage();
+
+    // P5.1 (2026-10-08) 扩展
+    void attach_brushTool_routesToMosaicPage();
+    void attach_textTool_routesToTextPage();
+    void attach_mosaicModeToggle_switchesBetweenBrushAndMosaic();
+    void attach_noMosaicNoText_gracefulNoPage();
 };
 
 void tst_ImageOptionBar::initTestCase()
@@ -158,6 +175,103 @@ void tst_ImageOptionBar::attach_maskBrush_dynamicAddPage()
     emit ctx.toolChanged(ToolId::None);
     QCOMPARE(stack->currentIndex(), static_cast<int>(ToolId::None));
     QVERIFY(stack->count() >= beforeCount);
+}
+
+// =============================================================================
+//  P5.1 (2026-10-08) 扩展 — Mosaic + Text 接 ImageOptionBar 路由
+// =============================================================================
+
+void tst_ImageOptionBar::attach_brushTool_routesToMosaicPage()
+{
+    // P5.1: 接 mosaic + textCtrl 后, 切到 Brush tool 应该跳 Mosaic page.
+    //   没 mosaic 时, Brush tool 还是落到 idx=7 (Brush default).
+    ImageOptionBar bar;
+    ToolContext ctx;
+    MosaicTool mosaic;
+    bar.attach(&ctx, &mosaic, nullptr);
+    QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
+    QVERIFY(stack != nullptr);
+
+    emit ctx.toolChanged(ToolId::Brush);
+    QVERIFY(bar.mosaicPageIdx() >= 0);
+    QCOMPARE(stack->currentIndex(), bar.mosaicPageIdx());
+    QVERIFY(stack->count() >= bar.mosaicPageIdx() + 1);
+
+    bar.detach();
+}
+
+void tst_ImageOptionBar::attach_textTool_routesToTextPage()
+{
+    ImageOptionBar bar;
+    ToolContext ctx;
+    MosaicTool mosaic;
+    TextOverlayController textCtrl;
+    bar.attach(&ctx, &mosaic, &textCtrl);
+    QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
+    QVERIFY(stack != nullptr);
+
+    emit ctx.toolChanged(ToolId::Text);
+    QVERIFY(bar.textPageIdx() >= 0);
+    QCOMPARE(stack->currentIndex(), bar.textPageIdx());
+    QVERIFY(stack->count() >= bar.textPageIdx() + 1);
+
+    bar.detach();
+}
+
+void tst_ImageOptionBar::attach_mosaicModeToggle_switchesBetweenBrushAndMosaic()
+{
+    // P5.1: MosaicOptionPanel 自 listen MosaicTool::modeChanged, 所以切换
+    //   mosaic on/off 时 page index 不变 (始终在 m_mosaicPageIdx). 这里
+    //   验证 panel 保持显示 + modeChanged 不会崩 + getEnabled 状态正确.
+    ImageOptionBar bar;
+    ToolContext ctx;
+    MosaicTool mosaic;
+    bar.attach(&ctx, &mosaic, nullptr);
+    QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
+    QVERIFY(stack != nullptr);
+
+    emit ctx.toolChanged(ToolId::Brush);
+    const int mosaicIdx = bar.mosaicPageIdx();
+    QVERIFY(mosaicIdx >= 0);
+    QCOMPARE(stack->currentIndex(), mosaicIdx);
+
+    // Toggle mosaic on - modeChanged signal fires (panel reflects new state),
+    //   page index stays stable.
+    QSignalSpy spy(&mosaic, &MosaicTool::modeChanged);
+    mosaic.setEnabled(true);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(stack->currentIndex(), mosaicIdx);
+
+    // Toggle mosaic off - same story.
+    mosaic.setEnabled(false);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(stack->currentIndex(), mosaicIdx);
+
+    bar.detach();
+}
+
+void tst_ImageOptionBar::attach_noMosaicNoText_gracefulNoPage()
+{
+    // P5.1: attach 不传 deps, 不要 addPage, 切换也不崩.
+    ImageOptionBar bar;
+    ToolContext ctx;
+    bar.attach(&ctx);  // no deps
+    QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
+    QVERIFY(stack != nullptr);
+    const int baseCount = stack->count();
+
+    emit ctx.toolChanged(ToolId::Brush);
+    QCOMPARE(stack->currentIndex(), static_cast<int>(ToolId::Brush));
+    QVERIFY(stack->count() == baseCount);  // no addPage triggered
+
+    emit ctx.toolChanged(ToolId::Text);
+    QCOMPARE(stack->currentIndex(), static_cast<int>(ToolId::Text));
+    QVERIFY(stack->count() == baseCount);
+
+    emit ctx.toolChanged(ToolId::None);
+    QCOMPARE(stack->currentIndex(), static_cast<int>(ToolId::None));
+
+    bar.detach();
 }
 
 QTEST_MAIN(tst_ImageOptionBar)

@@ -58,8 +58,7 @@ class AdjustmentPanel;
 class MosaicTool;
 class TextOverlayController;
 // Q4.2.2 (2026-09-24): OptionPanel 完整 include (unique_ptr 需要完整类型, 析构能正确 delete)
-#include "imagewindow/MosaicOptionPanel.h"
-#include "imagewindow/TextOptionPanel.h"
+// P5.1: MosaicOptionPanel + TextOptionPanel include removed (moved to ImageOptionBar).
 // F-G.3 Fix (2026-09-10): RightPanelDock forward decl (右侧 panel 1 widget 4+1 tab)
 namespace docks { class RightPanelDock; }
 namespace mediators { class WorkspaceMediator; class DialogMediator; }
@@ -502,11 +501,12 @@ private:
     //   现在升级成独立 OptionPanel widget, 装到左侧 dock 下方 (splitDockWidget
     //   跟在 ImageOptionBar 后面). 用户可拖动调整顺序/位置 (NoDockWidgetFeatures
     //   隐藏 close/float 按钮, 跟左侧其他 dock 一致).
-    // Q4.2.2.1 fix (2026-09-24): Mosaic/Text OptionPanel 改放 leftPanel 顶部
-    //   (imagewindow.ui gridLayout_4), 不再作为永久 dock. 保留 unique_ptr 持有所有权,
-    //   dtor 正常析构. QDockWidget 字段已删.
-    std::unique_ptr<MosaicOptionPanel>    m_mosaicOptionPanel;
-    std::unique_ptr<TextOptionPanel>      m_textOptionPanel;
+    // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel no longer owned
+    //   by ImageWindow. They are owned by ImageOptionBar (created lazily inside
+    //   ImageOptionBar::ensureMosaicPage / ensureTextPage) and follow the active
+    //   tool like every other option panel. The previous Q4.2.2.1 leftPanel
+    //   gridLayout_4 hosting kept them always-on; the new routing only shows
+    //   them when the matching tool is active (Brush for Mosaic, Text for Text).
 
     // F-N (2026-09-10): Tool state context — owns current ToolState, receives eventFilter forwards
     std::unique_ptr<tools::ToolContext>     m_ctx;

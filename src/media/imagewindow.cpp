@@ -465,7 +465,13 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   groupText 是 MosaicTool/TextOverlay 的旧 UI (跟 ToolMediator 无关),
     //   Q4.2.2 单独 commit 做迁移, 本次只接入 LeftToolBar + ImageOptionBar.
     m_imageOptionBar = std::make_unique<tools::ImageOptionBar>();
-    m_imageOptionBar->attach(m_ctx.get());
+    // P5.1 (2026-10-08): pass MosaicTool + TextOverlayController so
+    //   ImageOptionBar can route Brush -> MosaicOptionPanel and
+    //   Text -> TextOptionPanel, replacing the old Q4.2.2.1 leftPanel
+    //   gridLayout_4 always-on hosting.
+    m_imageOptionBar->attach(m_ctx.get(),
+                             m_mosaicTool.get(),
+                             m_textCtrl.get());
 
     m_imageOptionDockContainer = new QDockWidget(this);
     m_imageOptionDockContainer->setObjectName(QStringLiteral("imageOptionDockContainer"));
@@ -480,25 +486,14 @@ ImageWindow::ImageWindow(QWidget *parent)
     splitDockWidget(m_modeSelectorDockContainer, m_imageOptionDockContainer, Qt::Vertical);
     resizeDocks({m_imageOptionDockContainer}, {220}, Qt::Vertical);
 
-    // Q4.2.2.1 fix (2026-09-24): MosaicOptionPanel + TextOptionPanel 改回 leftPanel
-    //   Q4.2.2 commit (1f10637) 把这俩 OptionPanel 装成 ImageOptionBar 下方永久 dock,
-    //   但用户截图反馈: 左侧 dock 多出两块永久面板 (ImageOptionBar 下方 200+200 px),
-    //   "为什么这两块东西还在这里". 原来 groupMosaic + groupText 是在 imagewindow.ui
-    //   top-left 的 leftPanel (scrollArea 容器里), 升级成 OptionPanel 应当放回原位,
-    //   而不是新增 dock. leftPanel 里 gridLayout_4 现在接 MosaicOptionPanel +
-    //   TextOptionPanel (垂直排). 后续 Q4.2.3 二级模式选择栏 用 imagewindow.ui 的
-    //   新 widget 区域, 不再动 gridLayout_4.
-    m_mosaicOptionPanel = std::make_unique<MosaicOptionPanel>(m_mosaicTool.get());
-    m_textOptionPanel = std::make_unique<TextOptionPanel>(m_textCtrl.get());
-    if (ui->gridLayout_4) {
-        // MosaicOptionPanel 在 row 0, TextOptionPanel 在 row 1. 两面板都用
-        // sizePolicy Preferred/Expanding, scrollArea 让内容超出时可滚.
-        ui->gridLayout_4->addWidget(m_mosaicOptionPanel.get(), 0, 0);
-        ui->gridLayout_4->addWidget(m_textOptionPanel.get(), 1, 0);
-    }
-    // Q4.2.2.1: 删永久 dock container 字段, 改用 leftPanel 内 gridLayout_4.
-    // m_mosaicOptionPanel / m_textOptionPanel 仍 unique_ptr 持有, dtor 正常析构.
-    // 不再 addDockWidget + splitDockWidget.
+    // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel no longer hosted
+    //   here. ImageOptionBar owns both and routes them per active tool
+    //   (Brush -> Mosaic, Text -> Text). The Q4.2.2.1 leftPanel gridLayout_4
+    //   hosting left them always visible (~200 + ~200 px blank chrome) which
+    //   the user kept flagging; routing them through ImageOptionBar gives
+    //   them the same active-tool UX as every other tool option.
+    // (imagewindow.ui gridLayout_4 stays empty for now as a reserved slot;
+    //  it can host other widgets later, e.g. quick mask / screen mode.)
 
     // P0-4 (2026-09-10): SelectionModel 实例化
     //   ImageCanvas 拿 selection 引用, drawForeground 画 marching ants 边界
