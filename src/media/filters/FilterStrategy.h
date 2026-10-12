@@ -63,6 +63,42 @@ enum class FilterKind {
     //   Temp (色温, 2000K..10000K): R/B 通道补偿 (蓝->红 / 红->蓝)
     //   Tint (-150..+150): 绿/品红通道补偿
     WhiteBalance   = 23,
+
+    // ===== P7.3 (2026-10-12) PS 2025 风格化菜单扩 =====
+    // PS 把 11 个模糊全放"风格化"submenu, 24..31 共 8 项 (我们不少 alias 现有策略).
+    SurfaceBlur    = 24,    // 表面模糊 — alias BilateralBlur
+    MotionBlur     = 25,    // 动感模糊 — cv::blur + 方向核
+    RadialBlur     = 26,    // 径向模糊 — cv::warpPolar 模拟
+    LensBlur       = 27,    // 镜头模糊 — 模拟景深, BoxBlur 简化
+    Blur           = 28,    // 旧 PS 模糊 — alias BoxBlur
+    Average        = 29,    // 平均 — cv::blur 整图求均
+    SpecialBlur    = 30,    // 特殊模糊 — alias BilateralBlur
+    ShapeBlur      = 31,    // 形状模糊 — BoxBlur 简化
+
+    // 扭曲 6 项 (32..37) — placeholder (P7.3 仅注册 enum; 后续 commit 真做 cv::remap)
+    Twirl          = 32,    // 旋转扭曲
+    Polar          = 33,    // 极坐标
+    Ripple         = 34,    // 波纹
+    Spherize       = 35,    // 挤压/球面化
+    Shear          = 36,    // 切变
+    ZigZag         = 37,    // 锯齿/Z 字形
+
+    // 像素化 4 项 (38..41)
+    Pixelate       = 38,    // 像素化 — 缩小后放大 (cv::resize INTER_NEAREST)
+    Fragment       = 39,    // 彩块化 — K-means 简化
+    Mezzotint      = 40,    // 铜版雕刻 — 简化 (cv::threshold + dither)
+    ColorHalftone  = 41,    // 彩色半调 — cv::div 通道像素化
+
+    // 渲染 3 项 (42..44)
+    LensFlare      = 42,    // 镜头光晕 — 合成
+    Clouds         = 43,    // 分层云彩 — cv::randn + 阈值
+    DiffuseGlow    = 44,    // 照亮边缘 — GlowingEdges alias
+
+    // 杂色 4 (45..48) — PS 标准 (AddNoise/ReduceNoise/MedianNoise/DustScratches)
+    DustScratches  = 45,    // 蒙尘与划痕 — bilateral alias
+
+    // 调整型 — 旧 dialog 顶 (Curves/Levels/B&W/ChannelMixer/Hsl 不放 enum — 走 AdjustmentPanel)
+    // 注: 这 4 个 AdjustmentDialog 已存在, 菜单项走 onAdjustDialogTriggered() 不走 enum
 };
 
 // 中文显示名 (PS 风格: 模糊/锐化/浮雕...)

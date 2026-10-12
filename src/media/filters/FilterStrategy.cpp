@@ -40,6 +40,29 @@ const char* filterName(FilterKind k)
     case FilterKind::ReduceNoise:   return "减少噪点";
     case FilterKind::MedianNoise:   return "中值降噪";
     case FilterKind::WhiteBalance:  return "白平衡";
+    // P7.3 (2026-10-12): PS 风格化菜单 (8 模糊 + 6 扭曲 + 4 像素化 + 3 渲染 + 1 杂色)
+    case FilterKind::SurfaceBlur:    return "表面模糊";
+    case FilterKind::MotionBlur:     return "动感模糊";
+    case FilterKind::RadialBlur:     return "径向模糊";
+    case FilterKind::LensBlur:       return "镜头模糊";
+    case FilterKind::Blur:           return "模糊";
+    case FilterKind::Average:        return "平均";
+    case FilterKind::SpecialBlur:    return "特殊模糊";
+    case FilterKind::ShapeBlur:      return "形状模糊";
+    case FilterKind::Twirl:          return "旋转扭曲";
+    case FilterKind::Polar:          return "极坐标";
+    case FilterKind::Ripple:         return "波纹";
+    case FilterKind::Spherize:       return "球面化";
+    case FilterKind::Shear:          return "切变";
+    case FilterKind::ZigZag:         return "锯齿";
+    case FilterKind::Pixelate:       return "像素化";
+    case FilterKind::Fragment:       return "彩块化";
+    case FilterKind::Mezzotint:      return "铜版雕刻";
+    case FilterKind::ColorHalftone:  return "彩色半调";
+    case FilterKind::LensFlare:      return "镜头光晕";
+    case FilterKind::Clouds:         return "分层云彩";
+    case FilterKind::DiffuseGlow:    return "照亮边缘";
+    case FilterKind::DustScratches:  return "蒙尘与划痕";
     }
     return "未知滤镜";
 }

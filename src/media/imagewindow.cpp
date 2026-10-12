@@ -2184,6 +2184,62 @@ void ImageWindow::onRedo()
     if (m_undoStack) m_undoStack->redo();
 }
 
+// P7.3 (2026-10-12): 当前活动图层 idx. 没图 -> -1.
+int ImageWindow::currentLayerIndex() const
+{
+    if (!m_layerStack) return -1;
+    return m_layerStack->selection();
+}
+
+// P7.3 (2026-10-12): 滤镜 → 转换为智能滤镜 实现.
+//   1) 拿当前图层 idx + 当前 cached image (m_current) 作为 imageBefore
+//   2) 把图层 idx 转 SmartObject (in-place convertToSmartObject)
+//   3) append 目标 filter kind 作为 SmartFilter sub-layer
+//   两步都进 undoStack, undo 可回滚 (P7.3 简化: convert 命令走 before 镜像).
+//   返回 true 表示两道都成功.
+bool ImageWindow::convertCurrentLayerToSmartObjectWithFilter(filter::FilterKind kind)
+{
+    if (!m_layerStack) return false;
+    const int idx = currentLayerIndex();
+    if (idx < 0) return false;
+    auto* stack = m_undoStack;
+    if (!stack) return false;
+
+    namespace lyr = layers;
+    // 1) 备份原图层 (Layer 内自带 cv::Mat clone for undo)
+    const cv::Mat imageBefore = m_current.clone();
+    lyr::LayerPtr beforeLayerPtr = m_layerStack->at(idx);
+    if (!beforeLayerPtr) return false;
+    const lyr::Layer beforeLayerCopy = *beforeLayerPtr;   // copy by value
+
+    // 2) Convert Bitmap -> SmartObject (in-place)
+    if (!m_layerStack->convertToSmartObject(idx, /*embed=*/true)) {
+        LOG_WARN("[ImageWindow] convertToSmartObject failed at idx={}", idx);
+        return false;
+    }
+    // P1.4.x 已有: convertToSmartObject undo 回滚命令
+    if (auto* convCmd = lyr::LayerCommand::makeConvertToSmartObject(
+            m_layerStack.get(), idx, beforeLayerCopy)) {
+        stack->push(convCmd);
+    }
+
+    // 3) append SmartFilter (sub-layer 接到 idx 上, imageBefore 用于 chain re-render)
+    const QString filterType = QString::fromUtf8(filter::filterName(kind));
+    const int newIdx = m_layerStack->appendSmartFilter(idx, filterType, /*strength=*/1.0, imageBefore);
+    if (newIdx < 0) {
+        LOG_WARN("[ImageWindow] appendSmartFilter failed at idx={}, kind={}", idx, filterType.toStdString());
+        return false;
+    }
+    if (auto* sfCmd = lyr::LayerCommand::makeAppendSmartFilter(
+            m_layerStack.get(), idx, filterType, /*oldStrength=*/1.0)) {
+        stack->push(sfCmd);
+    }
+
+    rebuildCurrentCache();   // P6 (2026-10-09) 缓存层
+    renderToView();
+    return true;
+}
+
 // Q4.2.2 (2026-09-24): 4 个占位 slot 已删, 由 MosaicOptionPanel / TextOptionPanel
 //   自己接管信号 (panel 直接 connect MosaicTool / TextOverlayController).
 //   onMosaicSizeChanged / onMosaicModeToggled / onTextSizeChanged /

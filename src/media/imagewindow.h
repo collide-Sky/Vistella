@@ -276,6 +276,13 @@ public:
 
     // 阶段 1 W4.3 Phase 1 (2026-09-04): 给 LayerPanel 调 (MainWindow 通过这些访问 layerStack + undoStack)
     layers::LayerStack* layerStack() const { return m_layerStack.get(); }
+    int currentLayerIndex() const;   // P7.3 (2026-10-12): 当前活动图层 idx for "转换为智能滤镜"
+
+    // P7.3 (2026-10-12): 滤镜 → 转换为智能滤镜 走 ImageWindow 实现.
+    //   流程: convertToSmartObject(idx) + appendSmartFilter(filterKind) +
+    //         LayerCommand 双 push 进 undoStack.
+    //   成功返回 true, 失败 (无 stack / 离线活动图层 / SmartObject 转换失败) 返 false.
+    bool convertCurrentLayerToSmartObjectWithFilter(filter::FilterKind kind);
 
     // F-G.3 (2026-09-09): 注入 WorkspaceMediator (mainwindow 创建 imagewindow 后调一次)
     void attachWorkspaceMed(mediators::WorkspaceMediator* wsMed);

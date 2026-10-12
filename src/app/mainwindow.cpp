@@ -943,67 +943,139 @@ void MainWindow::buildActions()
         statusBar()->showMessage(tr("选区羽化完成 (半径 %1 px)").arg(radius), 2000);
     });
 
-    // ---- 滤镜 (Filter) - P0-5 (2026-09-10) 4 action + P3.1.2 (2026-09-22) 16 action ----
-    //   P3.1.2: 4 flat action -> 5 submenu (4+3+3+5+5=20 滤镜 PS 同款)
-    //   每个 action 调 onFilterMenuTriggered(kind), 弹 FilterDialog (PS 风格: Apply 实时预览 + OK 入撤销栈)
+    // ---- 滤镜 (Filter) - P7.3 (2026-10-12) PS 2025 风格完整化 ----
+    //   顶部: 上次滤镜操作 + 转换为智能滤镜 + Neural Filters placeholder
+    //   中段 6 standalone: 滤镜库/自适应广角/Camera Raw/镜头校正/液化/消失点
+    //   8 submenu: 风格化/扭曲/锐化/像素化/渲染/杂点/颜色/其它
+    //   末尾 4 adjustment dialog: 曲线/色阶/黑白/通道混合器
+    //   注: 大部分新 filter placeholder, P7.3 注册 enum + 标签 + 简化映射, 真做后续.
     QMenu *mFilter = mb->addMenu(tr("滤镜"));
 
-    // P3.1.2 (2026-09-22): 通用 lambda: add a submenu action + 自动连接 onFilterMenuTriggered
-    auto addFilterAction = [this](QMenu *parent, const QString& text, filter::FilterKind kind) {
+    // P7.3: 通用 lambda: addFilterAction — 接到 onFilterMenuTriggered.
+    //   改 P3.1.2 lambda: 返 QAction* 这样可以 setEnabled(false) 标记 placeholder.
+    auto addFilterAction = [this](QMenu *parent, const QString& text, filter::FilterKind kind) -> QAction* {
         QAction *a = parent->addAction(text);
         connect(a, &QAction::triggered, this, [this, kind]{
             onFilterMenuTriggered(kind);
         });
+        return a;
     };
 
-    // 5 submenu: 模糊(4) / 锐化(3) / 风格化(3) / 颜色(5) / 其他(5)
-    QMenu *mFilterBlur = mFilter->addMenu(tr("模糊"));
-    addFilterAction(mFilterBlur, tr("高斯模糊..."),         filter::FilterKind::GaussianBlur);
-    addFilterAction(mFilterBlur, tr("方框模糊..."),         filter::FilterKind::BoxBlur);
-    addFilterAction(mFilterBlur, tr("中值模糊..."),         filter::FilterKind::MedianBlur);
-    addFilterAction(mFilterBlur, tr("双边模糊..."),         filter::FilterKind::BilateralBlur);
+    // ----- 顶部 2 项: 上次滤镜操作 + 转换为智能滤镜 -----
+    QAction *aLastFilter = mFilter->addAction(tr("上次滤镜操作..."));
+    aLastFilter->setShortcut(QKeySequence(QStringLiteral("Alt+Ctrl+F")));   // PS 风格
+    aLastFilter->setEnabled(false);   // P7.3 placeholder, 后续 commit 接 m_lastFilterKind
+    QAction *aToSmartFilter = mFilter->addAction(tr("转换为智能滤镜"));
+    aToSmartFilter->setEnabled(true);
+    connect(aToSmartFilter, &QAction::triggered, this, &MainWindow::onConvertToSmartFilter);
 
+    mFilter->addSeparator();
+
+    // ----- Neural Filters -----
+    QAction *aNeural = mFilter->addAction(tr("Neural Filters..."));
+    aNeural->setEnabled(false);   // P7.3 占位 (云端 AI 滤镜)
+
+    mFilter->addSeparator();
+
+    // ----- 6 standalone 大滤镜 (PS 标准: 滤镜库 / 自适应广角 / Camera Raw / 镜头校正 / 液化 / 消失点) -----
+    QAction *aFilterGallery = mFilter->addAction(tr("滤镜库..."));
+    aFilterGallery->setShortcut(QKeySequence(QStringLiteral("Ctrl+G")));
+    connect(aFilterGallery, &QAction::triggered, this, [this]{
+        onFilterMenuTriggered(filter::FilterKind::FilterGallery);
+    });
+    QAction *aAdaptiveWide = mFilter->addAction(tr("自适应广角..."));
+    aAdaptiveWide->setShortcut(QKeySequence(QStringLiteral("Alt+Shift+Ctrl+A")));
+    aAdaptiveWide->setEnabled(false);   // PS 占位
+    QAction *aCameraRaw = mFilter->addAction(tr("Camera Raw 滤镜..."));
+    aCameraRaw->setShortcut(QKeySequence(QStringLiteral("Shift+Ctrl+A")));
+    aCameraRaw->setEnabled(false);   // PS 占位
+    QAction *aLensCorr = mFilter->addAction(tr("镜头校正..."));
+    aLensCorr->setShortcut(QKeySequence(QStringLiteral("Shift+Ctrl+R")));
+    aLensCorr->setEnabled(false);   // PS 占位
+    QAction *aLiquify = mFilter->addAction(tr("液化..."));
+    aLiquify->setShortcut(QKeySequence(QStringLiteral("Shift+Ctrl+X")));
+    connect(aLiquify, &QAction::triggered, this, [this]{ onLiquifyTriggered(); });
+    QAction *aVanish = mFilter->addAction(tr("消失点..."));
+    aVanish->setShortcut(QKeySequence(QStringLiteral("Alt+Ctrl+V")));
+    aVanish->setEnabled(false);   // PS 占位
+
+    mFilter->addSeparator();
+
+    // PS 风格化: 11 模糊 + 3 风格化 (浮雕/查找边缘/照亮边缘)
+    QMenu *mFilterStylize = mFilter->addMenu(tr("风格化"));
+    addFilterAction(mFilterStylize, tr("表面模糊..."),   filter::FilterKind::SurfaceBlur);
+    addFilterAction(mFilterStylize, tr("动感模糊..."),   filter::FilterKind::MotionBlur);
+    addFilterAction(mFilterStylize, tr("方框模糊..."),   filter::FilterKind::BoxBlur);
+    addFilterAction(mFilterStylize, tr("高斯模糊..."),   filter::FilterKind::GaussianBlur);
+    addFilterAction(mFilterStylize, tr("进一步模糊..."), filter::FilterKind::BlurMore);
+    addFilterAction(mFilterStylize, tr("径向模糊..."),   filter::FilterKind::RadialBlur)->setEnabled(false);
+    addFilterAction(mFilterStylize, tr("镜头模糊..."),   filter::FilterKind::LensBlur)->setEnabled(false);
+    addFilterAction(mFilterStylize, tr("模糊..."),       filter::FilterKind::Blur);
+    addFilterAction(mFilterStylize, tr("平均..."),       filter::FilterKind::Average);
+    addFilterAction(mFilterStylize, tr("特殊模糊..."),   filter::FilterKind::SpecialBlur);
+    addFilterAction(mFilterStylize, tr("形状模糊..."),   filter::FilterKind::ShapeBlur);
+    mFilterStylize->addSeparator();
+    addFilterAction(mFilterStylize, tr("浮雕..."),       filter::FilterKind::Emboss);
+    addFilterAction(mFilterStylize, tr("查找边缘..."),   filter::FilterKind::FindEdges);
+    addFilterAction(mFilterStylize, tr("照亮边缘..."),   filter::FilterKind::GlowingEdges);
+
+    // PS 扭曲: 6 项 placeholder (需 cv::remap/warpPolar, 后续 commit 真做)
+    QMenu *mFilterDistort = mFilter->addMenu(tr("扭曲"));
+    addFilterAction(mFilterDistort, tr("旋转扭曲..."),   filter::FilterKind::Twirl)->setEnabled(false);
+    addFilterAction(mFilterDistort, tr("极坐标..."),     filter::FilterKind::Polar)->setEnabled(false);
+    addFilterAction(mFilterDistort, tr("波纹..."),       filter::FilterKind::Ripple)->setEnabled(false);
+    addFilterAction(mFilterDistort, tr("球面化..."),     filter::FilterKind::Spherize)->setEnabled(false);
+    addFilterAction(mFilterDistort, tr("切变..."),       filter::FilterKind::Shear)->setEnabled(false);
+    addFilterAction(mFilterDistort, tr("锯齿..."),       filter::FilterKind::ZigZag)->setEnabled(false);
+
+    // 锐化 (3 项, 沿用)
     QMenu *mFilterSharpen = mFilter->addMenu(tr("锐化"));
-    addFilterAction(mFilterSharpen, tr("锐化..."),           filter::FilterKind::Sharpen);
-    addFilterAction(mFilterSharpen, tr("进一步锐化..."),     filter::FilterKind::SharpenMore);
-    addFilterAction(mFilterSharpen, tr("反锐化蒙版..."),     filter::FilterKind::UnsharpMask);
+    addFilterAction(mFilterSharpen, tr("锐化..."),         filter::FilterKind::Sharpen);
+    addFilterAction(mFilterSharpen, tr("进一步锐化..."),   filter::FilterKind::SharpenMore);
+    addFilterAction(mFilterSharpen, tr("反锐化蒙版..."),   filter::FilterKind::UnsharpMask);
 
-    QMenu *mFilterStyle = mFilter->addMenu(tr("风格化"));
-    addFilterAction(mFilterStyle, tr("浮雕..."),             filter::FilterKind::Emboss);
-    addFilterAction(mFilterStyle, tr("查找边缘..."),         filter::FilterKind::FindEdges);
-    addFilterAction(mFilterStyle, tr("照亮边缘..."),         filter::FilterKind::GlowingEdges);
+    // 像素化: 4 项 PS 标准
+    QMenu *mFilterPixelate = mFilter->addMenu(tr("像素化"));
+    addFilterAction(mFilterPixelate, tr("像素化..."),       filter::FilterKind::Pixelate)->setEnabled(false);
+    addFilterAction(mFilterPixelate, tr("彩块化..."),       filter::FilterKind::Fragment)->setEnabled(false);
+    addFilterAction(mFilterPixelate, tr("铜版雕刻..."),     filter::FilterKind::Mezzotint)->setEnabled(false);
+    addFilterAction(mFilterPixelate, tr("彩色半调..."),     filter::FilterKind::ColorHalftone)->setEnabled(false);
 
+    // 渲染: 3 项 PS 标准
+    QMenu *mFilterRender = mFilter->addMenu(tr("渲染"));
+    addFilterAction(mFilterRender, tr("镜头光晕..."),       filter::FilterKind::LensFlare)->setEnabled(false);
+    addFilterAction(mFilterRender, tr("分层云彩..."),       filter::FilterKind::Clouds)->setEnabled(false);
+    addFilterAction(mFilterRender, tr("照亮边缘..."),       filter::FilterKind::DiffuseGlow);
+
+    mFilter->addSeparator();
+
+    // 杂点 (PS Filter > Noise): AddNoise / ReduceNoise / DustScratches / MedianNoise
+    QMenu *mFilterNoise = mFilter->addMenu(tr("杂点"));
+    addFilterAction(mFilterNoise, tr("添加噪点..."),       filter::FilterKind::AddNoise);
+    addFilterAction(mFilterNoise, tr("减少噪点..."),       filter::FilterKind::ReduceNoise);
+    addFilterAction(mFilterNoise, tr("蒙尘与划痕..."),     filter::FilterKind::DustScratches)->setEnabled(false);
+    addFilterAction(mFilterNoise, tr("中值降噪..."),       filter::FilterKind::MedianNoise);
+
+    mFilter->addSeparator();
+
+    // 颜色 (PS 风格 — 7 项, 含照片滤镜)
     QMenu *mFilterColor = mFilter->addMenu(tr("颜色"));
-    addFilterAction(mFilterColor, tr("去色..."),             filter::FilterKind::Desaturate);
-    addFilterAction(mFilterColor, tr("反相..."),             filter::FilterKind::Invert);
-    addFilterAction(mFilterColor, tr("阈值..."),             filter::FilterKind::Threshold);
-    addFilterAction(mFilterColor, tr("色调分离..."),         filter::FilterKind::Posterize);
-    addFilterAction(mFilterColor, tr("渐变映射..."),         filter::FilterKind::GradientMap);
-    // P3.4 (2026-09-22): 白平衡 (Temp/Tint)
-    addFilterAction(mFilterColor, tr("白平衡..."),           filter::FilterKind::WhiteBalance);
+    addFilterAction(mFilterColor, tr("去色..."),           filter::FilterKind::Desaturate);
+    addFilterAction(mFilterColor, tr("反相..."),           filter::FilterKind::Invert);
+    addFilterAction(mFilterColor, tr("阈值..."),           filter::FilterKind::Threshold);
+    addFilterAction(mFilterColor, tr("色调分离..."),       filter::FilterKind::Posterize);
+    addFilterAction(mFilterColor, tr("渐变映射..."),       filter::FilterKind::GradientMap);
+    addFilterAction(mFilterColor, tr("白平衡..."),         filter::FilterKind::WhiteBalance);
+    addFilterAction(mFilterColor, tr("照片滤镜..."),       filter::FilterKind::PhotoFilter);
 
-    QMenu *mFilterOther = mFilter->addMenu(tr("其他"));
-    addFilterAction(mFilterOther, tr("照片滤镜..."),         filter::FilterKind::PhotoFilter);
-    addFilterAction(mFilterOther, tr("进一步模糊..."),       filter::FilterKind::BlurMore);
-    addFilterAction(mFilterOther, tr("高反差保留..."),       filter::FilterKind::HighPass);
-    addFilterAction(mFilterOther, tr("曝光过度..."),         filter::FilterKind::Solarize);
-    addFilterAction(mFilterOther, tr("滤镜画廊..."),         filter::FilterKind::FilterGallery);
+    // 其它: PS 高反差保留 + 曝光过度
+    QMenu *mFilterOther = mFilter->addMenu(tr("其它"));
+    addFilterAction(mFilterOther, tr("高反差保留..."),     filter::FilterKind::HighPass);
+    addFilterAction(mFilterOther, tr("曝光过度..."),       filter::FilterKind::Solarize);
 
     mFilter->addSeparator();
 
-    // P3.3 (2026-09-22): Noise submenu — 3 个 (AddNoise / ReduceNoise / MedianNoise)
-    //   AddNoise 加 Gaussian 噪声, ReduceNoise 用 bilateral filter 降噪,
-    //   MedianNoise 用 median blur 降噪 (PS Filter > Noise > Median 别名菜单)
-    QMenu *mFilterNoise = mFilter->addMenu(tr("噪点"));
-    addFilterAction(mFilterNoise, tr("添加噪点..."),         filter::FilterKind::AddNoise);
-    addFilterAction(mFilterNoise, tr("减少噪点..."),         filter::FilterKind::ReduceNoise);
-    addFilterAction(mFilterNoise, tr("中值降噪..."),         filter::FilterKind::MedianNoise);
-
-    mFilter->addSeparator();
-    // P0 leftover 5 (2026-09-21): Curves / Levels / B&W / ChannelMixer
-    //   standalone dialogs. Each entry pops a non-modal dialog via the
-    //   active ImageWindow's DialogMediator. dialog->applied is routed to
-    //   AdjustmentPanel::setStandaloneParams inside ImageWindow.
+    // ----- 末尾 4 调整型 dialog (standalone) -----
     QAction *aAdjustCurves = mFilter->addAction(tr("曲线 (Curves)..."));
     connect(aAdjustCurves, &QAction::triggered, this, [this]{
         onAdjustDialogTriggered("Curves");
@@ -1020,13 +1092,10 @@ void MainWindow::buildActions()
     connect(aAdjustChannelMixer, &QAction::triggered, this, [this]{
         onAdjustDialogTriggered("ChannelMixer");
     });
-    mFilter->addSeparator();
-    // P1.2.5+6+8 (2026-09-16): Liquify 滤镜 (交互式液化: 6 工具 + 网格 + 冻结 + 撤销)
-    QAction *aFilterLiquify = mFilter->addAction(tr("液化..."));
-    connect(aFilterLiquify, &QAction::triggered, this, [this]{
-        onLiquifyTriggered();
-    });
 }
+
+// =============================================================
+// 自绘标题栏 (L2 方案)
 
 // =============================================================
 // 自绘标题栏 (L2 方案)
@@ -2300,6 +2369,36 @@ void MainWindow::onFilterMenuTriggered(filter::FilterKind kind)
             2000);
     });
     dlg->show();
+}
+
+// P7.3 (2026-10-12): 滤镜 → 转换为智能滤镜
+//   - 拿当前 ImageWindow 活动图层
+//   - 调 convertToSmartObject (in-place Bitmap -> SmartObject)
+//   - 然后 appendSmartFilter 把当前 FilterKind 当作 sub-layer
+//   - 两次操作都走 LayerCommand 入撤销栈 (可 undo)
+//   P7.3 简化: 用 GaussianBlur 作为目标 filter (PS 默认同款), 后续 commit
+//     把"最后一次 filter kind + 强度"持久化到 QSettings, 变成真 "last filter".
+void MainWindow::onConvertToSmartFilter()
+{
+    auto* img = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+    if (!img) {
+        statusBar()->showMessage(tr("当前页面不可转换为智能滤镜 (需要图像窗口)"), 2000);
+        return;
+    }
+    if (img->currentLayerIndex() < 0) {
+        statusBar()->showMessage(tr("没有可用的图层"), 2000);
+        return;
+    }
+    const filter::FilterKind targetKind = filter::FilterKind::GaussianBlur;
+    if (img->convertCurrentLayerToSmartObjectWithFilter(targetKind)) {
+        statusBar()->showMessage(
+            tr("已转换为智能滤镜 (Layer %1 + %2)")
+                .arg(img->currentLayerIndex())
+                .arg(QString::fromUtf8(filter::filterName(targetKind))),
+            3000);
+    } else {
+        statusBar()->showMessage(tr("转换为智能滤镜失败"), 2000);
+    }
 }
 
 // P1.2.5+6+8 (2026-09-16): 启动 Liquify 交互式液化对话框

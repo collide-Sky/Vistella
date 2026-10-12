@@ -141,6 +141,8 @@ private slots:
 
     // P0-5 (2026-09-10): 滤镜菜单 4 action 弹 FilterDialog
     void onFilterMenuTriggered(filter::FilterKind kind);
+    // P7.3 (2026-10-12): 滤镜 → 转换为智能滤镜 — 把当前图层 + GaussianBlur 转 SmartObject+SmartFilter.
+    void onConvertToSmartFilter();
     // P0 leftover 5 (2026-09-21): Curves / Levels / B&W / ChannelMixer
     //   standalone dialog trigger (routes through active ImageWindow's
     //   DialogMediator).
