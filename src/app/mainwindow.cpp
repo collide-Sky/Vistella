@@ -399,67 +399,35 @@ void MainWindow::buildActions()
     mEdit->addAction(m_actFind);
     mEdit->addAction(m_actReplace);
 
+    // P7.2 (2026-10-12): PS 2025 顶部菜单栏重整.
+    //   - 视图: 移除 工作区 submenu (3D/2026-09-02 已删了) + 主页入口 + 信息树入口 +
+    //     右侧面板入口 (dock 自身有 close btn, 不需要菜单).
+    //     保留 zoom + 屏幕模式 + 100%/200% 等 PS 通用项.
+    //   - 工具 → 设置 (rename): 15 工具 entry 移除 (入口全归 LeftToolBar) +
+    //     4 全局设置项保留 (首选项/语言/主题画廊/登录).
+    //   - 15 工具快捷键 (V/M/L/W/C/T/B/I/U/P/S/J) 保留作 QAction + global shortcut,
+    //     不 addAction 到任何菜单 — 改走 onSwitchTool 兜底入口.
+    //   - 增效工具: 空 placeholder (留入口待 P7.11 真做插件管理).
+    //   - 窗口: 全量 — 文档列表 + 工作区 submenu (从视图搬过来) + 平铺/堆叠 +
+    //     关闭所有 / 全部最小化.
     QMenu *mView = mb->addMenu(tr("视图"));
-    QAction *actShowHome = mView->addAction(tr("主页"));
-    actShowHome->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+H")));
-    connect(actShowHome, &QAction::triggered, this, &MainWindow::switchToHomePage);
-    mView->addSeparator();
-    // 信息树: checkable action, 同步显示/隐藏 + 勾选状态
-    QAction *actInfoTree = mView->addAction(tr("信息树"));
-    actInfoTree->setCheckable(true);
-    actInfoTree->setShortcut(QKeySequence(QStringLiteral("Ctrl+I")));
-    if (m_infoDock) actInfoTree->setChecked(m_infoDock->isVisible());
-    connect(actInfoTree, &QAction::toggled, this, [this](bool on){
-        if (m_infoDock) m_infoDock->setVisible(on);
-    });
-    // Stage D (2026-09-15): 右侧 panel toggle (ImageWindow::setRightPanelVisible)
-    //   解决原 bug: setGeometry 浮动覆盖 + 没 toggle 入口
-    //   现在 QDockWidget 容器 + 菜单 toggle, dock 关闭后菜单项仍在
-    QAction *actRightPanel = mView->addAction(tr("右侧面板"));
-    actRightPanel->setCheckable(true);
-    actRightPanel->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+R")));
-    actRightPanel->setChecked(true);  // 默认显示
-    connect(actRightPanel, &QAction::toggled, this, [this](bool on){
-        if (auto* img = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()))) {
-            img->setRightPanelVisible(on);
-        }
-    });
-    // 切到 imagewindow 时同步菜单勾选状态 (dock 状态可能因其他操作变化)
-    //   Stage D 后续优化: emit visibilityChanged 信号接 menu state 同步
     mView->addAction(m_actZoomIn);
     mView->addAction(m_actZoomOut);
     mView->addAction(m_actResetLayout);
+    mView->addSeparator();
+    QAction *aFitScreen = mView->addAction(tr("适合屏幕"));
+    aFitScreen->setShortcut(QKeySequence(QStringLiteral("Ctrl+0")));
+    connect(aFitScreen, &QAction::triggered, this, [this]() {
+        auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+        if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
+        iw->onFitWindow();
+    });
 
-    // F-F (2026-09-09): 工作区 submenu (4 个 checkable action + QActionGroup 互斥)
-    //   触发 action -> m_workspaceMed->switchWorkspace(id)
-    //   m_workspaceMed 临时 mainwindow 持有, F-G 改 imagewindow 共享
-    QMenu *mWorkspace = mView->addMenu(tr("工作区"));
-    QActionGroup *wsGroup = new QActionGroup(this);
-    wsGroup->setExclusive(true);
-    auto addWsAction = [this, mWorkspace, wsGroup](mediators::WorkspaceId id, const QString& label) {
-        QAction *a = mWorkspace->addAction(label);
-        a->setCheckable(true);
-        if (m_workspaceMed && m_workspaceMed->currentWorkspace() == id) {
-            a->setChecked(true);
-        }
-        wsGroup->addAction(a);
-        connect(a, &QAction::triggered, this, [this, id]() {
-            if (m_workspaceMed) m_workspaceMed->switchWorkspace(id);
-        });
-    };
-    addWsAction(mediators::WorkspaceId::Basic, tr("基本功能"));
-    addWsAction(mediators::WorkspaceId::Photo, tr("摄影"));
-    addWsAction(mediators::WorkspaceId::Paint, tr("绘画"));
-    addWsAction(mediators::WorkspaceId::Web,   tr("Web"));
-    // (主题切换已统一到标题栏 user btn 旁的 ☀ 按钮, 不再放进菜单避免重复)
-    //   m_actToggleTheme 字段保留 + 快捷键 Ctrl+T, 但不 addAction 到任何菜单
-
-    // (3D 模块已移除, 模式菜单删除, 2026-09-02)
-
-    QMenu *mTools = mb->addMenu(tr("工具"));
-    // Q4.4 (2026-10-08): 工具栏 15 个工具入口 (PS 标准快捷键).
-    //   之前 Tools 菜单只有 Settings/Lang/Theme/Login 4 项, 现在补上 15 个工具.
-    //   点击通过 onSwitchTool(ToolId) 转发到活动 ImageWindow 的 m_toolMed.
+    // P7.2: 15 工具快捷键全局注册 (Ctrl+B/V/M/L/W/C/T/I/U/P/S/J/X/Y).
+    //   - 不 addAction 到菜单 — 入口全归 LeftToolBar (P7.1 已落地 PS 紧凑布局).
+    //   - 快捷键经过 MainWindow 时直接转发到 onSwitchTool, 跟用户按 LeftToolBar
+    //     按钮等效 (因为菜单已无入口, 防止快捷键失效).
+    //   - 字段保留在 m_globalToolActions 防止 GC, MainWindow 销毁时一起回收.
     {
         struct Entry { const char* text; mediators::ToolId id; const char* shortcut; };
         const Entry toolEntries[] = {
@@ -480,27 +448,89 @@ void MainWindow::buildActions()
             {"蒙版画笔 (MaskBrush)",  mediators::ToolId::MaskBrush,  ""},
         };
         for (const auto& e : toolEntries) {
-            auto* act = mTools->addAction(tr(e.text));
+            auto* act = new QAction(tr(e.text), this);
             if (e.shortcut && e.shortcut[0]) {
                 act->setShortcut(QKeySequence(QString::fromLatin1(e.shortcut)));
             }
+            // 关键: 关联 MainWindow 为 shortcutContext, 不 addAction 到任何菜单也能
+            // 接收全局快捷键 (Qt widget + QAction + shortcutContext = MainWindow).
+            act->setShortcutContext(Qt::ApplicationShortcut);
             connect(act, &QAction::triggered, this, [this, id = e.id]() {
                 onSwitchTool(id);
             });
+            addAction(act);
+            m_globalToolActions.push_back(act);
         }
-        mTools->addSeparator();
     }
-    QAction *aSettings = mTools->addAction(tr("首选项..."));
+
+    // P7.2: 工具 → 设置 改名 (PS 标准).
+    //   15 工具 entry 已迁出到 LeftToolBar + 全局快捷键; 保留 4 全局设置项.
+    //   同时解决 Ctrl+T 冲突: 自由变换 (编辑) 跟 主题切换冲突 — 优先级 Qt 自动处理,
+    //   但为避免歧义把主题切换 (m_actToggleTheme Ctrl+T) 改名无快捷键 (走标题栏 ☀).
+    QMenu *mSetup = mb->addMenu(tr("设置"));
+    QAction *aSettings = mSetup->addAction(tr("首选项..."));
     connect(aSettings, &QAction::triggered, this, &MainWindow::onSettings);
-    QAction *aLang = mTools->addAction(tr("语言"));
+    QAction *aLang = mSetup->addAction(tr("语言"));
     connect(aLang, &QAction::triggered, this, &MainWindow::onSettings);
-    // 阶段 0 第 10 步: 主题画廊 + 登录 (UI 骨架, 阶段 5+ 真接入 ThemeManager/AuthClient)
-    QAction *aTheme = mTools->addAction(tr("主题画廊..."));
+    QAction *aTheme = mSetup->addAction(tr("主题画廊..."));
     connect(aTheme, &QAction::triggered, this, &MainWindow::onShowThemeGallery);
-    QAction *aLogin = mTools->addAction(tr("登录..."));
+    QAction *aLogin = mSetup->addAction(tr("登录..."));
     connect(aLogin, &QAction::triggered, this, &MainWindow::onShowLogin);
-    // (主题切换从工具菜单移除, 统一从标题栏 ☀ 进入, 2026-09-02)
-    //   后续加"选择主题"页面也通过标题栏 ☀ 按钮触发
+
+    // P7.2: 增效工具 (占位) — PS 标准 11 菜单的第 9 个, 现在只放空 placeholder,
+    //   后续 P7.11 真接入插件管理 (动态加载 .so / .dll).
+    QMenu *mPlugins = mb->addMenu(tr("增效工具"));
+    QAction *aPluginsMgr = mPlugins->addAction(tr("增效工具管理器..."));
+    aPluginsMgr->setEnabled(false);   // P7.11 实装
+    m_pluginsMenu = mPlugins;          // 留 menu 句柄供后续动态加载入口
+
+    // P7.2: 窗口 (全量) — PS 标准 11 菜单的第 10 个.
+    //   - 文档列表: 列所有打开 ImageWindow, click 切到 (切到 m_tabWidget->setCurrentIndex)
+    //   - 工作区 submenu: Basic/Photo/Paint/Web (4 个 QActionGroup 互斥), 从视图搬过来
+    //   - 平铺 / 堆叠 / 关闭所有 / 全部最小化 (Qt QMainWindow::tile + cascade + closeAllSubWindows)
+    QMenu *mWindow = mb->addMenu(tr("窗口"));
+    QMenu *mDocs = mWindow->addMenu(tr("文档"));
+    m_docsMenu = mDocs;                  // 暴露以便监听 ImageWindow 增删时刷新
+    rebuildDocsMenu(mDocs);
+    mWindow->addSeparator();
+    QAction *aCascade = mWindow->addAction(tr("堆叠文档"));
+    aCascade->setEnabled(false);   // P7.2: tab-based UI 不支持 MDI, 灰态占位
+    QAction *aTile = mWindow->addAction(tr("平铺文档"));
+    aTile->setEnabled(false);     // P7.2: tab-based UI 不支持 MDI, 灰态占位
+    QAction *aMinAll = mWindow->addAction(tr("全部最小化"));
+    connect(aMinAll, &QAction::triggered, this, [this]() {
+        showMinimized();
+    });
+    QAction *aCloseAll = mWindow->addAction(tr("关闭所有文档"));
+    connect(aCloseAll, &QAction::triggered, this, [this]() {
+        if (ui && ui->tabWidget) {
+            const int n = ui->tabWidget->count();
+            for (int i = n - 1; i >= 0; --i) {
+                onTabCloseRequested(i);
+            }
+        }
+    });
+    mWindow->addSeparator();
+    // 工作区 submenu — 从旧 视图.menu 搬过来.
+    QMenu *mWorkspace = mWindow->addMenu(tr("工作区"));
+    QActionGroup *wsGroup = new QActionGroup(this);
+    wsGroup->setExclusive(true);
+    auto addWsAction = [this, mWorkspace, wsGroup](mediators::WorkspaceId id, const QString& label) {
+        QAction *a = mWorkspace->addAction(label);
+        a->setCheckable(true);
+        if (m_workspaceMed && m_workspaceMed->currentWorkspace() == id) {
+            a->setChecked(true);
+        }
+        wsGroup->addAction(a);
+        connect(a, &QAction::triggered, this, [this, id]() {
+            if (m_workspaceMed) m_workspaceMed->switchWorkspace(id);
+        });
+    };
+    addWsAction(mediators::WorkspaceId::Basic, tr("基本功能"));
+    addWsAction(mediators::WorkspaceId::Photo, tr("摄影"));
+    addWsAction(mediators::WorkspaceId::Paint, tr("绘画"));
+    addWsAction(mediators::WorkspaceId::Web,   tr("Web"));
+    m_windowMenu = mWindow;
 
     QMenu *mHelp = mb->addMenu(tr("帮助"));
     QAction *aAbout = mHelp->addAction(tr("关于 Vistella"));
@@ -1253,6 +1283,13 @@ void MainWindow::buildInfoTree()
             this, &MainWindow::onTabChanged);
     connect(ui->tabWidget, &QTabWidget::tabCloseRequested,
             this, &MainWindow::onTabCloseRequested);
+    // P7.2 (2026-10-12): 窗口 → 文档 submenu 动态重排 (增删/切 tab 自动刷新).
+    //   注: QTabWidget 没有 tabInserted signal (它只在内部用), 但 new tab
+    //   addTab 后会触发 currentChanged (-1 -> 0), 删 tab 由 tabCloseRequested
+    //   触发, 两个 signal 一起已覆盖所有 tab 状态变化.
+    auto refreshDocsMenu = [this]() { if (m_docsMenu) rebuildDocsMenu(m_docsMenu); };
+    connect(ui->tabWidget, &QTabWidget::currentChanged, this, [refreshDocsMenu](int){ refreshDocsMenu(); });
+    connect(ui->tabWidget, &QTabWidget::tabCloseRequested, this, [refreshDocsMenu](int){ refreshDocsMenu(); });
 
     // 右键菜单
     ui->tabWidget->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -1690,6 +1727,40 @@ void MainWindow::onCloseSameType()
         if (i == -1) continue;
         if (i == cur) continue;
         if (docTypeOf(widgetAt(i)) == curType) onTabCloseRequested(i);
+    }
+}
+
+// P7.2 (2026-10-12): 窗口 → 文档 submenu 动态重排 + tabWidget 信号接听.
+ImageWindow* MainWindow::activeImageWindow() const
+{
+    if (!ui || !ui->tabWidget) return nullptr;
+    return qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
+}
+
+void MainWindow::rebuildDocsMenu(QMenu* docsMenu)
+{
+    if (!docsMenu) return;
+    docsMenu->clear();
+    if (!ui || !ui->tabWidget) return;
+    const int cur = ui->tabWidget->currentIndex();
+    const int n = ui->tabWidget->count();
+    if (n == 0) {
+        QAction* aNone = docsMenu->addAction(tr("(无打开文档)"));
+        aNone->setEnabled(false);
+        return;
+    }
+    QActionGroup* group = new QActionGroup(docsMenu);
+    group->setExclusive(true);
+    for (int i = 0; i < n; ++i) {
+        QString text = ui->tabWidget->tabText(i);
+        if (text.isEmpty()) text = tr("文档 %1").arg(i + 1);
+        QAction* a = docsMenu->addAction(text);
+        a->setCheckable(true);
+        a->setChecked(i == cur);
+        group->addAction(a);
+        connect(a, &QAction::triggered, this, [this, i]() {
+            if (ui && ui->tabWidget) ui->tabWidget->setCurrentIndex(i);
+        });
     }
 }
 

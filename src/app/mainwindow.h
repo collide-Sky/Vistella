@@ -6,6 +6,7 @@
 #include <QStringList>
 #include <QFrame>
 #include <QPushButton>
+#include <QList>
 #include <memory>
 
 QT_BEGIN_NAMESPACE
@@ -337,6 +338,24 @@ private:
 
     // 顶部全局命令栏 (主题按钮 + 后续全局设置按钮)
     class QToolBar *m_globalBar = nullptr;
+
+    // P7.2 (2026-10-12): PS 标准 11 顶部菜单新增集合 —
+    //   - m_globalToolActions: 15 工具 QAction 数组 (无菜单入口, 仅全局快捷键)
+    //   - m_docsMenu: 窗口 → 文档 submenu (动态列 open ImageWindow)
+    //   - m_pluginsMenu: 增效工具 menu (空 placeholder, P7.11 实装)
+    //   - m_windowMenu: 窗口 menu 句柄
+    QList<QAction*>  m_globalToolActions;
+    QMenu*           m_docsMenu    = nullptr;
+    QMenu*           m_pluginsMenu = nullptr;
+    QMenu*           m_windowMenu  = nullptr;
+
+    // P7.2 (2026-10-12): 窗口 → 文档 submenu 动态刷新.
+    //   监听 ui->tabWidget->tabInserted/tabCloseRequested, 重建 submenu 列出
+    //   当前所有 ImageWindow (label = tab 文本, 可点击切换).
+    void rebuildDocsMenu(QMenu* docsMenu);
+
+    // P7.2: 活动 ImageWindow (当前 tab). 用于窗口 → 平铺/堆叠/最小化等.
+    ImageWindow* activeImageWindow() const;
 };
 
 #endif // MAINWINDOW_H

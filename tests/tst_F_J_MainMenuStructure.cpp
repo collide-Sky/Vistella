@@ -22,18 +22,25 @@ private slots:
 
 void tst_F_J_MainMenuStructure::tenMenuNamesExpected()
 {
-    // F-A.1 (5 个) + F-J (5 个) = 10 个主菜单
+    // F-A.1 (5 个) + F-J (5 个) = 10 个主菜单 (历史 PS 2021 同款).
+    // P7.2 (2026-10-12): PS 2025 11 菜单 — 工具 → 设置 (rename), 加 增效工具 + 窗口.
     QStringList expected = {
         "文件", "编辑", "图像", "图层", "文字",
-        "选择", "滤镜", "视图", "工具", "帮助"
+        "选择", "滤镜", "视图", "设置", "增效工具", "窗口", "帮助"
     };
-    QCOMPARE(expected.size(), 10);
+    QCOMPARE(expected.size(), 12);   // 文件/编辑/图像/图层/文字/选择/滤镜/视图/设置/增效工具/窗口/帮助
     // 验证 F-J 新加的 5 个都在
     QVERIFY(expected.contains("图像"));
     QVERIFY(expected.contains("图层"));
     QVERIFY(expected.contains("文字"));
     QVERIFY(expected.contains("选择"));
     QVERIFY(expected.contains("滤镜"));
+    // P7.2 验证: 改名 + 新增 2 个
+    QVERIFY(expected.contains("设置"));
+    QVERIFY(expected.contains("增效工具"));
+    QVERIFY(expected.contains("窗口"));
+    // 旧的 "工具" 没了 (已被 "设置" 替换)
+    QVERIFY(!expected.contains("工具"));
 }
 
 void tst_F_J_MainMenuStructure::menuActions_5to8Each()
