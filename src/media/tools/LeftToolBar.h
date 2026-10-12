@@ -46,9 +46,34 @@ public:
     // Disable a tool (e.g. when no image loaded)
     void setToolEnabled(mediators::ToolId id, bool enabled);
 
+    // P7.1: PS-style fg/bg double-click swap (event filter).
+    bool eventFilter(QObject* watched, QEvent* event);
+
+    // P7.1 (2026-10-12): PS-style foreground / background color accessors.
+    //   fg/bg swatches (50x50 fg + 10x50 bg) live in the bottom strip of
+    //   this dock and stay in lockstep with ColorDock. Click fg / bg to
+    //   open QColorDialog; double-click triggers swap. Click the small
+    //   "swapBtn" arrow to swap manually.
+    QColor foregroundColor() const { return m_fgColor; }
+    QColor backgroundColor() const { return m_bgColor; }
+    void   setForegroundColor(const QColor& c);
+    void   setBackgroundColor(const QColor& c);
+    void   swapColors();
+    void   defaultColors();
+
+signals:
+    void foregroundColorChanged(const QColor& c);
+    void backgroundColorChanged(const QColor& c);
+
 private slots:
     // ToolMediator 信号
     void onToolMediatorSwitched(mediators::ToolId id);
+    // P7.1: fg/bg swatch interaction.
+    void onFgSwatchClicked();
+    void onBgSwatchClicked();
+    void onSwapBtnClicked();
+    void onFgSwatchDoubleClicked();
+    void onBgSwatchDoubleClicked();
 
 private:
     // 8 工具 factory (F-L 2026-09-10: 加 RectSelect/Lasso/MagicWand/Crop/Text/Brush)
@@ -70,10 +95,17 @@ private:
     // P1.3.4 (2026-09-17): MaskBrush factory (像素蒙版画笔)
     static ToolState* createMaskBrushTool();
 
+    // P7.1: paint fg/bg swatch widget.
+    void paintColorSwatch(QWidget* w, const QColor& c);
+
     QHash<mediators::ToolId, QToolButton*> m_buttons;
 
     mediators::ToolMediator* m_toolMed = nullptr;  // weak ref
     ToolContext*             m_ctx     = nullptr;  // weak ref
+
+    // P7.1: fg/bg state.
+    QColor m_fgColor = Qt::black;
+    QColor m_bgColor = Qt::white;
 
     Ui::LeftToolBar* ui = nullptr;  // .ui auto-generated (F-P.3 2026-09-09)
 };

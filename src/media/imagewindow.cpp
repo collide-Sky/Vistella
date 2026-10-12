@@ -405,9 +405,22 @@ ImageWindow::ImageWindow(QWidget *parent)
     // P6 (2026-10-09): wire RightPanelDock connectors that were dangling before.
     //   Color fg/bg -> current Brush paint color; ChannelPathPanel selection
     //   save/load + Quick Mask three-way sync (AppBar / ChannelPathPanel / tool).
+    // P7.1 (2026-10-12): extend ColorDock fg/bg to also push into LeftToolBar
+    //   so the swatches at the bottom of the left toolbar stay in lockstep
+    //   with the right-side Color dock (PS 风格 one swatch, two docks).
+    //   Echo loops are guarded by the `if (m_xxx == c) return;` early-out in
+    //   both setters, so the chain terminates after the first round.
     if (auto* colorDock = m_rightDock->colorDock()) {
         connect(colorDock, &docks::ColorDock::foregroundColorChanged,
                 this, &ImageWindow::onForegroundColorChanged);
+        connect(colorDock, &docks::ColorDock::foregroundColorChanged,
+                this, [this](const QColor& c) {
+                    if (m_leftToolBar) m_leftToolBar->setForegroundColor(c);
+                });
+        connect(colorDock, &docks::ColorDock::backgroundColorChanged,
+                this, [this](const QColor& c) {
+                    if (m_leftToolBar) m_leftToolBar->setBackgroundColor(c);
+                });
     }
     if (auto* selPanel = m_rightDock->channelPathPanel()) {
         connect(selPanel, &docks::ChannelPathPanel::saveSelectionRequested,
@@ -452,6 +465,18 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_leftToolBar = std::make_unique<tools::LeftToolBar>();
     m_leftToolBar->attach(m_toolMed.get(), m_ctx.get());
 
+    // P7.1 (2026-10-12): reverse direction sync — when LeftToolBar swatch is
+    //   picked / swapped / defaulted (typically via PS-style X/D shortcuts
+    //   handled in the dock itself), push the change into ColorDock so the
+    //   right-side color picker reflects the same fg/bg. Echo is prevented
+    //   by the `if (m_xxx == c) return;` guard in ColorDock::setXxxColor.
+    if (auto* colorDock = m_rightDock->colorDock()) {
+        connect(m_leftToolBar.get(), &tools::LeftToolBar::foregroundColorChanged,
+                colorDock, &docks::ColorDock::setForegroundColor);
+        connect(m_leftToolBar.get(), &tools::LeftToolBar::backgroundColorChanged,
+                colorDock, &docks::ColorDock::setBackgroundColor);
+    }
+
     m_leftDockContainer = new QDockWidget(this);
     m_leftDockContainer->setObjectName(QStringLiteral("leftDockContainer"));
     m_leftDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
@@ -463,8 +488,10 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_leftDockContainer->setWidget(m_leftToolBar.release());
 
     addDockWidget(Qt::LeftDockWidgetArea, m_leftDockContainer);
-    // PS 风格工具栏宽 64px (2 列 32px 按钮 + 4px margin)
-    resizeDocks({m_leftDockContainer}, {64}, Qt::Horizontal);
+    // P7.1 (2026-10-12): PS 风格工具栏缩到 56px (2 列 28px 按钮 + 0 spacing).
+    //   之前 Q4.2.1 占位 64px 是按 32px btn + 4 margin 算的, 现在 P7.1 ui 收紧
+    //   到 28px btn + 0 margin, 总宽 56px (PS 实际风格).
+    resizeDocks({m_leftDockContainer}, {56}, Qt::Horizontal);
 
     // Q4.2.3 (2026-09-24): ModeSelectorBar 二级模式选择栏 (LeftToolBar 下方, ImageOptionBar 上方)
     //   5 tools (Crop/MagicWand/Lasso/Brush/Eyedropper) 共享 1 个 widget, 按 currentToolId

@@ -165,12 +165,13 @@ void ModeSelectorBar::rebuildPages()
     m_pageEyedropper.widget->setObjectName(QStringLiteral("pageEyedropper"));
 
     // ===== Page: Empty (fallback for tools we don't handle) =====
+    // P7.1 (2026-10-12): 之前放一个灰色 "(no secondary mode for current tool)"
+    //   占位 label; PS 风格下这种 hint 太抢眼, 跟左侧工具栏的紧凑风格冲突.
+    //   改为纯空 page — user 切到没二级模式的工具 (Move/Text/Shape etc.) 时,
+    //   bar 自身依然显示高度但内部留白, 不放标签也不放占位.
     m_pageEmpty.widget = new QWidget(this);
     auto* emptyLay = new QHBoxLayout(m_pageEmpty.widget);
     emptyLay->setContentsMargins(0, 0, 0, 0);
-    auto* hint = new QLabel(QStringLiteral("(no secondary mode for current tool)"), m_pageEmpty.widget);
-    hint->setStyleSheet(QStringLiteral("color: gray; font-size: 9pt;"));
-    emptyLay->addWidget(hint);
     emptyLay->addStretch(1);
 
     // Q4.2.4 fix: 把 5 个 page widget 全加到 QStackedWidget, showPageForTool 用

@@ -37,6 +37,13 @@ private slots:
     void test_setToolEnabled();
     void test_None_unchecks_all();
     void test_all_8_tools_clickable();   // F-L: 8 工具 button click → Mediator switchTool
+    // P7.1 (2026-10-12): PS-style fg/bg swatch double-click swap + sync.
+    void test_initial_fg_black_bg_white();
+    void test_setForegroundColor_emits();
+    void test_setBackgroundColor_emits();
+    void test_swapColors();
+    void test_defaultColors();
+    void test_setColor_no_change_no_emit();
 };
 
 void tst_LeftToolBar::initTestCase()
@@ -53,8 +60,9 @@ void tst_LeftToolBar::test_default_8_buttons()
     //   P0-9.4 (2026-09-15): +6 按钮 (Shape / Pen / Clone / Heal / Patch / RedEye) = 14
     //   Q4.2.1 (2026-09-23): +1 按钮 (MaskBrush P1.3.4 像素蒙版画笔) = 15
     //   Q4.2.4 (2026-10-08): 数量不变, 仍 15
+    //   P7.1 (2026-10-12): +3 fgSwatch + bgSwatch + swapBtn (都是 QToolButton) = 18.
     auto btns = bar.findChildren<QToolButton*>();
-    QCOMPARE(btns.size(), 15);
+    QCOMPARE(btns.size(), 18);
 }
 
 void tst_LeftToolBar::test_button_letter_codes()
@@ -196,6 +204,76 @@ void tst_LeftToolBar::test_all_8_tools_clickable()
         btn->click();
         QCOMPARE(qvariant_cast<ToolId>(spy.at(spy.count()-1).at(0)), expectedId);
     }
+}
+
+// ============== P7.1 (2026-10-12): fg/bg swatch API ==============
+
+void tst_LeftToolBar::test_initial_fg_black_bg_white()
+{
+    LeftToolBar bar;
+    QCOMPARE(bar.foregroundColor(), QColor(Qt::black));
+    QCOMPARE(bar.backgroundColor(), QColor(Qt::white));
+}
+
+void tst_LeftToolBar::test_setForegroundColor_emits()
+{
+    LeftToolBar bar;
+    QSignalSpy spy(&bar, &LeftToolBar::foregroundColorChanged);
+    bar.setForegroundColor(QColor(255, 0, 0));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(qvariant_cast<QColor>(spy.at(0).at(0)), QColor(255, 0, 0));
+    QCOMPARE(bar.foregroundColor(), QColor(255, 0, 0));
+}
+
+void tst_LeftToolBar::test_setBackgroundColor_emits()
+{
+    LeftToolBar bar;
+    QSignalSpy spy(&bar, &LeftToolBar::backgroundColorChanged);
+    bar.setBackgroundColor(QColor(0, 255, 0));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(qvariant_cast<QColor>(spy.at(0).at(0)), QColor(0, 255, 0));
+    QCOMPARE(bar.backgroundColor(), QColor(0, 255, 0));
+}
+
+void tst_LeftToolBar::test_swapColors()
+{
+    LeftToolBar bar;
+    bar.setForegroundColor(QColor(255, 0, 0));
+    bar.setBackgroundColor(QColor(0, 0, 255));
+    QSignalSpy fgSpy(&bar, &LeftToolBar::foregroundColorChanged);
+    QSignalSpy bgSpy(&bar, &LeftToolBar::backgroundColorChanged);
+    bar.swapColors();
+    // fg becomes old bg, bg becomes old fg -> 2 emits.
+    QCOMPARE(fgSpy.count(), 1);
+    QCOMPARE(bgSpy.count(), 1);
+    QCOMPARE(bar.foregroundColor(), QColor(0, 0, 255));
+    QCOMPARE(bar.backgroundColor(), QColor(255, 0, 0));
+}
+
+void tst_LeftToolBar::test_defaultColors()
+{
+    LeftToolBar bar;
+    bar.setForegroundColor(QColor(255, 0, 0));
+    bar.setBackgroundColor(QColor(0, 0, 255));
+    QSignalSpy fgSpy(&bar, &LeftToolBar::foregroundColorChanged);
+    QSignalSpy bgSpy(&bar, &LeftToolBar::backgroundColorChanged);
+    bar.defaultColors();
+    QCOMPARE(fgSpy.count(), 1);
+    QCOMPARE(bgSpy.count(), 1);
+    QCOMPARE(bar.foregroundColor(), QColor(Qt::black));
+    QCOMPARE(bar.backgroundColor(), QColor(Qt::white));
+}
+
+void tst_LeftToolBar::test_setColor_no_change_no_emit()
+{
+    // P7.1: 设置跟当前相同的颜色不应触发 signal (echo 防护).
+    LeftToolBar bar;
+    QSignalSpy fgSpy(&bar, &LeftToolBar::foregroundColorChanged);
+    QSignalSpy bgSpy(&bar, &LeftToolBar::backgroundColorChanged);
+    bar.setForegroundColor(Qt::black);   // 初始就是黑
+    bar.setBackgroundColor(Qt::white);   // 初始就是白
+    QCOMPARE(fgSpy.count(), 0);
+    QCOMPARE(bgSpy.count(), 0);
 }
 
 QTEST_MAIN(tst_LeftToolBar)

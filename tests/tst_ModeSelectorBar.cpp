@@ -107,9 +107,13 @@ void tst_ModeSelectorBar::test_attach_syncInitial_nonePage()
     QVERIFY(stacked);
     QCOMPARE(stacked->currentIndex(), kEmptyIdx);
 
-    // empty page 的 QLabel hint 存在
+    // P7.1 (2026-10-12): empty page 之前放灰色 "(no secondary mode for current tool)"
+    //   QLabel hint; P7.1 改为纯空 page, 不再放 hint label (跟 PS 风格一致 — 左
+    //   侧工具栏切换工具时统一 hint 留给 LeftToolBar 的 toolTip, ModeSelectorBar
+    //   自身在没二级模式的工具下保持空白).
+    //   验证: empty page 里 0 个 QLabel.
     auto labels = bar.findChildren<QLabel*>();
-    QVERIFY(!labels.isEmpty());
+    QVERIFY2(labels.isEmpty(), "P7.1 expects no QLabel hint in empty page");
 }
 
 void tst_ModeSelectorBar::test_toolChanged_magicWand_showsSelectionPage()

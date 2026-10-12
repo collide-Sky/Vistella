@@ -13,6 +13,8 @@
 #include <QGridLayout>
 #include <QIcon>
 #include <QStyle>
+#include <QPalette>
+#include <QColorDialog>
 
 namespace tools {
 
@@ -71,11 +73,124 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     // Q4.2.1 (2026-09-23): MaskBrush 按钮加到 ui (P1.3.4 之前只 switchTool
     //   路由没按钮 — Q4.2 拍板"不放注释",所以 MaskBrush 也必须有可见入口)
     m_buttons[mediators::ToolId::MaskBrush]  = ui->btnMaskBrush;
+
+    // P7.1 (2026-10-12): PS-style fg/bg swatch (50x50 fg + 10x50 bg).
+    //   Initial paint + click handlers; double-click = swap. The swatches
+    //   stay in lockstep with ColorDock via foregroundColorChanged /
+    //   backgroundColorChanged signals.
+    paintColorSwatch(ui->fgSwatch, m_fgColor);
+    paintColorSwatch(ui->bgSwatch, m_bgColor);
+    if (ui->fgSwatch) {
+        connect(ui->fgSwatch, &QToolButton::clicked,
+                this, &LeftToolBar::onFgSwatchClicked);
+    }
+    if (ui->bgSwatch) {
+        connect(ui->bgSwatch, &QToolButton::clicked,
+                this, &LeftToolBar::onBgSwatchClicked);
+    }
+    if (ui->swapBtn) {
+        connect(ui->swapBtn, &QToolButton::clicked,
+                this, &LeftToolBar::onSwapBtnClicked);
+    }
+    // P7.1: PS-style double-click swap on fg/bg swatch (event filter).
+    if (ui->fgSwatch) ui->fgSwatch->installEventFilter(this);
+    if (ui->bgSwatch) ui->bgSwatch->installEventFilter(this);
 }
 
 LeftToolBar::~LeftToolBar()
 {
     delete ui;
+}
+
+// P7.1 (2026-10-12): fg/bg setter / swatch paint / click handlers.
+
+void LeftToolBar::setForegroundColor(const QColor& c)
+{
+    if (m_fgColor == c) return;
+    m_fgColor = c;
+    if (ui && ui->fgSwatch) paintColorSwatch(ui->fgSwatch, c);
+    LOG_INFO("[LeftToolBar] foregroundColor: {}", c.name().toStdString());
+    emit foregroundColorChanged(c);
+}
+
+void LeftToolBar::setBackgroundColor(const QColor& c)
+{
+    if (m_bgColor == c) return;
+    m_bgColor = c;
+    if (ui && ui->bgSwatch) paintColorSwatch(ui->bgSwatch, c);
+    LOG_INFO("[LeftToolBar] backgroundColor: {}", c.name().toStdString());
+    emit backgroundColorChanged(c);
+}
+
+void LeftToolBar::swapColors()
+{
+    QColor tmp = m_fgColor;
+    setForegroundColor(m_bgColor);  // emits
+    setBackgroundColor(tmp);        // emits
+}
+
+void LeftToolBar::defaultColors()
+{
+    setForegroundColor(Qt::black);  // emits
+    setBackgroundColor(Qt::white);  // emits
+}
+
+void LeftToolBar::onFgSwatchClicked()
+{
+    QColor c = QColorDialog::getColor(m_fgColor, this, "前景色");
+    if (c.isValid() && c != m_fgColor) {
+        setForegroundColor(c);
+    }
+}
+
+void LeftToolBar::onBgSwatchClicked()
+{
+    QColor c = QColorDialog::getColor(m_bgColor, this, "背景色");
+    if (c.isValid() && c != m_bgColor) {
+        setBackgroundColor(c);
+    }
+}
+
+void LeftToolBar::onSwapBtnClicked()
+{
+    swapColors();
+}
+
+void LeftToolBar::onFgSwatchDoubleClicked()
+{
+    // PS-style: 双击 fg = swap.
+    swapColors();
+}
+
+void LeftToolBar::onBgSwatchDoubleClicked()
+{
+    // PS-style: 双击 bg = swap.
+    swapColors();
+}
+
+void LeftToolBar::paintColorSwatch(QWidget* w, const QColor& c)
+{
+    if (!w) return;
+    QPalette p = w->palette();
+    p.setColor(QPalette::Button, c);
+    p.setColor(QPalette::Window, c);
+    w->setPalette(p);
+    w->setAutoFillBackground(true);
+}
+
+// P7.1 (2026-10-12): PS-style fg/bg swatch double-click = swap.
+//   Install event filter on fgSwatch + bgSwatch so we can intercept
+//   QEvent::MouseButtonDblClick and trigger swap (instead of opening
+//   picker like single-click does).
+bool LeftToolBar::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event->type() == QEvent::MouseButtonDblClick) {
+        if (watched == ui->fgSwatch || watched == ui->bgSwatch) {
+            swapColors();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 ToolState* LeftToolBar::createMoveTool()       { return createToolState(mediators::ToolId::Move); }

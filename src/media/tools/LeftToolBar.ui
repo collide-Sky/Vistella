@@ -6,174 +6,238 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>72</width>
-    <height>148</height>
+    <width>56</width>
+    <height>340</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>72</width>
-    <height>36</height>
+    <width>56</width>
+    <height>0</height>
    </size>
   </property>
-  <property name="windowTitle">
-   <string>Form</string>
+  <property name="maximumSize">
+   <size>
+    <width>56</width>
+    <height>16777215</height>
+   </size>
   </property>
-  <layout class="QGridLayout" name="gridLayout">
-   <property name="leftMargin">2</property>
-   <property name="topMargin">2</property>
-   <property name="rightMargin">2</property>
-   <property name="bottomMargin">2</property>
-   <property name="spacing">2</property>
-   <item row="0" column="0">
-    <widget class="QToolButton" name="btnMove">
-     <property name="text"><string>M</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Move (V)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="leftMargin">0</property>
+   <property name="topMargin">0</property>
+   <property name="rightMargin">0</property>
+   <property name="bottomMargin">0</property>
+   <property name="spacing">0</property>
+   <!-- P7.1 (2026-10-12): PS-style tight 2-column tool grid.
+        Each tool button is 28x28, no margin, zero spacing. Total width 56. -->
+   <item>
+    <widget class="QWidget" name="toolGridContainer">
+     <property name="minimumSize">
+      <size><width>0</width><height>0</height></size>
+     </property>
+     <layout class="QGridLayout" name="gridLayout">
+      <property name="leftMargin">0</property>
+      <property name="topMargin">0</property>
+      <property name="rightMargin">0</property>
+      <property name="bottomMargin">0</property>
+      <property name="spacing">0</property>
+      <item row="0" column="0">
+       <widget class="QToolButton" name="btnMove">
+        <property name="text"><string>M</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Move</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QToolButton" name="btnRectSelect">
+        <property name="text"><string>R</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Rectangular Marquee</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QToolButton" name="btnLasso">
+        <property name="text"><string>L</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Lasso (L)</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QToolButton" name="btnMagicWand">
+        <property name="text"><string>W</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Magic Wand (W)</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QToolButton" name="btnCrop">
+        <property name="text"><string>C</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Crop</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QToolButton" name="btnText">
+        <property name="text"><string>T</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Text</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QToolButton" name="btnBrush">
+        <property name="text"><string>B</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Brush</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QToolButton" name="btnEyedropper">
+        <property name="text"><string>I</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Eyedropper</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QToolButton" name="btnShape">
+        <property name="text"><string>Sh</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Shape</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QToolButton" name="btnPen">
+        <property name="text"><string>Pn</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Pen</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QToolButton" name="btnClone">
+        <property name="text"><string>Cl</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Clone Stamp</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QToolButton" name="btnHeal">
+        <property name="text"><string>Hl</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Healing Brush</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="6" column="0">
+       <widget class="QToolButton" name="btnPatch">
+        <property name="text"><string>Pt</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Patch</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <widget class="QToolButton" name="btnRedEye">
+        <property name="text"><string>RE</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Red Eye</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="7" column="0">
+       <widget class="QToolButton" name="btnMaskBrush">
+        <property name="text"><string>MB</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Mask Brush</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
-   <item row="0" column="1">
-    <widget class="QToolButton" name="btnRectSelect">
-     <property name="text"><string>R</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>RectSelect (M)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="1" column="0">
-    <widget class="QToolButton" name="btnLasso">
-     <property name="text"><string>L</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Lasso (L)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="1" column="1">
-    <widget class="QToolButton" name="btnMagicWand">
-     <property name="text"><string>W</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>MagicWand (W)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="2" column="0">
-    <widget class="QToolButton" name="btnCrop">
-     <property name="text"><string>C</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Crop (C)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="2" column="1">
-    <widget class="QToolButton" name="btnText">
-     <property name="text"><string>T</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Text (T)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="3" column="0">
-    <widget class="QToolButton" name="btnBrush">
-     <property name="text"><string>B</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Brush (B)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="3" column="1">
-    <widget class="QToolButton" name="btnEyedropper">
-     <property name="text"><string>I</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Eyedropper (I)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="4" column="0">
-    <widget class="QToolButton" name="btnShape">
-     <property name="text"><string>Sh</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Shape (U)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="4" column="1">
-    <widget class="QToolButton" name="btnPen">
-     <property name="text"><string>Pn</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Pen (P)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="5" column="0">
-    <widget class="QToolButton" name="btnClone">
-     <property name="text"><string>Cl</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Clone (S)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="5" column="1">
-    <widget class="QToolButton" name="btnHeal">
-     <property name="text"><string>Hl</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Heal (J)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="6" column="0">
-    <widget class="QToolButton" name="btnPatch">
-     <property name="text"><string>Pt</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Patch</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <item row="6" column="1">
-    <widget class="QToolButton" name="btnRedEye">
-     <property name="text"><string>RE</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>RedEye</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
-    </widget>
-   </item>
-   <!-- Q4.2.1 (2026-09-23): MaskBrush 按钮 (P1.3.4 像素蒙版画笔), 之前 cpp 注释说没加到 ui -->
-   <item row="7" column="0">
-    <widget class="QToolButton" name="btnMaskBrush">
-     <property name="text"><string>MB</string></property>
-     <property name="checkable"><bool>true</bool></property>
-     <property name="autoRaise"><bool>true</bool></property>
-     <property name="toolTip"><string>Mask Brush (paint layer mask)</string></property>
-     <property name="minimumSize"><size><width>32</width><height>32</height></size></property>
-     <property name="maximumSize"><size><width>32</width><height>32</height></size></property>
+   <!-- P7.1 (2026-10-12): PS-style fg/bg swatch (60x50 stacked).
+        Foreground 50x50 + Background 10x50 corner-anchored. Click fg to
+        pick color, click bg to pick, click on the small arrow inside fg
+        (swap hint) to swap. Default: fg=black, bg=white.
+        Layout dropped: all 3 widgets use absolute geometry inside
+        fgBgContainer (no Qt layout manager), matching PS visual look. -->
+   <item>
+    <widget class="QWidget" name="fgBgContainer">
+     <property name="minimumSize">
+      <size><width>56</width><height>50</height></size>
+     </property>
+     <property name="maximumSize">
+      <size><width>56</width><height>50</height></size>
+     </property>
+     <widget class="QToolButton" name="fgSwatch">
+      <property name="text"><string></string></property>
+      <property name="autoRaise"><bool>false</bool></property>
+      <property name="toolTip"><string>前景色 (点击拾色器, 双击调换 X)</string></property>
+      <property name="geometry">
+       <rect><x>0</x><y>0</y><width>50</width><height>50</height></rect>
+      </property>
+      <property name="minimumSize"><size><width>50</width><height>50</height></size></property>
+      <property name="maximumSize"><size><width>50</width><height>50</height></size></property>
+     </widget>
+     <widget class="QToolButton" name="bgSwatch">
+      <property name="text"><string></string></property>
+      <property name="autoRaise"><bool>false</bool></property>
+      <property name="toolTip"><string>背景色 (点击拾色器, 双击调换 X)</string></property>
+      <property name="geometry">
+       <rect><x>46</x><y>0</y><width>10</width><height>50</height></rect>
+      </property>
+      <property name="minimumSize"><size><width>10</width><height>50</height></size></property>
+      <property name="maximumSize"><size><width>10</width><height>50</height></size></property>
+     </widget>
+     <widget class="QToolButton" name="swapBtn">
+      <property name="text"><string></string></property>
+      <property name="autoRaise"><bool>true</bool></property>
+      <property name="toolTip"><string>交换 (X)</string></property>
+      <property name="geometry">
+       <rect><x>40</x><y>20</y><width>12</width><height>12</height></rect>
+      </property>
+      <property name="minimumSize"><size><width>12</width><height>12</height></size></property>
+      <property name="maximumSize"><size><width>12</width><height>12</height></size></property>
+     </widget>
     </widget>
    </item>
   </layout>
