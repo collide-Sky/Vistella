@@ -753,24 +753,62 @@ void MainWindow::buildActions()
         iw->applyLayerOp(ImageWindow::LayerOp::FlattenVisible);
     });
 
-    // P1.3.4/5/6/7 (2026-09-17): 图层蒙版 5 个真实操作
+    // P7.4 (2026-10-12): 图层 → 蒙版 submenu (PS 风格 12 项蒙版操作整合).
+    //   把 P1.3.4/5/6/7 4 个 mask 操作收进 submenu + 加 P7.4 4 个新 real op
+    //   (启用/禁用/删除/应用/反相). Refine Edge / Color Range 在 滤镜 菜单
+    //   也可以入口 (PS 在多菜单都有), 保持现状.
     mLayer->addSeparator();
-    QAction *aMaskPaint = mLayer->addAction(tr("编辑像素蒙版 (Paint Mask)"));
-    connect(aMaskPaint, &QAction::triggered, this, [this]{
-        onSwitchToMaskBrush();
+    QMenu *mMask = mLayer->addMenu(tr("蒙版"));
+    QAction *aMaskPaint = mMask->addAction(tr("编辑像素蒙版 (Paint Mask)"));
+    connect(aMaskPaint, &QAction::triggered, this, [this]{ onSwitchToMaskBrush(); });
+    QAction *aMaskFromSel = mMask->addAction(tr("从选区添加像素蒙版"));
+    connect(aMaskFromSel, &QAction::triggered, this, [this]{ onAddPixelMaskFromSelection(); });
+    QAction *aMaskAddVector = mMask->addAction(tr("添加矢量蒙版"));
+    aMaskAddVector->setEnabled(false);   // P7.4 placeholder (后续 commit 真做)
+    QAction *aMaskFromAlpha = mMask->addAction(tr("从透明区域..."));
+    aMaskFromAlpha->setEnabled(false);
+    QAction *aMaskSelectReveal = mMask->addAction(tr("当前选区生成蒙版"));
+    aMaskSelectReveal->setEnabled(false);
+    QAction *aMaskSelectHide = mMask->addAction(tr("当前选区填充工作蒙版"));
+    aMaskSelectHide->setEnabled(false);
+    mMask->addSeparator();
+    QAction *aMaskToggle = mMask->addAction(tr("启用/禁用当前蒙版"));
+    connect(aMaskToggle, &QAction::triggered, this, [this]{
+        if (auto* iw = activeImageWindow()) {
+            if (!iw->toggleLayerMask()) {
+                statusBar()->showMessage(tr("当前图层没有蒙版"), 2000);
+            }
+        }
     });
-    QAction *aMaskFromSelection = mLayer->addAction(tr("从选区添加像素蒙版"));
-    connect(aMaskFromSelection, &QAction::triggered, this, [this]{
-        onAddPixelMaskFromSelection();
+    QAction *aMaskApply = mMask->addAction(tr("应用蒙版"));
+    connect(aMaskApply, &QAction::triggered, this, [this]{
+        if (auto* iw = activeImageWindow()) {
+            if (!iw->applyLayerMask()) {
+                statusBar()->showMessage(tr("应用蒙版失败 (无蒙版 或 矢量蒙版)"), 2000);
+            }
+        }
     });
-    QAction *aMaskRefine = mLayer->addAction(tr("调整蒙版边缘 (Refine Edge)..."));
-    connect(aMaskRefine, &QAction::triggered, this, [this]{
-        onRefineMaskEdge();
+    QAction *aMaskRemove = mMask->addAction(tr("删除蒙版"));
+    connect(aMaskRemove, &QAction::triggered, this, [this]{
+        if (auto* iw = activeImageWindow()) {
+            if (!iw->removeLayerMask()) {
+                statusBar()->showMessage(tr("当前图层没有蒙版"), 2000);
+            }
+        }
     });
-    QAction *aMaskColorRange = mLayer->addAction(tr("颜色范围 (Color Range)..."));
-    connect(aMaskColorRange, &QAction::triggered, this, [this]{
-        onColorRangeMask();
+    QAction *aMaskInvert = mMask->addAction(tr("反相蒙版"));
+    connect(aMaskInvert, &QAction::triggered, this, [this]{
+        if (auto* iw = activeImageWindow()) {
+            if (!iw->invertLayerMask()) {
+                statusBar()->showMessage(tr("当前图层没有蒙版"), 2000);
+            }
+        }
     });
+    mMask->addSeparator();
+    QAction *aMaskRefine = mMask->addAction(tr("调整蒙版边缘 (Refine Edge)..."));
+    connect(aMaskRefine, &QAction::triggered, this, [this]{ onRefineMaskEdge(); });
+    QAction *aMaskColorRange = mMask->addAction(tr("颜色范围 (Color Range)..."));
+    connect(aMaskColorRange, &QAction::triggered, this, [this]{ onColorRangeMask(); });
 
     // P1.4.2 (2026-09-17): 智能对象 4 主菜单 action (idx=-1 → 用当前 selection)
     mLayer->addSeparator();

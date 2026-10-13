@@ -278,6 +278,15 @@ public:
     layers::LayerStack* layerStack() const { return m_layerStack.get(); }
     int currentLayerIndex() const;   // P7.3 (2026-10-12): 当前活动图层 idx for "转换为智能滤镜"
 
+    // P7.4 (2026-10-12): 图层 → 蒙版 submenu 4 action (启用/禁用, 删除, 应用, 反相).
+    //   调 layerStack->setMaskEnabled/clearMaskFull/applyMask/setMaskInvert.
+    //   成功 true; 失败 (无 stack / 无活动图层 / 该图层无 mask) 返 false.
+    bool toggleLayerMask();
+    bool removeLayerMask();
+    bool applyLayerMask();
+    bool invertLayerMask();
+    bool hasLayerMask() const;
+
     // P7.3 (2026-10-12): 滤镜 → 转换为智能滤镜 走 ImageWindow 实现.
     //   流程: convertToSmartObject(idx) + appendSmartFilter(filterKind) +
     //         LayerCommand 双 push 进 undoStack.

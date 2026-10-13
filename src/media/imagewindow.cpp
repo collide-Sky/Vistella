@@ -2240,6 +2240,113 @@ bool ImageWindow::convertCurrentLayerToSmartObjectWithFilter(filter::FilterKind 
     return true;
 }
 
+// P7.4 (2026-10-12): 图层 → 蒙版 submenu — 4 helper + 1 query.
+//   内部已有对应 lambda (setMaskEnabled/clearMaskFull/setMaskInvert 等, ~1715 行)
+//   这里暴露成 public method 给 MainWindow 主菜单 submenu 调用.
+//   所有 helper 失败都返 false (无 stack / 无活动图层 / 该图层无 mask).
+bool ImageWindow::hasLayerMask() const
+{
+    if (!m_layerStack) return false;
+    const int idx = currentLayerIndex();
+    if (idx < 0) return false;
+    const layers::LayerMask* m = m_layerStack->maskAt(idx);
+    return m && m->kind != layers::LayerMask::None;
+}
+
+bool ImageWindow::toggleLayerMask()
+{
+    if (!m_layerStack || !m_undoStack) return false;
+    const int idx = currentLayerIndex();
+    if (idx < 0) return false;
+    const layers::LayerMask* m = m_layerStack->maskAt(idx);
+    if (!m || m->kind == layers::LayerMask::None) return false;
+    const bool newEnabled = !m->enabled;
+    if (!m_layerStack->setMaskEnabled(idx, newEnabled)) return false;
+    invalidateCurrentCache();
+    renderToView();
+    statusBar()->showMessage(
+        newEnabled ? tr("蒙版已启用") : tr("蒙版已禁用"), 2000);
+    return true;
+}
+
+bool ImageWindow::removeLayerMask()
+{
+    if (!m_layerStack || !m_undoStack) return false;
+    const int idx = currentLayerIndex();
+    if (idx < 0) return false;
+    if (!m_layerStack->clearMaskFull(idx)) return false;
+    invalidateCurrentCache();
+    renderToView();
+    statusBar()->showMessage(tr("已删除蒙版"), 2000);
+    return true;
+}
+
+bool ImageWindow::invertLayerMask()
+{
+    if (!m_layerStack || !m_undoStack) return false;
+    const int idx = currentLayerIndex();
+    if (idx < 0) return false;
+    const layers::LayerMask* m = m_layerStack->maskAt(idx);
+    if (!m || m->kind == layers::LayerMask::None) return false;
+    const bool newInvert = !m->invert;
+    if (!m_layerStack->setMaskInvert(idx, newInvert)) return false;
+    invalidateCurrentCache();
+    renderToView();
+    statusBar()->showMessage(
+        newInvert ? tr("蒙版已反相") : tr("蒙版取消反相"), 2000);
+    return true;
+}
+
+bool ImageWindow::applyLayerMask()
+{
+    if (!m_layerStack || !m_undoStack) return false;
+    const int idx = currentLayerIndex();
+    if (idx < 0) return false;
+    const layers::LayerMask* m = m_layerStack->maskAt(idx);
+    if (!m || m->kind == layers::LayerMask::None) return false;
+
+    // P7.4 简化 applyLayerMask:
+    //   对 Pixel mask: 遍历 layer 图层 + mask 像素, alpha=0 处像素置 0 (黑);
+    //     然后 clearMaskFull. 把 mask 烧进图层本身.
+    //   对 Vector mask: placeholder (需 renderer 重置 + 加剪贴算法).
+    if (m->kind == layers::LayerMask::Pixel) {
+        layers::LayerPtr layerPtr = m_layerStack->at(idx);
+        if (!layerPtr || layerPtr->image.empty()) return false;
+        cv::Mat img = layerPtr->image.clone();
+        const cv::Mat& mask = m->pixel;
+        if (img.size() != mask.size()) return false;
+        const int ch = img.channels();
+        for (int y = 0; y < img.rows; ++y) {
+            if (ch == 1) {
+                const uchar* mp = mask.ptr<uchar>(y);
+                uchar* ip = img.ptr<uchar>(y);
+                for (int x = 0; x < img.cols; ++x) {
+                    if (mp[x] < 128) ip[x] = 0;   // 黑
+                }
+            } else {
+                const uchar* mp = mask.ptr<uchar>(y);
+                uchar* ip = img.ptr<uchar>(y);
+                for (int x = 0; x < img.cols; ++x) {
+                    if (mp[x] < 128) {
+                        ip[x * 3 + 0] = 0;
+                        ip[x * 3 + 1] = 0;
+                        ip[x * 3 + 2] = 0;
+                    }
+                }
+            }
+        }
+        layerPtr->image = img;       // 烧进图层
+        m_layerStack->clearMaskFull(idx);   // 删 mask
+        invalidateCurrentCache();
+        renderToView();
+        statusBar()->showMessage(tr("蒙版已应用到图层"), 3000);
+        return true;
+    }
+    // Vector mask 暂未实装
+    statusBar()->showMessage(tr("矢量蒙版应用暂未实装"), 2000);
+    return false;
+}
+
 // Q4.2.2 (2026-09-24): 4 个占位 slot 已删, 由 MosaicOptionPanel / TextOptionPanel
 //   自己接管信号 (panel 直接 connect MosaicTool / TextOverlayController).
 //   onMosaicSizeChanged / onMosaicModeToggled / onTextSizeChanged /
