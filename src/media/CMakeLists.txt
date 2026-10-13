@@ -139,6 +139,9 @@ add_library(vistella_media STATIC
     # F-E (2026-09-09): ImageOptionBar 二级工具栏 QStackedWidget 8 工具 page
     tools/ImageOptionBar.h
     tools/ImageOptionBar.cpp
+    # P7.5 (2026-10-12): TopOptionBar 顶部水平工具栏 (PS 风格 mode/opacity/flow/smoothing/angle/size)
+    tools/TopOptionBar.h
+    tools/TopOptionBar.cpp
     tools/ImageOptionBar.ui
 
     # P1.1 (2026-09-15): Brush full implementation - Brush 二级工具栏 (PS 风格 options panel)

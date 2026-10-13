@@ -16,6 +16,7 @@
 #include <opencv2/core.hpp>
 
 #include <QMainWindow>
+#include <QToolBar>
 #include <QDockWidget>
 #include <QUndoStack>
 #include <QGraphicsRectItem>
@@ -74,6 +75,7 @@ namespace tools { class ToolContext; }
 //   硬编码 groupMosaic + groupText 占位). 真实 include 进来用, 不 forward decl.
 #include "tools/LeftToolBar.h"
 #include "tools/ImageOptionBar.h"
+#include "tools/TopOptionBar.h"   // P7.5 (2026-10-12): 顶部水平工具栏 (PS 风格)
 #include "tools/AppBar.h"
 #include "tools/ModeSelectorBar.h"
 // P0-4 (2026-09-10): SelectionModel forward decl (selection state holder)
@@ -521,6 +523,10 @@ private:
     std::unique_ptr<tools::LeftToolBar>    m_leftToolBar;
     QDockWidget                           *m_leftDockContainer = nullptr;
     std::unique_ptr<tools::ImageOptionBar> m_imageOptionBar;
+
+    // P7.5 (2026-10-12): 顶部水平共享工具栏 (PS 风格 mode/opacity/flow/smoothing/angle/size)
+    std::unique_ptr<tools::TopOptionBar> m_topOptionBar;
+    QToolBar* m_topToolBar = nullptr;        // ImageWindow addToolBar(Qt::TopToolBarArea)
     QDockWidget                           *m_imageOptionDockContainer = nullptr;
     // Q4.2.3 (2026-09-24): ModeSelectorBar 二级模式选择栏 (LeftToolBar 和 ImageOptionBar 之间)
     //   监听 ToolContext::toolChanged, 切到对应 tool 时显示 mode 按钮组.

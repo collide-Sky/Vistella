@@ -569,6 +569,18 @@ ImageWindow::ImageWindow(QWidget *parent)
     // 初值: 标准屏幕模式 (P5.5+ 启动时默认).
     applyScreenMode(tools::AppBar::ScreenStandard);
 
+    // P7.5 (2026-10-12): 顶部水平共享工具栏 (PS 风格 mode/opacity/flow/smoothing/angle/size).
+    //   用户截图左上的 fg/bg swatch + 模式/不透明度/流量/平滑/角度/大小 全放这里.
+    //   P7.5 只画 UI + QToolBar. 接 Brush/Clone/Heal/Patch/MaskBrush 工具状态在 P7.6 commit.
+    m_topOptionBar = std::make_unique<tools::TopOptionBar>();
+    m_topToolBar = addToolBar(tr("选项"));
+    m_topToolBar->setObjectName(QStringLiteral("topOptionBar"));
+    m_topToolBar->setMovable(false);
+    m_topToolBar->setFloatable(false);
+    m_topToolBar->setIconSize(QSize(16, 16));
+    m_topToolBar->addWidget(m_topOptionBar.get());
+    // PS-style 紧凑 topToolBar: 28px 高 (一次高度, 允许后续 zoom + fg/bg 快捷槽位)
+
     // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel no longer hosted
     //   here. ImageOptionBar owns both and routes them per active tool
     //   (Brush -> Mosaic, Text -> Text). The Q4.2.2.1 leftPanel gridLayout_4
