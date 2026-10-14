@@ -32,6 +32,7 @@ function(add_vistella_test NAME)
         Qt6::Concurrent    # C.1: tst_Async (QtConcurrent::run) 用
         vistella_core       # FileExtensionRegistry / MediaDispatcher / IModule / Result / Async
         vistella_ui         # FileTreeModel / FileTreeItem 在 src/ui
+        vistella_ui_dock    # P7.6.x v3 (2026-10-14): VDraggableTabWidget + VDragManager + VRenderPath / VCompositeStrategy
         vistella_imageworker  # W1: tst_ImageWorker 用 (ImageWorker / ImageWorkspace)
         vistella_media      # W1 + W2: ImageWindow / ImageProcessor / Graphicstextitem / ImageInfoPanel
         vistella_logger
@@ -192,3 +193,5 @@ add_vistella_test(tst_P3_1_FilterDialog)
 #   FileExtensionRegistry 12 RAW 格式覆盖 + decodeRaw stub error 路径).
 #   真 libraw 链接时 stub 自动切换, 测试不需要改.
 add_vistella_test(tst_P3_5_CameraRaw)
+# P7.6.x v3 commit 2 (2026-10-14): PS-style draggable tab + GPU/CPU placeholders
+add_vistella_test(tst_VDraggableTabWidget)
