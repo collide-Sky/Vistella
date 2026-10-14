@@ -18,6 +18,7 @@
 #include "tools/LeftToolBar.h"
 #include "tools/ImageOptionBar.h"
 #include "tools/BrushOptionsPanel.h"  // P7.6.x (2026-10-14): m_brushOpt member
+#include "tools/LeftSidePanel.h"     // P7.6.x v2 (2026-10-14): 单容器装 4 左侧 widget
 // P0-3.2 (2026-09-08): 新组件 AdjustmentPanel (5 tab 色彩调整)
 #include "imagewindow/AdjustmentPanel.h"
 #include "mediators/DialogMediator.h"
@@ -462,23 +463,33 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_ctx = std::make_unique<tools::ToolContext>(this);
     m_ctx->attach(this, m_toolMed.get());
 
-    // Q4.2.1 (2026-09-23): LeftToolBar 接入左侧 dock (PS 风格 14 工具图标栏)
-    //   之前 F-D (2026-09-09) LeftToolBar.cpp/.h/.ui 写完但 ctor 从没创建,
-    //   整个图片阶段做完左侧 panel 只有 imagewindow.ui 硬编码的 groupMosaic + groupText.
-    //   Q4.2.1 拍板"真实接入", 不放占位 stub. attach(toolMed, ctx) 后 14 工具按钮
-    //   可切换: button click -> Mediator.switchTool(id) -> onToolMediatorSwitched
-    //   -> ctx->setState(createXxxTool()) 走 ToolState factory.
-    //   P7.6.x: raw pointer — Qt owns lifetime via setWidget() below.
-    m_leftToolBar = new tools::LeftToolBar();
+    // P7.6.x v2 (2026-10-14): 单容器 LeftSidePanel 取代 4 个独立 dock + splitDockWidget 链.
+    //   v1 用 4 个 QDockWidget 加 LeftDockWidgetArea + splitDockWidget, Qt 在不同版本下
+    //   行为不一致 (有时 tabify, 有时按添加顺序, 有时 LeftToolBar 整个塌缩), 用户实测
+    //   LeftToolBar 整个看不见. 现在 4 个 widget 装一个 LeftSidePanel 的 QVBoxLayout,
+    //   一次性排好, 确定性.
+    //
+    //   旧布局: LeftToolBar (top) > ModeSelectorBar > ImageOptionBar > AppBar (bottom)
+    //   新布局: LeftToolBar (top, 56 wide 固定) > sep > ImageOptionBar (expanding) >
+    //           ModeSelectorBar (36 high 固定) > AppBar (32 high 固定)
+    //   ModeSelectorBar 从 LeftToolBar/ImageOptionBar 之间挪到 ImageOptionBar 下方
+    //   (更接近 PS 风格 — 二级 mode 按钮贴近底部状态栏感).
+    m_brushOpt = new tools::BrushOptionsPanel();    // P7.6.x: persistent idx=7 page
+    m_leftSidePanel = new tools::LeftSidePanel(this);  // 创建 4 子 widget
+    m_leftToolBar     = m_leftSidePanel->leftToolBar();
+    m_imageOptionBar  = m_leftSidePanel->imageOptionBar();
+    m_modeSelectorBar = m_leftSidePanel->modeSelectorBar();
+    m_appBar          = m_leftSidePanel->appBar();
+
+    // P7.6.x: reparent m_brushOpt 进 LeftSidePanel (在 LeftSidePanel 内跟其他 widget
+    //   形成统一 Qt tree). parent 改为 m_imageOptionBar 因为它是 stackedWidget 父级.
+    m_brushOpt->setParent(m_imageOptionBar);
+
+    // Q4.2.1 (2026-09-23) LeftToolBar + Mediator wiring (跟 v1 一样, 仅接入点变):
+    //   button click -> Mediator.switchTool(id) -> ctx->setState(createXxxTool())
     m_leftToolBar->attach(m_toolMed.get(), m_ctx.get());
 
-    // P7.1 (2026-10-12): reverse direction sync — when LeftToolBar swatch is
-    //   picked / swapped / defaulted (typically via PS-style X/D shortcuts
-    //   handled in the dock itself), push the change into ColorDock so the
-    //   right-side color picker reflects the same fg/bg. Echo is prevented
-    //   by the `if (m_xxx == c) return;` guard in ColorDock::setXxxColor.
-    //   P7.6.x: m_rightDock is now a raw pointer that survives setWidget()
-    //   (no more null deref, no more rawRightDock workaround).
+    // P7.1 fg/bg swatch -> ColorDock 同步
     if (m_rightDock) {
         if (auto* colorDock = m_rightDock->colorDock()) {
             connect(m_leftToolBar, &tools::LeftToolBar::foregroundColorChanged,
@@ -488,88 +499,16 @@ ImageWindow::ImageWindow(QWidget *parent)
         }
     }
 
-    m_leftDockContainer = new QDockWidget(this);
-    m_leftDockContainer->setObjectName(QStringLiteral("leftDockContainer"));
-    m_leftDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    // 隐藏 title bar (PS 风格面板无标题栏, 跟右侧 dock 一致)
-    auto* leftEmptyTitle = new QWidget();
-    leftEmptyTitle->setFixedHeight(0);
-    m_leftDockContainer->setTitleBarWidget(leftEmptyTitle);
-    // setWidget() takes ownership; m_leftToolBar remains a valid raw pointer
-    //   for post-setWidget access (see P7.6.x design rule).
-    m_leftDockContainer->setWidget(m_leftToolBar);
-
-    addDockWidget(Qt::LeftDockWidgetArea, m_leftDockContainer);
-    // P7.1 (2026-10-12): PS 风格工具栏缩到 56px (2 列 28px 按钮 + 0 spacing).
-    //   之前 Q4.2.1 占位 64px 是按 32px btn + 4 margin 算的, 现在 P7.1 ui 收紧
-    //   到 28px btn + 0 margin, 总宽 56px (PS 实际风格).
-    resizeDocks({m_leftDockContainer}, {56}, Qt::Horizontal);
-
-    // Q4.2.3 (2026-09-24): ModeSelectorBar 二级模式选择栏 (LeftToolBar 下方, ImageOptionBar 上方)
-    //   5 tools (Crop/MagicWand/Lasso/Brush/Eyedropper) 共享 1 个 widget, 按 currentToolId
-    //   切到对应 page (selection mode / aspect / blend / sample size). 紧凑按钮栏 32px 高,
-    //   LeftToolBar 和 ImageOptionBar 之间. 监听 ToolContext::toolChanged, 切换 tool 时
-    //   自动切 page + refresh 按钮状态 (从 tool.getter 读).
-    //   P7.6.x: raw pointer — setWidget() below takes ownership.
-    m_modeSelectorBar = new tools::ModeSelectorBar();
+    // Q4.2.3 ModeSelectorBar 接 ctx (切 tool 切 page)
     m_modeSelectorBar->attach(m_ctx.get());
 
-    m_modeSelectorDockContainer = new QDockWidget(this);
-    m_modeSelectorDockContainer->setObjectName(QStringLiteral("modeSelectorDockContainer"));
-    m_modeSelectorDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    auto* modeEmptyTitle = new QWidget();
-    modeEmptyTitle->setFixedHeight(0);
-    m_modeSelectorDockContainer->setTitleBarWidget(modeEmptyTitle);
-    m_modeSelectorDockContainer->setWidget(m_modeSelectorBar);
-
-    addDockWidget(Qt::LeftDockWidgetArea, m_modeSelectorDockContainer);
-    // ModeSelectorBar 在 LeftToolBar 下方垂直排 (splitDockWidget), ImageOptionBar 在 ModeSelectorBar 下方
-    splitDockWidget(m_leftDockContainer, m_modeSelectorDockContainer, Qt::Vertical);
-    resizeDocks({m_modeSelectorDockContainer}, {36}, Qt::Vertical);  // 36px 高, 紧凑按钮栏
-
-    // Q4.2.1 (2026-09-23): ImageOptionBar 接入左侧 dock (ModeSelectorBar 下方)
-    //   二级属性面板, 监听 ToolContext::toolChanged, 根据 toolId 切到对应 page.
-    //   MaskBrush (P1.3.4) 跟 TransformTool 一样走动态 addPage 路径, page16
-    //   装 MaskOptionsPanel. 其他工具 page 默认空 (ToolState::optionPage 返 nullptr,
-    //   Q4.2.2 跟 Q4.2.3 会逐个实装). 注意: imagewindow.ui 占位 groupMosaic +
-    //   groupText 是 MosaicTool/TextOverlay 的旧 UI (跟 ToolMediator 无关),
-    //   Q4.2.2 单独 commit 做迁移, 本次只接入 LeftToolBar + ImageOptionBar.
-    //   P7.6.x: raw pointer — setWidget() below takes ownership.
-    // P7.6.x (2026-10-14): m_brushOpt 先于 m_imageOptionBar 创建. BrushOptionsPanel
-    //   是单例 (idx=7 page), 用 parent=this. ImageOptionBar::attach() 第 4 参数
-    //   撮合 BrushOptionsPanel <-> ToolContext.brushSharedState.
-    m_brushOpt = new tools::BrushOptionsPanel(this);
-    m_imageOptionBar = new tools::ImageOptionBar();
-    // P5.1 (2026-10-08): pass MosaicTool + TextOverlayController so
-    //   ImageOptionBar can route Brush -> MosaicOptionPanel and
-    //   Text -> TextOptionPanel, replacing the old Q4.2.2.1 leftPanel
-    //   gridLayout_4 always-on hosting.
-    // P7.6.x (2026-10-14): pass m_brushOpt so ImageOptionBar uses it at idx=7
-    //   instead of creating a new BrushOptionsPanel each time, and so the
-    //   sharedState <-> brushSharedState 撮合 is set up.
+    // Q4.2.1 ImageOptionBar 接 ctx + mosaic + textCtrl + brushOpt (P7.6.x 第 4 参数)
     m_imageOptionBar->attach(m_ctx.get(),
                              m_mosaicTool.get(),
                              m_textCtrl.get(),
                              m_brushOpt);
 
-    m_imageOptionDockContainer = new QDockWidget(this);
-    m_imageOptionDockContainer->setObjectName(QStringLiteral("imageOptionDockContainer"));
-    m_imageOptionDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    auto* optionEmptyTitle = new QWidget();
-    optionEmptyTitle->setFixedHeight(0);
-    m_imageOptionDockContainer->setTitleBarWidget(optionEmptyTitle);
-    m_imageOptionDockContainer->setWidget(m_imageOptionBar);
-
-    addDockWidget(Qt::LeftDockWidgetArea, m_imageOptionDockContainer);
-    // ImageOptionBar 在 ModeSelectorBar 下方垂直排 (splitDockWidget)
-    splitDockWidget(m_modeSelectorDockContainer, m_imageOptionDockContainer, Qt::Vertical);
-    resizeDocks({m_imageOptionDockContainer}, {220}, Qt::Vertical);
-
-    // P5.5+ (2026-10-09): AppBar 三组全局 toggle (Quick Mask / Screen Mode / Capture),
-    //   装在 ImageOptionBar 下方. 不依赖 active tool, 是 PS 风格的 "always-on"
-    //   全局工具行. 32 px 高紧凑.
-    //   P7.6.x: raw pointer — setWidget() below takes ownership.
-    m_appBar = new tools::AppBar();
+    // P5.5+ AppBar 三组 toggle
     connect(m_appBar, &tools::AppBar::quickMaskToggled,
             this, &ImageWindow::onQuickMaskToggled);
     connect(m_appBar, &tools::AppBar::screenModeSelected,
@@ -577,18 +516,22 @@ ImageWindow::ImageWindow(QWidget *parent)
     connect(m_appBar, &tools::AppBar::captureRequested,
             this, &ImageWindow::onCaptureRequested);
 
-    m_appBarDockContainer = new QDockWidget(this);
-    m_appBarDockContainer->setObjectName(QString("appBarDockContainer"));
-    m_appBarDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    auto* appBarEmptyTitle = new QWidget();
-    appBarEmptyTitle->setFixedHeight(0);
-    m_appBarDockContainer->setTitleBarWidget(appBarEmptyTitle);
-    m_appBarDockContainer->setWidget(m_appBar);
+    // 单 dock 容器, 装 LeftSidePanel (左侧整个 PS 风格面板). NoDockWidgetFeatures
+    //   + setTitleBarWidget(emptyTitle) 隐藏标题栏跟 v1 一致.
+    m_leftDockContainer = new QDockWidget(this);
+    m_leftDockContainer->setObjectName(QStringLiteral("leftDockContainer"));
+    m_leftDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    auto* leftEmptyTitle = new QWidget();
+    leftEmptyTitle->setFixedHeight(0);
+    m_leftDockContainer->setTitleBarWidget(leftEmptyTitle);
+    m_leftDockContainer->setWidget(m_leftSidePanel);
 
-    addDockWidget(Qt::LeftDockWidgetArea, m_appBarDockContainer);
-    // AppBar 在 ImageOptionBar 下方垂直排 (splitDockWidget)
-    splitDockWidget(m_imageOptionDockContainer, m_appBarDockContainer, Qt::Vertical);
-    resizeDocks({m_appBarDockContainer}, {32}, Qt::Vertical);
+    addDockWidget(Qt::LeftDockWidgetArea, m_leftDockContainer);
+    // P7.1 风格: 56px 宽 = LeftToolBar 占满 (其他 widget 在它右边 — 但当前布局是
+    //   LeftToolBar 在 leftSidePanel 顶部, 占满 56 宽, 整个 leftSidePanel 宽跟着 dock).
+    //   dock 宽度由 LeftToolBar (56) + ImageOptionBar (expanding) 决定, 设最小宽 56.
+    resizeDocks({m_leftDockContainer}, {56}, Qt::Horizontal);
+
     // 初值: 标准屏幕模式 (P5.5+ 启动时默认).
     applyScreenMode(tools::AppBar::ScreenStandard);
 

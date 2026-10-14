@@ -75,6 +75,7 @@ namespace tools { class ToolContext; }
 //   硬编码 groupMosaic + groupText 占位). 真实 include 进来用, 不 forward decl.
 #include "tools/LeftToolBar.h"
 #include "tools/ImageOptionBar.h"
+#include "tools/LeftSidePanel.h"  // P7.6.x v2 (2026-10-14): 单容器装 4 个左侧 widget
 // P7.6.x (2026-10-14): TopOptionBar 已删 - 6 控件 (mode/opacity/flow/smoothing/angle/size)
 //   搬到 ImageOptionBar 内的 BrushOptionsPanel (cmbBlendMode + 5 重叠字段).
 //   撮合 BrushOptionsPanel <-> ToolContext.brushSharedState 在 ImageOptionBar::attach() 里.
@@ -525,27 +526,24 @@ private:
     docks::RightPanelDock                  *m_rightDock = nullptr;
     QDockWidget                            *m_rightDockContainer = nullptr;
 
-    // Q4.2.1 (2026-09-23): LeftToolBar + ImageOptionBar — both raw because
-    //   they are added to m_leftDockContainer / m_imageOptionDockContainer
-    //   via setWidget(). Qt owns lifetime; raw pointer survives for further
-    //   access after setWidget() (no release() dance needed).
-    tools::LeftToolBar                     *m_leftToolBar = nullptr;
+    // P7.6.x v2 (2026-10-14): LeftSidePanel 单容器, 取代 v1 的 4 个 dock (LeftToolBar +
+    //   ImageOptionBar + ModeSelectorBar + AppBar). Qt dock 在 addDockWidget + splitDockWidget
+    //   链式调用里行为不一致 (Qt 版本相关), v1 模式下 LeftToolBar 整个塌缩到 0 高度看不见.
+    // 单容器用 QVBoxLayout 一次排好, 确定性. LeftSidePanel 内的 4 个子 widget 仍 raw pointer
+    //   (Qt tree, P7.6.x smart pointer 规则).
+    tools::LeftSidePanel                   *m_leftSidePanel = nullptr;
     QDockWidget                            *m_leftDockContainer = nullptr;
-    tools::ImageOptionBar                  *m_imageOptionBar = nullptr;
-    // P7.6.x (2026-10-14): persistent BrushOptionsPanel (idx=7). Parent=this.
-    //   Replaces dynamic Brush::optionPage() creation. 撮合 lives in ImageOptionBar::attach().
+
+    // P7.6.x (2026-10-14): persistent BrushOptionsPanel (idx=7). Parent=m_leftSidePanel
+    //   (LeftSidePanel owns the Qt tree). 撮合 lives in ImageOptionBar::attach() — see
+    //   constructor.
     tools::BrushOptionsPanel               *m_brushOpt = nullptr;
 
-    // P7.6.x (2026-10-14): 顶部水平共享工具栏 (TopOptionBar) 已删. 6 控件搬进
-    //   ImageOptionBar 的 BrushOptionsPanel (idx=7). BrushOptionsPanel 撮合:
-    //   ImageOptionBar::attach() 第 4 参数 brushOpt.
-    QDockWidget                            *m_imageOptionDockContainer = nullptr;
-    // Q4.2.3 (2026-09-24): ModeSelectorBar — setWidget on dock container.
+    // 4 子 widget 的访问快捷方式 (m_leftSidePanel 创建后赋值). Raw pointer (Qt tree).
+    tools::LeftToolBar                     *m_leftToolBar = nullptr;
+    tools::ImageOptionBar                  *m_imageOptionBar = nullptr;
     tools::ModeSelectorBar                 *m_modeSelectorBar = nullptr;
-    QDockWidget                            *m_modeSelectorDockContainer = nullptr;
-    // P5.5+ (2026-10-09): AppBar — setWidget on dock container.
     tools::AppBar                          *m_appBar = nullptr;
-    QDockWidget                            *m_appBarDockContainer = nullptr;
     // Quick Mask mode: when on, MaskBrush paint mode is "switch into" until toggled off;
     //   stores the previously active tool so onQuickMaskToggled(false) restores it.
     bool                                   m_quickMaskActive = false;

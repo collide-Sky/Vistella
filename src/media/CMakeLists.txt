@@ -160,6 +160,13 @@ add_library(vistella_media STATIC
     tools/AppBar.cpp
     tools/AppBar.ui
 
+    # P7.6.x v2 (2026-10-14): LeftSidePanel 单容器, 装 LeftToolBar +
+    #   ImageOptionBar + ModeSelectorBar + AppBar 在一个 QVBoxLayout.
+    #   取代 v1 的 4 个 dock + splitDockWidget 链 (Qt dock 行为不一致导致
+    #   LeftToolBar 整个塌缩到 0 高度看不见 — 用户反馈 "左侧图标显示不完整").
+    tools/LeftSidePanel.h
+    tools/LeftSidePanel.cpp
+
     # F-G (2026-09-09): RightPanelStack 右侧 panel 3 dock (颜色/属性/图层)
     docks/RightPanelStack.h
     docks/RightPanelStack.cpp
