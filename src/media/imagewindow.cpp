@@ -401,6 +401,11 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_rightDock = std::make_unique<docks::RightPanelDock>();
     // F-G.3: release() 转移所有权给 m_rightDock (QTabWidget::addTab reparent 后 Qt 析构会 delete 一次)
     m_rightDock->setAdjustmentPanel(m_adjustmentPanel.release());
+    // P7.6.x (2026-10-14): save raw pointer to RightPanelDock before release
+    //   at line 443, so post-release wiring (LeftToolBar -> ColorDock sync) can
+    //   still access it. m_rightDock is null after release(); rawRightDock is
+    //   the dangling-but-valid pointer that survives the std::unique_ptr release.
+    auto* rawRightDock = m_rightDock.get();
 
     // P6 (2026-10-09): wire RightPanelDock connectors that were dangling before.
     //   Color fg/bg -> current Brush paint color; ChannelPathPanel selection
@@ -470,7 +475,9 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   handled in the dock itself), push the change into ColorDock so the
     //   right-side color picker reflects the same fg/bg. Echo is prevented
     //   by the `if (m_xxx == c) return;` guard in ColorDock::setXxxColor.
-    if (auto* colorDock = m_rightDock->colorDock()) {
+    // P7.6.x (2026-10-14): use rawRightDock (saved before m_rightDock.release())
+    //   to avoid null deref after ownership transfer to QDockWidget at line 443.
+    if (auto* colorDock = rawRightDock->colorDock()) {
         connect(m_leftToolBar.get(), &tools::LeftToolBar::foregroundColorChanged,
                 colorDock, &docks::ColorDock::setForegroundColor);
         connect(m_leftToolBar.get(), &tools::LeftToolBar::backgroundColorChanged,

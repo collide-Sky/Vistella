@@ -55,11 +55,11 @@ GradientTab::GradientTab(QWidget* parent) : QWidget(parent)
     typeRow->addWidget(typeLabel);
 
     m_typeCombo = new QComboBox(this);
-    m_typeCombo->addItem(tr("线性 (Linear)"));
-    m_typeCombo->addItem(tr("径向 (Radial)"));
-    m_typeCombo->addItem(tr("角度 (Angle)"));
-    m_typeCombo->addItem(tr("菱形 (Diamond)"));
-    m_typeCombo->addItem(tr("对称 (Symmetric)"));
+    m_typeCombo->addItem(tr("线性"));
+    m_typeCombo->addItem(tr("径向"));
+    m_typeCombo->addItem(tr("角度"));
+    m_typeCombo->addItem(tr("菱形"));
+    m_typeCombo->addItem(tr("对称"));
     typeRow->addWidget(m_typeCombo, 1);
     root->addLayout(typeRow);
 
