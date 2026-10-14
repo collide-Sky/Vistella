@@ -36,6 +36,18 @@ public:
     int    angle() const;          // 0..359
     int    brushSize() const;      // 1..2000 px
 
+    // P7.6 (2026-10-13): Setter — ToolContext.brushSettingsChanged triggers UI refresh.
+    //   Implementation wraps QSignalBlocker to prevent loop: ToolContext sets -> TopOptionBar.setX
+    //   -> control valueChanged -> TopOptionBar.xxxChanged -> ToolContext.setX -> infinite loop.
+    //   Caller does not need to care, just set.
+    void setBlendMode(BlendMode mode);
+    void setBlendModeIndex(int idx);
+    void setOpacity(double pct);
+    void setFlow(double pct);
+    void setSmoothing(double pct);
+    void setAngle(int deg);
+    void setBrushSize(int px);
+
 signals:
     // 配置变化 — 接 ImageWindow (转发给当前 ToolState).
     void blendModeChanged(int idx);

@@ -581,6 +581,54 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_topToolBar->addWidget(m_topOptionBar.get());
     // PS-style 紧凑 topToolBar: 28px 高 (一次高度, 允许后续 zoom + fg/bg 快捷槽位)
 
+    // P7.6 (2026-10-13): TopOptionBar <-> ToolContext.brushSharedState() 双向同步.
+    //   TopOptionBar 改值 -> 走 ToolContext setter (发 brushSettingsChanged 信号,
+    //   当前 active brush tool 接; ToolContext 状态变 (切 tool 时) -> 给 TopOptionBar 显示.
+    //   6 个控件 -> 6 个 setter 双向 (+ 当前 paint color 暂 P7.6 commit 不接):
+    //     blendMode / opacity / flow / smoothing / angle / brushSize
+    if (m_ctx) {
+        // (1) TopOptionBar -> ToolContext 写 (User 改 TopOptionBar)
+        connect(m_topOptionBar.get(), &tools::TopOptionBar::blendModeChanged,
+                m_ctx.get(), [this](int /*idx*/) {
+                    m_ctx->setBlendMode(static_cast<int>(m_topOptionBar->blendMode()));
+                });
+        connect(m_topOptionBar.get(), &tools::TopOptionBar::opacityChanged,
+                m_ctx.get(), [this](double pct) {
+                    m_ctx->setOpacity(pct);
+                });
+        connect(m_topOptionBar.get(), &tools::TopOptionBar::flowChanged,
+                m_ctx.get(), [this](double pct) {
+                    m_ctx->setFlow(pct);
+                });
+        connect(m_topOptionBar.get(), &tools::TopOptionBar::smoothingChanged,
+                m_ctx.get(), [this](double pct) {
+                    m_ctx->setSmoothing(pct);
+                });
+        connect(m_topOptionBar.get(), &tools::TopOptionBar::angleChanged,
+                m_ctx.get(), [this](int deg) {
+                    m_ctx->setAngle(deg);
+                });
+        connect(m_topOptionBar.get(), &tools::TopOptionBar::brushSizeChanged,
+                m_ctx.get(), [this](int px) {
+                    m_ctx->setBrushSize(px);
+                });
+
+        // (2) ToolContext -> TopOptionBar 读 (任何 setter 触发都 fetch 6 个值)
+        connect(m_ctx.get(), &tools::ToolContext::brushSettingsChanged,
+                this, [this]() {
+                    m_topOptionBar->setBlendModeIndex(m_ctx->brushSharedState().blendMode);
+                    m_topOptionBar->setOpacity(m_ctx->brushSharedState().opacity);
+                    m_topOptionBar->setFlow(m_ctx->brushSharedState().flow);
+                    m_topOptionBar->setSmoothing(m_ctx->brushSharedState().smoothing);
+                    m_topOptionBar->setAngle(m_ctx->brushSharedState().angle);
+                    m_topOptionBar->setBrushSize(m_ctx->brushSharedState().brushSize);
+                });
+
+        // 启动时同步 ToolContext 当前 6 值到 TopOptionBar UI (TopOptionBar 构造时
+        //   跟 ToolContext 默认值一致, 但显式 set 一次让 setX 经过 QSignalBlocker).
+        m_ctx->setBrushSize(m_ctx->brushSharedState().brushSize);
+    }
+
     // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel no longer hosted
     //   here. ImageOptionBar owns both and routes them per active tool
     //   (Brush -> Mosaic, Text -> Text). The Q4.2.2.1 leftPanel gridLayout_4

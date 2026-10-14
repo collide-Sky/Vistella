@@ -21,6 +21,19 @@ class ImageWindow;
 
 namespace tools {
 
+// P7.6 (2026-10-13): shared brush state. TopOptionBar writes, Brush/Clone/Heal/Patch/MaskBrush read.
+//   Not nested (moc does not like nested struct). Top-level namespace.
+//   P7.9 commit extends (12 dynamic panel slots) and tools apply() sync.
+struct BrushSharedState {
+    // PS brush mode starter 3 items; P7.9 commit extends to 9
+    int     blendMode = 0;     // 0=Normal
+    double  opacity   = 100.0; // 0..100 %
+    double  flow      = 100.0; // 0..100 %
+    double  smoothing = 10.0;  // 0..100 %; P7.9 commit changes to 0
+    int     angle     = 0;     // 0..359 deg
+    int     brushSize = 13;    // 1..2000 px; PS default 13
+};
+
 class ToolState;
 
 class ToolContext : public QObject
@@ -49,6 +62,17 @@ public:
     void onKeyPress(QKeyEvent* e);
     void onKeyRelease(QKeyEvent* e);
 
+    // P7.6 (2026-10-13): shared brush state accessor (TopOptionBar in ImageWindow reads/writes).
+    BrushSharedState& brushSharedState() { return m_brushShared; }
+    const BrushSharedState& brushSharedState() const { return m_brushShared; }
+    // Single setter path with refresh signal — TopOptionBar / tools can set shared.
+    void setBlendMode(int mode);
+    void setOpacity(double pct);
+    void setFlow(double pct);
+    void setSmoothing(double pct);
+    void setAngle(int deg);
+    void setBrushSize(int px);
+
 signals:
     // Subscribers listen:
     //   ImageCanvas: change cursor
@@ -57,6 +81,11 @@ signals:
     // Current tool's cursor changed (e.g. internal state change)
     void cursorChanged(const QCursor& cursor);
 
+    // P7.6 (2026-10-13): brushSettingsChanged — any of opacity/flow/angle/size/blendMode change emits
+    //   signal; TopOptionBar / current active brush tool sync. P7.6 stage:
+    //   only TopOptionBar change -> ToolContext -> ToolContext change -> brush tool listen (P7.9).
+    void brushSettingsChanged();
+
 private:
     // Do NOT own host / toolMed (weak ref only)
     QPointer<ImageWindow>           m_host;
@@ -64,6 +93,9 @@ private:
 
     // Own current tool
     std::unique_ptr<ToolState>       m_current;
+
+    // P7.6 (2026-10-13): shared brush state (mode/opacity/flow/smoothing/angle/brushSize).
+    BrushSharedState                 m_brushShared;
 
     // Initial default tool (None state, no event response)
     void installDefaultState();

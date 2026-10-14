@@ -4,6 +4,7 @@
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QToolButton>
 
@@ -111,5 +112,57 @@ double TopOptionBar::flow() const { return m_spnFlow->value(); }
 double TopOptionBar::smoothing() const { return m_spnSmoothing->value(); }
 int    TopOptionBar::angle() const { return m_spnAngle->value(); }
 int    TopOptionBar::brushSize() const { return m_spnSize->value(); }
+
+// P7.6 (2026-10-13): setter impls — all wrap QSignalBlocker.
+//   Prevents loop ToolContext.setX -> TopOptionBar.setX -> control valueChanged ->
+//   TopOptionBar.xxxChanged -> ToolContext.setX -> infinite loop.
+//   Caller just sets, no need to blocker.
+void TopOptionBar::setBlendMode(BlendMode mode)
+{
+    setBlendModeIndex(static_cast<int>(mode));
+}
+
+void TopOptionBar::setBlendModeIndex(int idx)
+{
+    if (idx < 0 || idx >= m_cmbBlendMode->count()) return;
+    if (m_cmbBlendMode->currentIndex() == idx) return;
+    QSignalBlocker block(m_cmbBlendMode);
+    m_cmbBlendMode->setCurrentIndex(idx);
+}
+
+void TopOptionBar::setOpacity(double pct)
+{
+    if (m_spnOpacity->value() == pct) return;
+    QSignalBlocker block(m_spnOpacity);
+    m_spnOpacity->setValue(pct);
+}
+
+void TopOptionBar::setFlow(double pct)
+{
+    if (m_spnFlow->value() == pct) return;
+    QSignalBlocker block(m_spnFlow);
+    m_spnFlow->setValue(pct);
+}
+
+void TopOptionBar::setSmoothing(double pct)
+{
+    if (m_spnSmoothing->value() == pct) return;
+    QSignalBlocker block(m_spnSmoothing);
+    m_spnSmoothing->setValue(pct);
+}
+
+void TopOptionBar::setAngle(int deg)
+{
+    if (m_spnAngle->value() == deg) return;
+    QSignalBlocker block(m_spnAngle);
+    m_spnAngle->setValue(deg);
+}
+
+void TopOptionBar::setBrushSize(int px)
+{
+    if (m_spnSize->value() == px) return;
+    QSignalBlocker block(m_spnSize);
+    m_spnSize->setValue(px);
+}
 
 } // namespace tools

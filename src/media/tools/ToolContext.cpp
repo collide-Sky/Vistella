@@ -113,4 +113,56 @@ void ToolContext::onKeyRelease(QKeyEvent* e)
     if (m_current) m_current->onKeyRelease(e, m_host.data());
 }
 
+// ===== P7.6 (2026-10-13) brushSharedState setters =====
+//   Single setter writes + emits brushSettingsChanged. TopOptionBar (P7.5) value change
+//   goes through these 6 setters; current active brush tool listens to brushSettingsChanged for sync (P7.9).
+//   Also ImageWindow on loadFile/active-tool change sets these 6 values so
+//   TopOptionBar shows current tool's preset (default 3 PS brush preset switching).
+//
+//   P7.6 stage: tool read path goes through setBrushSize -> Brush::setBrushSize + sync
+//   in Brush::onEnter (subsequent commit also connects 4 brush tools). 5 brush tools
+//   done at P7.6 commit end. opacity/flow/smoothing/angle/blendMode temporarily only
+//   touch ToolContext.m_brushShared (signal emitted), tool apply() path P7.9.
+void ToolContext::setBlendMode(int mode)
+{
+    if (m_brushShared.blendMode == mode) return;
+    m_brushShared.blendMode = mode;
+    emit brushSettingsChanged();
+}
+
+void ToolContext::setOpacity(double pct)
+{
+    if (qFuzzyCompare(m_brushShared.opacity, pct)) return;
+    m_brushShared.opacity = pct;
+    emit brushSettingsChanged();
+}
+
+void ToolContext::setFlow(double pct)
+{
+    if (qFuzzyCompare(m_brushShared.flow, pct)) return;
+    m_brushShared.flow = pct;
+    emit brushSettingsChanged();
+}
+
+void ToolContext::setSmoothing(double pct)
+{
+    if (qFuzzyCompare(m_brushShared.smoothing, pct)) return;
+    m_brushShared.smoothing = pct;
+    emit brushSettingsChanged();
+}
+
+void ToolContext::setAngle(int deg)
+{
+    if (m_brushShared.angle == deg) return;
+    m_brushShared.angle = deg;
+    emit brushSettingsChanged();
+}
+
+void ToolContext::setBrushSize(int px)
+{
+    if (m_brushShared.brushSize == px) return;
+    m_brushShared.brushSize = px;
+    emit brushSettingsChanged();
+}
+
 } // namespace tools
