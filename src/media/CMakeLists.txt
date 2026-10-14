@@ -167,11 +167,19 @@ add_library(vistella_media STATIC
     # F-G.3 Fix (2026-09-10): RightPanelDock 1 widget 4+1 tab 浮动 panel (替代 3 分 dock + addDockWidget)
     docks/RightPanelDock.h
     docks/RightPanelDock.cpp
+    # P7.7 (2026-10-14): ColorDock 4-tab 重拆 (颜色/色板/渐变/图章)
+    #   ColorDock 变成 QTabWidget container, 4 个 sub-page 各自独立 widget.
+    #   ColorDock public API (signals/slots) 保持不变, imagewindow.cpp 不动.
     docks/ColorDock.h
     docks/ColorDock.cpp
-    # F-P.3 (2026-09-09): ColorDock 转 .ui
-    # F-M (2026-09-10): 加渐变 (gradient) 编辑器 + 图案 (pattern) 选择器
-    docks/ColorDock.ui
+    docks/ColorTab.h
+    docks/ColorTab.cpp
+    docks/SwatchTab.h
+    docks/SwatchTab.cpp
+    docks/GradientTab.h
+    docks/GradientTab.cpp
+    docks/PatternTab.h
+    docks/PatternTab.cpp
     docks/PropertiesDock.h
     docks/PropertiesDock.cpp
     docks/LayersDock.h

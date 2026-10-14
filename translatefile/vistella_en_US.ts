@@ -400,85 +400,6 @@
     </message>
 </context>
 <context>
-    <name>ColorDock</name>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="52"/>
-        <source>D 双击 swap</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="78"/>
-        <source>拾取颜色...</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="84"/>
-        <source>交换 (X)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="86"/>
-        <source>前景色 ↔ 背景色 交换</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="91"/>
-        <source>默认 (D)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="93"/>
-        <source>前景色=黑,背景色=白</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="111"/>
-        <source>色板</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="135"/>
-        <source>渐变</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="143"/>
-        <source>线性</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="144"/>
-        <source>径向</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="145"/>
-        <source>角度</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="146"/>
-        <source>菱形</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="147"/>
-        <source>对称</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="160"/>
-        <location filename="../src/media/docks/ColorDock.ui" line="190"/>
-        <source>预设</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/media/docks/ColorDock.ui" line="182"/>
-        <source>图案</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>DocWindow</name>
     <message>
         <location filename="../src/ui/docwindow.cpp" line="32"/>
@@ -3798,8 +3719,79 @@ Selected: %1</source>
 <context>
     <name>docks::ColorDock</name>
     <message>
-        <location filename="../src/media/docks/ColorDock.cpp" line="146"/>
+        <location filename="../src/media/docks/ColorDock.cpp" line="37"/>
+        <source>颜色</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/ColorDock.cpp" line="41"/>
+        <source>色板</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/ColorDock.cpp" line="45"/>
+        <source>渐变</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/ColorDock.cpp" line="49"/>
+        <source>图章</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>docks::ColorTab</name>
+    <message>
+        <location filename="../src/media/docks/ColorTab.cpp" line="55"/>
+        <source>交换前景/背景</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/ColorTab.cpp" line="60"/>
+        <source>恢复默认前景/背景</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/ColorTab.cpp" line="67"/>
+        <source>拾取颜色...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/ColorTab.cpp" line="131"/>
         <source>选择前景色</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>docks::GradientTab</name>
+    <message>
+        <location filename="../src/media/docks/GradientTab.cpp" line="54"/>
+        <source>类型:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/GradientTab.cpp" line="58"/>
+        <source>线性 (Linear)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/GradientTab.cpp" line="59"/>
+        <source>径向 (Radial)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/GradientTab.cpp" line="60"/>
+        <source>角度 (Angle)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/GradientTab.cpp" line="61"/>
+        <source>菱形 (Diamond)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/GradientTab.cpp" line="62"/>
+        <source>对称 (Symmetric)</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

@@ -1,40 +1,33 @@
 // SPDX-License-Identifier: MIT
 //
-// ColorDock - F-H (2026-09-09) + F-M (2026-09-10)
+// ColorDock - F-H (2026-09-09) + F-M (2026-09-10) + P7.7 (2026-10-14)
 //
-// Right-side panel dock 1: color / swatch / palette / gradient / pattern (PS-style).
-//   F-H stage:
-//     - foreground/background swatch (2 QFrame, fg 30x30 over bg 50x50)
-//     - "拾取颜色..." button (opens QColorDialog)
-//     - 12-color swatch grid (PS standard)
-//   F-M stage:
-//     - gradient editor (5 types: linear/radial/angle/diamond/symmetric)
-//       + preview bar (200x24, fg->bg linear default)
-//       + 8 PS-style preset cells (4 cols x 2 rows)
-//     - pattern picker (6 PS-style preset cells, 3 cols x 2 rows)
+//   P7.7: Right-side color panel split into 4 sub-tabs (PS-style):
+//     - 颜色 (Color):   fg/bg swatch + pick + swap + default
+//     - 色板 (Swatch):  12-color palette grid
+//     - 渐变 (Gradient): 5 types + 8 preset cells
+//     - 图章 (Pattern): 6 preset cells
 //
-// PS 2026 layout (per SPEC F-M):
-//   +----------------+
-//   | fg/bg swatch   |
-//   | 拾取颜色...     |
-//   | 色板 [12 色]   |
-//   | 渐变 [5+1+8]   |
-//   | 图案 [6]       |
-//   +----------------+
+//   Public API (signals/slots/accessors) preserved for callers
+//   (imagewindow.cpp, LeftToolBar, etc). Sub-tab widgets are private
+//   members; their signals are forwarded to ColorDock's own signals.
 //
-// F-P.3 (2026-09-09): ColorDock now uses ColorDock.ui for framework
-//   (only dynamic cell widgets are created in ctor).
+//   F-H stage: original single-page widget with fg/bg + 12 swatches
+//   F-M stage: added gradient (5 types + 8 presets) + pattern (6 presets)
+//   P7.7: split into 4 sub-tabs (this file)
 //
 #pragma once
 
 #include <QWidget>
 #include <QColor>
 
-class QFrame;
-class QPushButton;
-class QComboBox;
+#include "ColorTab.h"
+#include "SwatchTab.h"
+#include "GradientTab.h"
+#include "PatternTab.h"
 
-namespace Ui { class ColorDock; }
+class QTabWidget;
+class QShowEvent;
 
 namespace docks {
 
@@ -45,62 +38,63 @@ public:
     explicit ColorDock(QWidget* parent = nullptr);
     ~ColorDock() override;
 
-    bool eventFilter(QObject* obj, QEvent* e) override;
+    // P7.7: Accessors for sub-tabs (used by P7.8+ swatch tree, future tests)
+    ColorTab*    colorTab()    const { return m_colorTab; }
+    SwatchTab*   swatchTab()   const { return m_swatchTab; }
+    GradientTab* gradientTab() const { return m_gradientTab; }
+    PatternTab*  patternTab()  const { return m_patternTab; }
 
-    // F-H: foreground/background color accessors
-    QColor foregroundColor() const { return m_foreground; }
-    QColor backgroundColor() const { return m_background; }
-    void   setForegroundColor(const QColor& c);
-    void   setBackgroundColor(const QColor& c);
+    // F-H: foreground/background color accessors (sub-tab Color owns the state)
+    QColor foregroundColor() const;
+    QColor backgroundColor() const;
 
-    // F-M.1: gradient type (5 PS standard)
+    // F-M.1: gradient type (5 PS standard) — re-export from GradientTab
     enum class GradientType {
-        Linear     = 0,   // 线性
-        Radial     = 1,   // 径向
-        Angle      = 2,   // 角度
-        Diamond    = 3,   // 菱形
-        Symmetric  = 4,   // 对称
+        Linear     = 0,
+        Radial     = 1,
+        Angle      = 2,
+        Diamond    = 3,
+        Symmetric  = 4,
     };
     Q_ENUM(GradientType)
 
-    // F-M.1: gradient accessors
-    GradientType gradientType() const { return m_gradientType; }
-    int          gradientPreset() const { return m_gradientPreset; }   // 0..7, -1 = custom
-    void         setGradientType(GradientType t);
-    void         setGradientPreset(int idx);
+    GradientType gradientType() const;
+    int          gradientPreset() const;
+    int          patternPreset() const;
 
-    // F-M.2: pattern accessors
-    int  patternPreset() const { return m_patternPreset; }   // 0..5, -1 = none
+public slots:
+    void setForegroundColor(const QColor& c);
+    void setBackgroundColor(const QColor& c);
+    void setGradientType(GradientType t);
+    void setGradientPreset(int idx);
     void setPatternPreset(int idx);
 
 signals:
     void foregroundColorChanged(const QColor& c);
     void backgroundColorChanged(const QColor& c);
-    void gradientTypeChanged(docks::ColorDock::GradientType t);
+    void gradientTypeChanged(GradientType t);
     void gradientPresetChanged(int idx);
     void patternPresetChanged(int idx);
 
+protected:
+    void showEvent(QShowEvent* e) override;
+
 private slots:
-    void onPickColorClicked();
-    void onGradientTypeChanged(int idx);
-    // P6 (2026-10-09): PS X / D 键等价入口
-    void onSwapClicked();
-    void onDefaultClicked();
+    // Forwarded from sub-tabs. Each is a thin wrapper.
+    void onColorTabForegroundChanged(const QColor& c);
+    void onColorTabBackgroundChanged(const QColor& c);
+    void onGradientTypeForward(GradientTab::GradientType t);
+    void onGradientPresetForward(int idx);
+    void onPatternPresetForward(int idx);
+    void onSwatchClicked(int idx, const QColor& c);
 
 private:
-    void setupPalette();
-    void setupGradientPresets();
-    void setupPatternPresets();
-    void updateGradientPreview();
+    QTabWidget* m_tabs = nullptr;
 
-    Ui::ColorDock* ui = nullptr;   // F-P.3 (2026-09-09)
-
-    QColor m_foreground = Qt::black;
-    QColor m_background = Qt::white;
-
-    GradientType m_gradientType    = GradientType::Linear;
-    int          m_gradientPreset  = 0;     // default: fg->bg linear
-    int          m_patternPreset   = -1;    // default: none
+    ColorTab*    m_colorTab    = nullptr;
+    SwatchTab*   m_swatchTab   = nullptr;
+    GradientTab* m_gradientTab = nullptr;
+    PatternTab*  m_patternTab  = nullptr;
 };
 
 } // namespace docks
