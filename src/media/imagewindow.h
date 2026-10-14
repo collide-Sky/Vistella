@@ -73,14 +73,12 @@ namespace tools { class ToolContext; }
 // Q4.2.1 (2026-09-23): LeftToolBar + ImageOptionBar 实装接入 (之前 P1.1 follow-up
 //   写完 cpp/h/ui 但 ctor 从没创建 — 整个图片阶段做完, 左侧 panel 只有 imagewindow.ui
 //   硬编码 groupMosaic + groupText 占位). 真实 include 进来用, 不 forward decl.
-#include "tools/LeftToolBar.h"
-#include "tools/ImageOptionBar.h"
-#include "tools/LeftSidePanel.h"  // P7.6.x v2 (2026-10-14): 单容器装 4 个左侧 widget
+#include "tools/AppBar.h"  // P7.6.x v3: AppBar 在 MainWindow 顶层, ImageWindow 仍持有 ScreenMode/Capture 引用
 // P7.6.x (2026-10-14): TopOptionBar 已删 - 6 控件 (mode/opacity/flow/smoothing/angle/size)
 //   搬到 ImageOptionBar 内的 BrushOptionsPanel (cmbBlendMode + 5 重叠字段).
 //   撮合 BrushOptionsPanel <-> ToolContext.brushSharedState 在 ImageOptionBar::attach() 里.
-#include "tools/AppBar.h"
-#include "tools/ModeSelectorBar.h"
+//   P7.6.x v3 commit 1: LeftToolBar + ImageOptionBar + ModeSelectorBar + LeftSidePanel +
+//   BrushOptionsPanel 全部从 ImageWindow 搬到 MainWindow. ImageWindow 不再 #include 它们.
 // P0-4 (2026-09-10): SelectionModel forward decl (selection state holder)
 namespace selection { class SelectionModel; }
 // P0-5 (2026-09-10): FilterStrategy forward decl (20 滤镜 PS 同款)
@@ -269,6 +267,11 @@ public:
     //   brushCursor(): brush cursor 控件 (P0-1.2 这一刻**不动**控件位置)
     //   renderToViewPublic(): 涂抹 in-place 修改后触发重绘
     class TextOverlayController* textOverlay() { return m_textCtrl.get(); }
+    // P7.6.x v3 (2026-10-14): 公开 MosaicTool / RightPanelDock 给 MainWindow 用.
+    //   docks 搬出 ImageWindow 后, MainWindow::bindLeftDockWidgets 通过这些拿当前
+    //   image 的组件. raw pointer, 仅在 ImageWindow 还活着时有效 (Qt 父对象关系保证).
+    class MosaicTool* mosaicTool() { return m_mosaicTool.get(); }
+    class docks::RightPanelDock* colorDock() { return m_rightDock; }
     // P2.5 (2026-09-22): returns raw pointer. Safe to use only when checked
     //   immediately before dereferencing (see MosaicTool::setSize pattern).
     //   The pointer becomes dangling when ImageCanvas->scene() deletes the
@@ -401,6 +404,9 @@ signals:
     void filePathChanged(const QString &path);
     void editTimeShouldUpdate(const QString &path);
     void closeRequested();   // 自身要求关闭 (例如工具栏"关闭"按钮或 Ctrl+W)
+    // P7.6.x v3 (2026-10-14): Quick Mask UI 同步 — AppBar 在 MainWindow 顶层, ImageWindow
+    //   不能直接改它. emit 信号, MainWindow 在 bindLeftDockWidgets() 里 connect 到 AppBar.
+    void quickMaskUiSync(bool on);
 
 protected:
     void keyPressEvent(QKeyEvent *e) override;
@@ -526,24 +532,16 @@ private:
     docks::RightPanelDock                  *m_rightDock = nullptr;
     QDockWidget                            *m_rightDockContainer = nullptr;
 
-    // P7.6.x v2 (2026-10-14): LeftSidePanel 单容器, 取代 v1 的 4 个 dock (LeftToolBar +
-    //   ImageOptionBar + ModeSelectorBar + AppBar). Qt dock 在 addDockWidget + splitDockWidget
-    //   链式调用里行为不一致 (Qt 版本相关), v1 模式下 LeftToolBar 整个塌缩到 0 高度看不见.
-    // 单容器用 QVBoxLayout 一次排好, 确定性. LeftSidePanel 内的 4 个子 widget 仍 raw pointer
-    //   (Qt tree, P7.6.x smart pointer 规则).
-    tools::LeftSidePanel                   *m_leftSidePanel = nullptr;
-    QDockWidget                            *m_leftDockContainer = nullptr;
-
-    // P7.6.x (2026-10-14): persistent BrushOptionsPanel (idx=7). Parent=m_leftSidePanel
-    //   (LeftSidePanel owns the Qt tree). 撮合 lives in ImageOptionBar::attach() — see
-    //   constructor.
-    tools::BrushOptionsPanel               *m_brushOpt = nullptr;
-
-    // 4 子 widget 的访问快捷方式 (m_leftSidePanel 创建后赋值). Raw pointer (Qt tree).
-    tools::LeftToolBar                     *m_leftToolBar = nullptr;
-    tools::ImageOptionBar                  *m_imageOptionBar = nullptr;
-    tools::ModeSelectorBar                 *m_modeSelectorBar = nullptr;
-    tools::AppBar                          *m_appBar = nullptr;
+    // P7.6.x v3 (2026-10-14): LeftSidePanel + LeftDockContainer + 4 子 widget + BrushOptionsPanel
+    //   全部搬出 ImageWindow, 移到 MainWindow. ImageWindow 现在只持画布 + 业务数据 + 右侧 dock
+    //   (P7.6.x v3 commit 1 范围: 只搬 left 侧; 右侧 dock 在 commit 5+ 处理). m_leftSidePanel
+    //   / m_leftDockContainer / m_leftToolBar / m_imageOptionBar / m_modeSelectorBar / m_appBar
+    //   / m_brushOpt 成员删除; MainWindow 接管.
+    //
+    //   ImageWindow 现在不需要创建 dock, 但它仍然创建 rightDock / layerPanel / adjustmentPanel
+    //   (右侧 dock 留到下一 commit 再搬, 因为它跟 ImageWindow 的 layer/channel/path state 有
+    //   大量 signal connect, 搬动需要重新规划 setHost / setContentWidget / setAdjustmentPanel
+    //   等 API).
     // Quick Mask mode: when on, MaskBrush paint mode is "switch into" until toggled off;
     //   stores the previously active tool so onQuickMaskToggled(false) restores it.
     bool                                   m_quickMaskActive = false;

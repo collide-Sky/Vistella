@@ -419,14 +419,9 @@ ImageWindow::ImageWindow(QWidget *parent)
     if (auto* colorDock = m_rightDock->colorDock()) {
         connect(colorDock, &docks::ColorDock::foregroundColorChanged,
                 this, &ImageWindow::onForegroundColorChanged);
-        connect(colorDock, &docks::ColorDock::foregroundColorChanged,
-                this, [this](const QColor& c) {
-                    if (m_leftToolBar) m_leftToolBar->setForegroundColor(c);
-                });
-        connect(colorDock, &docks::ColorDock::backgroundColorChanged,
-                this, [this](const QColor& c) {
-                    if (m_leftToolBar) m_leftToolBar->setBackgroundColor(c);
-                });
+        // P7.6.x v3 (2026-10-14): ColorDock fg/bg → LeftToolBar 同步搬到 MainWindow
+        //   (MainWindow::bindLeftDockWidgets 在 active image 切换时连). 避免 ImageWindow
+        //   仍然持有 m_leftToolBar 指针.
     }
     if (auto* selPanel = m_rightDock->channelPathPanel()) {
         connect(selPanel, &docks::ChannelPathPanel::saveSelectionRequested,
@@ -463,77 +458,27 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_ctx = std::make_unique<tools::ToolContext>(this);
     m_ctx->attach(this, m_toolMed.get());
 
-    // P7.6.x v2 (2026-10-14): 单容器 LeftSidePanel 取代 4 个独立 dock + splitDockWidget 链.
-    //   v1 用 4 个 QDockWidget 加 LeftDockWidgetArea + splitDockWidget, Qt 在不同版本下
-    //   行为不一致 (有时 tabify, 有时按添加顺序, 有时 LeftToolBar 整个塌缩), 用户实测
-    //   LeftToolBar 整个看不见. 现在 4 个 widget 装一个 LeftSidePanel 的 QVBoxLayout,
-    //   一次性排好, 确定性.
+    // P7.6.x v3 (2026-10-14): LeftSidePanel + 4 子 widget + m_brushOpt + 左 dock 容器
+    //   全部搬到 MainWindow (P7.6.x v3 commit 1). ImageWindow 只剩画布 + 业务数据 +
+    //   右侧 dock (P7.6.x v3 commit 5+ 处理).
     //
-    //   旧布局: LeftToolBar (top) > ModeSelectorBar > ImageOptionBar > AppBar (bottom)
-    //   新布局: LeftToolBar (top, 56 wide 固定) > sep > ImageOptionBar (expanding) >
-    //           ModeSelectorBar (36 high 固定) > AppBar (32 high 固定)
-    //   ModeSelectorBar 从 LeftToolBar/ImageOptionBar 之间挪到 ImageOptionBar 下方
-    //   (更接近 PS 风格 — 二级 mode 按钮贴近底部状态栏感).
-    m_brushOpt = new tools::BrushOptionsPanel();    // P7.6.x: persistent idx=7 page
-    m_leftSidePanel = new tools::LeftSidePanel(this);  // 创建 4 子 widget
-    m_leftToolBar     = m_leftSidePanel->leftToolBar();
-    m_imageOptionBar  = m_leftSidePanel->imageOptionBar();
-    m_modeSelectorBar = m_leftSidePanel->modeSelectorBar();
-    m_appBar          = m_leftSidePanel->appBar();
+    //   MainWindow 现在负责:
+    //     - 创建 4 个 dock widget (LeftToolBar + ImageOptionBar + ModeSelectorBar + AppBar)
+    //     - 创建 LeftSidePanel 单容器 + LeftDockContainer
+    //     - 在 tabWidget->currentChanged 时重新 attach 到当前 active image 的
+    //       toolMed/ctx/mosaicTool/textCtrl/brushOpt
+    //
+    //   ImageWindow 暴露的接口 (都是 raw pointer):
+    //     - toolMediator() / toolContext() / mosaicTool() / textOverlay()
+    //   都还在, MainWindow 直接拿.
 
-    // P7.6.x: reparent m_brushOpt 进 LeftSidePanel (在 LeftSidePanel 内跟其他 widget
-    //   形成统一 Qt tree). parent 改为 m_imageOptionBar 因为它是 stackedWidget 父级.
-    m_brushOpt->setParent(m_imageOptionBar);
+    // P7.6.x (2026-10-14): TopOptionBar 删除. 6 控件 (mode/opacity/flow/smoothing/
+    //   angle/size) 搬到 ImageOptionBar 内的 BrushOptionsPanel (idx=7).
+    //   顶部工具栏 (QToolBar + addToolBar) 不再有, 中央画布上方就是 image 区域.
+    //   顶部菜单栏 (QMenuBar) 仍然在 MainWindow 提供 视图→放大/缩小 入口.
 
-    // Q4.2.1 (2026-09-23) LeftToolBar + Mediator wiring (跟 v1 一样, 仅接入点变):
-    //   button click -> Mediator.switchTool(id) -> ctx->setState(createXxxTool())
-    m_leftToolBar->attach(m_toolMed.get(), m_ctx.get());
-
-    // P7.1 fg/bg swatch -> ColorDock 同步
-    if (m_rightDock) {
-        if (auto* colorDock = m_rightDock->colorDock()) {
-            connect(m_leftToolBar, &tools::LeftToolBar::foregroundColorChanged,
-                    colorDock, &docks::ColorDock::setForegroundColor);
-            connect(m_leftToolBar, &tools::LeftToolBar::backgroundColorChanged,
-                    colorDock, &docks::ColorDock::setBackgroundColor);
-        }
-    }
-
-    // Q4.2.3 ModeSelectorBar 接 ctx (切 tool 切 page)
-    m_modeSelectorBar->attach(m_ctx.get());
-
-    // Q4.2.1 ImageOptionBar 接 ctx + mosaic + textCtrl + brushOpt (P7.6.x 第 4 参数)
-    m_imageOptionBar->attach(m_ctx.get(),
-                             m_mosaicTool.get(),
-                             m_textCtrl.get(),
-                             m_brushOpt);
-
-    // P5.5+ AppBar 三组 toggle
-    connect(m_appBar, &tools::AppBar::quickMaskToggled,
-            this, &ImageWindow::onQuickMaskToggled);
-    connect(m_appBar, &tools::AppBar::screenModeSelected,
-            this, &ImageWindow::onScreenModeSelected);
-    connect(m_appBar, &tools::AppBar::captureRequested,
-            this, &ImageWindow::onCaptureRequested);
-
-    // 单 dock 容器, 装 LeftSidePanel (左侧整个 PS 风格面板). NoDockWidgetFeatures
-    //   + setTitleBarWidget(emptyTitle) 隐藏标题栏跟 v1 一致.
-    m_leftDockContainer = new QDockWidget(this);
-    m_leftDockContainer->setObjectName(QStringLiteral("leftDockContainer"));
-    m_leftDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    auto* leftEmptyTitle = new QWidget();
-    leftEmptyTitle->setFixedHeight(0);
-    m_leftDockContainer->setTitleBarWidget(leftEmptyTitle);
-    m_leftDockContainer->setWidget(m_leftSidePanel);
-
-    addDockWidget(Qt::LeftDockWidgetArea, m_leftDockContainer);
-    // P7.1 风格: 56px 宽 = LeftToolBar 占满 (其他 widget 在它右边 — 但当前布局是
-    //   LeftToolBar 在 leftSidePanel 顶部, 占满 56 宽, 整个 leftSidePanel 宽跟着 dock).
-    //   dock 宽度由 LeftToolBar (56) + ImageOptionBar (expanding) 决定, 设最小宽 56.
-    resizeDocks({m_leftDockContainer}, {56}, Qt::Horizontal);
-
-    // 初值: 标准屏幕模式 (P5.5+ 启动时默认).
-    applyScreenMode(tools::AppBar::ScreenStandard);
+    // P5.5+ AppBar 初值: 标准屏幕模式 (启动时默认). 现在由 MainWindow 触发
+    //   (AppBar 在 MainWindow 顶层, 不再跟 ImageWindow 挂钩).
 
     // P7.6.x (2026-10-14): TopOptionBar 删除. 6 控件 (mode/opacity/flow/smoothing/
     //   angle/size) 搬到 ImageOptionBar 内的 BrushOptionsPanel (idx=7).
@@ -2476,16 +2421,10 @@ void ImageWindow::onChannelPathQuickMaskToggled(bool on)
 
 void ImageWindow::syncQuickMaskUi(bool on)
 {
-    // Reflect state in the AppBar btnQuickMask AND the ChannelPathPanel btn
-    //   without re-triggering their toggled signals (block-signals wrapper).
-    if (m_appBar) {
-        auto* btn = m_appBar->findChild<QToolButton*>("btnQuickMask");
-        if (btn) {
-            const bool wasBlocked = btn->blockSignals(true);
-            btn->setChecked(on);
-            btn->blockSignals(wasBlocked);
-        }
-    }
+    // P7.6.x v3 (2026-10-14): AppBar 在 MainWindow 顶层, ImageWindow 不再持有 m_appBar.
+    //   通过 quickMaskUiSync 信号通知 MainWindow, MainWindow 接到 AppBar 的 btnQuickMask.
+    //   ChannelPathPanel 仍在 m_rightDock (ImageWindow 内的右侧 dock) 内, 保留同步.
+    emit quickMaskUiSync(on);
     if (m_rightDock) {
         if (auto* sel = m_rightDock->channelPathPanel()) {
             sel->setQuickMask(on);
