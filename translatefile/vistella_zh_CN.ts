@@ -551,548 +551,548 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1030"/>
+        <location filename="../src/media/imagewindow.cpp" line="1045"/>
         <source>智能对象源已修改</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1031"/>
+        <location filename="../src/media/imagewindow.cpp" line="1046"/>
         <source>源文件 &quot;%1&quot; 已在外部被修改.
 
 是否刷新此 SmartObject 图层?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1035"/>
+        <location filename="../src/media/imagewindow.cpp" line="1050"/>
         <source>已跳过刷新: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1040"/>
+        <location filename="../src/media/imagewindow.cpp" line="1055"/>
         <source>智能对象索引已失效 (图层顺序已变): %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1046"/>
+        <location filename="../src/media/imagewindow.cpp" line="1061"/>
         <source>已刷新: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1049"/>
+        <location filename="../src/media/imagewindow.cpp" line="1064"/>
         <source>刷新失败 (源文件不存在或权限不足): %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1095"/>
+        <location filename="../src/media/imagewindow.cpp" line="1109"/>
         <source>已在系统默认应用打开源文件</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1103"/>
+        <location filename="../src/media/imagewindow.cpp" line="1117"/>
         <source>智能对象已刷新</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1121"/>
+        <location filename="../src/media/imagewindow.cpp" line="1135"/>
         <source>转换失败 (源文件不存在或无写入权限)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1130"/>
+        <location filename="../src/media/imagewindow.cpp" line="1144"/>
         <source>已转换为智能对象 (嵌入模式)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1141"/>
+        <location filename="../src/media/imagewindow.cpp" line="1155"/>
         <source>栅格化失败 (源文件不存在)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1150"/>
+        <location filename="../src/media/imagewindow.cpp" line="1164"/>
         <source>已栅格化智能对象</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1158"/>
+        <location filename="../src/media/imagewindow.cpp" line="1172"/>
         <source>选择源文件</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1159"/>
-        <location filename="../src/media/imagewindow.cpp" line="1287"/>
+        <location filename="../src/media/imagewindow.cpp" line="1173"/>
+        <location filename="../src/media/imagewindow.cpp" line="1301"/>
         <source>图像 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;所有 (*.*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1171"/>
+        <location filename="../src/media/imagewindow.cpp" line="1185"/>
         <source>已重新链接源文件</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1189"/>
+        <location filename="../src/media/imagewindow.cpp" line="1203"/>
         <source>选择智能滤镜</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1190"/>
+        <location filename="../src/media/imagewindow.cpp" line="1204"/>
         <source>滤镜类型:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1196"/>
+        <location filename="../src/media/imagewindow.cpp" line="1210"/>
         <source>应用滤镜失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1206"/>
+        <location filename="../src/media/imagewindow.cpp" line="1220"/>
         <source>已应用智能滤镜: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1266"/>
+        <location filename="../src/media/imagewindow.cpp" line="1280"/>
         <source>位图</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1274"/>
+        <location filename="../src/media/imagewindow.cpp" line="1288"/>
         <source>矢量</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1280"/>
+        <location filename="../src/media/imagewindow.cpp" line="1294"/>
         <source>输入文字…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1281"/>
+        <location filename="../src/media/imagewindow.cpp" line="1295"/>
         <source>文字</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1286"/>
+        <location filename="../src/media/imagewindow.cpp" line="1300"/>
         <source>选择智能对象源文件</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1293"/>
+        <location filename="../src/media/imagewindow.cpp" line="1307"/>
         <source>智能对象</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1302"/>
+        <location filename="../src/media/imagewindow.cpp" line="1316"/>
         <source>调整层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1309"/>
+        <location filename="../src/media/imagewindow.cpp" line="1323"/>
         <source>新建图层失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1320"/>
+        <location filename="../src/media/imagewindow.cpp" line="1334"/>
         <source>已新建 %1 图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="826"/>
-        <location filename="../src/media/imagewindow.cpp" line="1338"/>
+        <location filename="../src/media/imagewindow.cpp" line="841"/>
+        <location filename="../src/media/imagewindow.cpp" line="1352"/>
         <source>已删除图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1349"/>
+        <location filename="../src/media/imagewindow.cpp" line="1363"/>
         <source>复制图层失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="810"/>
-        <location filename="../src/media/imagewindow.cpp" line="1360"/>
+        <location filename="../src/media/imagewindow.cpp" line="825"/>
+        <location filename="../src/media/imagewindow.cpp" line="1374"/>
         <source>已复制图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="576"/>
+        <location filename="../src/media/imagewindow.cpp" line="591"/>
         <source>选项</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="794"/>
+        <location filename="../src/media/imagewindow.cpp" line="809"/>
         <source>已新建图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="799"/>
-        <location filename="../src/media/imagewindow.cpp" line="815"/>
+        <location filename="../src/media/imagewindow.cpp" line="814"/>
+        <location filename="../src/media/imagewindow.cpp" line="830"/>
         <source>未选中图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="842"/>
-        <location filename="../src/media/imagewindow.cpp" line="1378"/>
+        <location filename="../src/media/imagewindow.cpp" line="857"/>
+        <location filename="../src/media/imagewindow.cpp" line="1392"/>
         <source>上移图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="857"/>
-        <location filename="../src/media/imagewindow.cpp" line="1393"/>
+        <location filename="../src/media/imagewindow.cpp" line="872"/>
+        <location filename="../src/media/imagewindow.cpp" line="1407"/>
         <source>下移图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="862"/>
-        <location filename="../src/media/imagewindow.cpp" line="1403"/>
+        <location filename="../src/media/imagewindow.cpp" line="877"/>
+        <location filename="../src/media/imagewindow.cpp" line="1417"/>
         <source>无法合并 (已在最底层)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="872"/>
-        <location filename="../src/media/imagewindow.cpp" line="1414"/>
+        <location filename="../src/media/imagewindow.cpp" line="887"/>
+        <location filename="../src/media/imagewindow.cpp" line="1428"/>
         <source>已向下合并</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="877"/>
-        <location filename="../src/media/imagewindow.cpp" line="1425"/>
+        <location filename="../src/media/imagewindow.cpp" line="892"/>
+        <location filename="../src/media/imagewindow.cpp" line="1439"/>
         <source>无需拼合 (图层数 ≤ 1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="893"/>
+        <location filename="../src/media/imagewindow.cpp" line="908"/>
         <source>拼合图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="895"/>
+        <location filename="../src/media/imagewindow.cpp" line="910"/>
         <source>已拼合图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1430"/>
+        <location filename="../src/media/imagewindow.cpp" line="1444"/>
         <source>拼合失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1442"/>
+        <location filename="../src/media/imagewindow.cpp" line="1456"/>
         <source>已合并所有可见图层到 base (仅 base 保留)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1457"/>
+        <location filename="../src/media/imagewindow.cpp" line="1471"/>
         <source>编组失败: 至少需要 2 个图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1469"/>
+        <location filename="../src/media/imagewindow.cpp" line="1483"/>
         <source>已编组 [%1..%2] (入撤销栈)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1480"/>
+        <location filename="../src/media/imagewindow.cpp" line="1494"/>
         <source>解组失败: 请先选中一个组</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1486"/>
+        <location filename="../src/media/imagewindow.cpp" line="1500"/>
         <source>解组失败: 当前选中不是组 (kind=%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1497"/>
+        <location filename="../src/media/imagewindow.cpp" line="1511"/>
         <source>已解组 (入撤销栈)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1516"/>
+        <location filename="../src/media/imagewindow.cpp" line="1530"/>
         <source>已重命名为 &quot;%1&quot;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1535"/>
+        <location filename="../src/media/imagewindow.cpp" line="1549"/>
         <source>已显示图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1535"/>
+        <location filename="../src/media/imagewindow.cpp" line="1549"/>
         <source>已隐藏图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1553"/>
+        <location filename="../src/media/imagewindow.cpp" line="1567"/>
         <source>已锁定图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1553"/>
+        <location filename="../src/media/imagewindow.cpp" line="1567"/>
         <source>已解锁图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1571"/>
+        <location filename="../src/media/imagewindow.cpp" line="1585"/>
         <source>已链接图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1571"/>
+        <location filename="../src/media/imagewindow.cpp" line="1585"/>
         <source>已取消链接</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1590"/>
+        <location filename="../src/media/imagewindow.cpp" line="1604"/>
         <source>不透明度 → %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1614"/>
+        <location filename="../src/media/imagewindow.cpp" line="1628"/>
         <source>混合模式已更改</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1633"/>
+        <location filename="../src/media/imagewindow.cpp" line="1647"/>
         <source>已更新文字内容</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1655"/>
+        <location filename="../src/media/imagewindow.cpp" line="1669"/>
         <source>文字字体已更新</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1669"/>
+        <location filename="../src/media/imagewindow.cpp" line="1683"/>
         <source>源文件失败 (源不存在)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1680"/>
+        <location filename="../src/media/imagewindow.cpp" line="1694"/>
         <source>已更新 SmartObject 源: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1700"/>
+        <location filename="../src/media/imagewindow.cpp" line="1714"/>
         <source>调整类型 → %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1722"/>
+        <location filename="../src/media/imagewindow.cpp" line="1736"/>
         <source>调整层 LUT 已复位 (identity)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1769"/>
+        <location filename="../src/media/imagewindow.cpp" line="1783"/>
         <source>加蒙版失败 (空选区/无效图)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1779"/>
+        <location filename="../src/media/imagewindow.cpp" line="1793"/>
         <source>已添加蒙版</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1792"/>
+        <location filename="../src/media/imagewindow.cpp" line="1806"/>
         <source>清除蒙版失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1802"/>
-        <location filename="../src/media/imagewindow.cpp" line="2340"/>
+        <location filename="../src/media/imagewindow.cpp" line="1816"/>
+        <location filename="../src/media/imagewindow.cpp" line="2354"/>
         <source>已删除蒙版</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1821"/>
-        <location filename="../src/media/imagewindow.cpp" line="2328"/>
+        <location filename="../src/media/imagewindow.cpp" line="1835"/>
+        <location filename="../src/media/imagewindow.cpp" line="2342"/>
         <source>蒙版已启用</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1821"/>
-        <location filename="../src/media/imagewindow.cpp" line="2328"/>
+        <location filename="../src/media/imagewindow.cpp" line="1835"/>
+        <location filename="../src/media/imagewindow.cpp" line="2342"/>
         <source>蒙版已禁用</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1833"/>
-        <location filename="../src/media/imagewindow.cpp" line="2356"/>
+        <location filename="../src/media/imagewindow.cpp" line="1847"/>
+        <location filename="../src/media/imagewindow.cpp" line="2370"/>
         <source>蒙版已反相</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1833"/>
-        <location filename="../src/media/imagewindow.cpp" line="2356"/>
+        <location filename="../src/media/imagewindow.cpp" line="1847"/>
+        <location filename="../src/media/imagewindow.cpp" line="2370"/>
         <source>蒙版取消反相</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1844"/>
+        <location filename="../src/media/imagewindow.cpp" line="1858"/>
         <source>蒙版密度 → %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1855"/>
+        <location filename="../src/media/imagewindow.cpp" line="1869"/>
         <source>蒙版羽化 → %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1868"/>
+        <location filename="../src/media/imagewindow.cpp" line="1882"/>
         <source>矢量蒙版添加失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1874"/>
+        <location filename="../src/media/imagewindow.cpp" line="1888"/>
         <source>已添加矢量蒙版 (用 PenTool 画路径)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1886"/>
+        <location filename="../src/media/imagewindow.cpp" line="1900"/>
         <source>当前无有效选区</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1906"/>
+        <location filename="../src/media/imagewindow.cpp" line="1920"/>
         <source>已从选区添加像素蒙版</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="1959"/>
+        <location filename="../src/media/imagewindow.cpp" line="1973"/>
         <source>未命名图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2402"/>
+        <location filename="../src/media/imagewindow.cpp" line="2416"/>
         <source>蒙版已应用到图层</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2406"/>
+        <location filename="../src/media/imagewindow.cpp" line="2420"/>
         <source>矢量蒙版应用暂未实装</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2549"/>
+        <location filename="../src/media/imagewindow.cpp" line="2563"/>
         <source>快速蒙版: 启用 (Mask Brush active)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2556"/>
+        <location filename="../src/media/imagewindow.cpp" line="2570"/>
         <source>快速蒙版: 关闭</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2623"/>
+        <location filename="../src/media/imagewindow.cpp" line="2637"/>
         <source>截图失败: 无 primary screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2629"/>
+        <location filename="../src/media/imagewindow.cpp" line="2643"/>
         <source>截图失败: 没有选区 (先 RectSelect)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2634"/>
+        <location filename="../src/media/imagewindow.cpp" line="2648"/>
         <source>截图失败: 选区为空</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2650"/>
+        <location filename="../src/media/imagewindow.cpp" line="2664"/>
         <source>截图失败: 抓图为空</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2660"/>
+        <location filename="../src/media/imagewindow.cpp" line="2674"/>
         <source>已保存: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2662"/>
+        <location filename="../src/media/imagewindow.cpp" line="2676"/>
         <source>保存失败: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2686"/>
+        <location filename="../src/media/imagewindow.cpp" line="2700"/>
         <source>保存选区失败: 没有选区模型</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2691"/>
+        <location filename="../src/media/imagewindow.cpp" line="2705"/>
         <source>保存选区失败: 选区为空</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2695"/>
+        <location filename="../src/media/imagewindow.cpp" line="2709"/>
         <source>保存选区失败: 没有加载图片</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2706"/>
+        <location filename="../src/media/imagewindow.cpp" line="2720"/>
         <source>选区已保存 (%1x%2)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2713"/>
+        <location filename="../src/media/imagewindow.cpp" line="2727"/>
         <source>载入选区失败: 没有保存的选区</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2718"/>
+        <location filename="../src/media/imagewindow.cpp" line="2732"/>
         <source>载入选区失败: 保存格式不对</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2724"/>
+        <location filename="../src/media/imagewindow.cpp" line="2738"/>
         <source>载入选区失败: 保存为空</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="2732"/>
+        <location filename="../src/media/imagewindow.cpp" line="2746"/>
         <source>选区已载入 (%1x%2)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="3026"/>
-        <location filename="../src/media/imagewindow.cpp" line="3112"/>
-        <location filename="../src/media/imagewindow.cpp" line="3128"/>
-        <location filename="../src/media/imagewindow.cpp" line="3144"/>
-        <location filename="../src/media/imagewindow.cpp" line="3160"/>
-        <location filename="../src/media/imagewindow.cpp" line="3176"/>
+        <location filename="../src/media/imagewindow.cpp" line="3040"/>
+        <location filename="../src/media/imagewindow.cpp" line="3126"/>
+        <location filename="../src/media/imagewindow.cpp" line="3142"/>
+        <location filename="../src/media/imagewindow.cpp" line="3158"/>
+        <location filename="../src/media/imagewindow.cpp" line="3174"/>
+        <location filename="../src/media/imagewindow.cpp" line="3190"/>
         <source>当前页面没有图像</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="3081"/>
+        <location filename="../src/media/imagewindow.cpp" line="3095"/>
         <source>已应用 SmartObject 变换</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="3088"/>
+        <location filename="../src/media/imagewindow.cpp" line="3102"/>
         <source>ToolContext 未初始化</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="3106"/>
+        <location filename="../src/media/imagewindow.cpp" line="3120"/>
         <source>自由变换 — 拖动 8 handle 或中心点 (Esc 退出)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="3119"/>
+        <location filename="../src/media/imagewindow.cpp" line="3133"/>
         <source>水平翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="3135"/>
+        <location filename="../src/media/imagewindow.cpp" line="3149"/>
         <source>垂直翻转</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="3151"/>
+        <location filename="../src/media/imagewindow.cpp" line="3165"/>
         <source>旋转 90° 顺时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="3167"/>
+        <location filename="../src/media/imagewindow.cpp" line="3181"/>
         <source>旋转 90° 逆时针</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/imagewindow.cpp" line="3183"/>
+        <location filename="../src/media/imagewindow.cpp" line="3197"/>
         <source>旋转 180°</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3742,22 +3742,22 @@ Selected: %1</source>
 <context>
     <name>docks::ColorTab</name>
     <message>
-        <location filename="../src/media/docks/ColorTab.cpp" line="55"/>
+        <location filename="../src/media/docks/ColorTab.cpp" line="56"/>
         <source>交换前景/背景</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/docks/ColorTab.cpp" line="60"/>
+        <location filename="../src/media/docks/ColorTab.cpp" line="62"/>
         <source>恢复默认前景/背景</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/docks/ColorTab.cpp" line="67"/>
+        <location filename="../src/media/docks/ColorTab.cpp" line="69"/>
         <source>拾取颜色...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/docks/ColorTab.cpp" line="131"/>
+        <location filename="../src/media/docks/ColorTab.cpp" line="134"/>
         <source>选择前景色</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3771,27 +3771,27 @@ Selected: %1</source>
     </message>
     <message>
         <location filename="../src/media/docks/GradientTab.cpp" line="58"/>
-        <source>线性 (Linear)</source>
+        <source>线性</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/media/docks/GradientTab.cpp" line="59"/>
-        <source>径向 (Radial)</source>
+        <source>径向</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/media/docks/GradientTab.cpp" line="60"/>
-        <source>角度 (Angle)</source>
+        <source>角度</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/media/docks/GradientTab.cpp" line="61"/>
-        <source>菱形 (Diamond)</source>
+        <source>菱形</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/media/docks/GradientTab.cpp" line="62"/>
-        <source>对称 (Symmetric)</source>
+        <source>对称</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
