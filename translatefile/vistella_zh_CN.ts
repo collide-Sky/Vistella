@@ -3968,6 +3968,24 @@ Selected: %1</source>
     </message>
 </context>
 <context>
+    <name>docks::SwatchTab</name>
+    <message>
+        <location filename="../src/media/docks/SwatchTab.cpp" line="126"/>
+        <source>树 (Tree)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/SwatchTab.cpp" line="127"/>
+        <source>草 (Grass)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/docks/SwatchTab.cpp" line="128"/>
+        <source>水滴 (Water)</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>filter::FilterDialog</name>
     <message>
         <location filename="../src/media/filters/FilterDialog.cpp" line="132"/>

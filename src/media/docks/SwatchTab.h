@@ -1,20 +1,26 @@
 // SPDX-License-Identifier: MIT
 //
-// SwatchTab - P7.7 (2026-10-14)
+// SwatchTab - P7.7 (2026-10-14) + P7.8 (2026-10-14)
 //
-//   Sub-page 2 of ColorDock. PS-style "Swatch" tab:
-//     - 12 PS standard palette swatches (4 cols x 3 rows)
-//     - Click to set foreground color (PS default behavior)
+//   Sub-page 2 of ColorDock. PS-style "Swatch" tab.
+//   P7.7: 12-color flat grid (4 cols x 3 rows).
+//   P7.8: classification tree with 3 categories (树 Tree / 草 Grass / 水滴 Water Drop).
+//     Each category has 4-6 swatches. Click to set foreground color.
 //
-//   P7.8 (2026-10-15) will extend to a tree with categories (tree/grass/...)
+//   P7.8 stage: QTreeView with QStandardItemModel. Item data role carries the
+//   QColor. Click on a swatch -> emit swatchClicked(idx, color) where idx is
+//   a stable index in [0..total). P7.11+ (palette library) will load palettes
+//   from .aco / .gpl files and replace the hardcoded 3 categories.
 //
 #pragma once
 
 #include <QWidget>
 #include <QColor>
 
-class QFrame;
-class QGridLayout;
+class QTreeView;
+class QStandardItemModel;
+class QStandardItem;
+class QModelIndex;
 
 namespace docks {
 
@@ -25,20 +31,32 @@ public:
     explicit SwatchTab(QWidget* parent = nullptr);
     ~SwatchTab();
 
-    // Set the swatch to highlight (idx 0..11); -1 = none
+    // Set the swatch to highlight by flat index across all categories (0..N-1).
+    //   P7.8 stage: stores index, applies highlight on next paint.
+    //   P7.11+ (custom delegate): paints a 2px border on the matching swatch.
     void setHighlightedIndex(int idx);
     int  highlightedIndex() const { return m_highlighted; }
 
+    // Total swatch count across all categories
+    int swatchCount() const;
+
 signals:
     // PS default: clicking a swatch sets foreground color
-    void swatchClicked(int idx, const QColor& color);
+    void swatchClicked(int flatIndex, const QColor& color);
+
+private slots:
+    void onItemClicked(const QModelIndex& index);
 
 private:
-    bool eventFilter(QObject* obj, QEvent* e);
+    void buildTree();
+    // Map a flat index (0..swatchCount()-1) to its QModelIndex in the tree.
+    QModelIndex flatToModelIndex(int flatIdx) const;
+    // Inverse: model index -> flat index (or -1 if header).
+    int modelIndexToFlat(const QModelIndex& idx) const;
 
-    QFrame*      m_cells[12] = { nullptr };
-    QGridLayout* m_grid      = nullptr;
-    int          m_highlighted = -1;
+    QTreeView*           m_tree     = nullptr;
+    QStandardItemModel*  m_model    = nullptr;
+    int                  m_highlighted = -1;
 };
 
 } // namespace docks
