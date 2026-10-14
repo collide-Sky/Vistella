@@ -10,6 +10,10 @@ add_library(vistella_ui_dock STATIC
     VDragManager.cpp
     VDraggableTabWidget.h
     VDraggableTabWidget.cpp
+    VTabPageBase.h
+    VTabPageBase.cpp
+    VPages.h
+    VPages.cpp
 )
 
 target_include_directories(vistella_ui_dock PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -18,6 +22,9 @@ target_link_libraries(vistella_ui_dock
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
+    PRIVATE
+        vistella_core       # Throttle.h (PropertiesDock uses it)
+        vistella_media      # ColorTab / SwatchTab / LayersDock / PropertiesDock / ChannelPathPanel / AdjustmentPanel
 )
 
 set(CMAKE_AUTOMOC ON)

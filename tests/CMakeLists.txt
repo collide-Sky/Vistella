@@ -195,3 +195,5 @@ add_vistella_test(tst_P3_1_FilterDialog)
 add_vistella_test(tst_P3_5_CameraRaw)
 # P7.6.x v3 commit 2 (2026-10-14): PS-style draggable tab + GPU/CPU placeholders
 add_vistella_test(tst_VDraggableTabWidget)
+# P7.6.x v3 commit 3 (2026-10-14): VTabPageBase + 9 V*Page adapters
+add_vistella_test(tst_VTabPageBase)
