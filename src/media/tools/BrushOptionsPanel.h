@@ -9,6 +9,18 @@
 //   Provides a sub-set of PS Brush panel (size/hardness/opacity/flow/spacing/
 //   angle/roundness + Size Jitter + Scattering + Smoothing). Additional
 //   dynamics groups (Transfer / Texture / Dual) can be added in P1.1 follow-up.
+//
+// P7.6.x (2026-10-14): 增加 BlendMode combo + 6 字段跟 ToolContext.brushSharedState
+//   的双向同步. 取代旧 TopOptionBar (P7.5) — TopOptionBar 整个 class 删除, 它的 6 控件
+//   拆分如下:
+//     - blendMode   -> 新增 cmbBlendMode (在 BrushPreset 里没有的图层混合模式)
+//     - size        -> 已经在 sliderSize/spinSize (BrushSettings.size)
+//     - opacity     -> 已经在 sliderOpacity/spinOpacity
+//     - flow        -> 已经在 sliderFlow/spinFlow
+//     - angle       -> 已经在 sliderAngle/spinAngle
+//     - smoothing   -> 已经在 sliderSmoothAmount/spinSmoothAmount
+//   6 字段的同步通过 sharedStateChanged / sharedStatePulledIn 两个 public method
+//   在 ImageOptionBar (Brush page 容器) 里撮合.
 
 #pragma once
 
@@ -43,15 +55,34 @@ public:
     // Bind to an existing BrushPreset's name (for header label).
     void setPresetName(const QString &name);
 
+    // P7.6.x (2026-10-14): 共享 brush state 撮合接口 — 取代 TopOptionBar.
+    //   sharedStateChanged: 外部 (用户改 UI 后) 把 6 字段同步到 ToolContext.brushSharedState.
+    //   sharedStatePulledIn: ToolContext 状态变 (切 tool / load file / preset 选) 把 6 字段
+    //     拉回到 UI. ImageOptionBar 在 Brush page 显示时调一次.
+    struct SharedState {
+        int    blendMode = 0;     // 0..5 (跟 cmbBlendMode 索引一致)
+        int    size      = 32;    // px
+        double opacityPct = 100.0;// %
+        double flowPct    = 100.0;// %
+        double smoothing  = 50.0; // %
+        int    angle      = 0;    // deg
+    };
+    SharedState sharedStatePulledIn() const; // UI -> struct (用户改 UI 后读)
+    void applySharedState(const SharedState& s); // struct -> UI (外部推送)
+
 signals:
     // Emitted on any UI change. Caller should call brush.setPreset(p).
     void presetChanged(const brushes::BrushPreset &p);
+    // P7.6.x (2026-10-14): any of 6 shared fields changed (cmbBlendMode 单独触发
+    //   不走 presetChanged). ImageOptionBar 撮合时 1 个 signal 就够.
+    void sharedStateChanged();
     // Emitted when user clicks the "..." picker button (opens BrushPickerDialog).
     void pickerRequested();
 
 private slots:
     // Forward signals from individual widgets.
     void onAnySettingChanged();
+    void onBlendModeChanged(int idx);
     void onPresetComboChanged(int idx);
 
 private:

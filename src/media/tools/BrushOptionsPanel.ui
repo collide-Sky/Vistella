@@ -56,6 +56,60 @@
      </layout>
     </widget>
    </item>
+   <!-- P7.6.x (2026-10-14): grpSharedMode - 顶部 TopOptionBar 6 控件里唯一不在
+        BrushPreset 里的就是 BlendMode (PS 图层混合). 搬到 BrushOptionsPanel 顶.
+        size/opacity/flow/angle/smoothing 5 项已经在 grpSettings 里有, 它们跟
+        ToolContext.brushSharedState 通过 presetChanged 同步. -->
+   <item>
+    <widget class="QGroupBox" name="grpSharedMode">
+     <property name="title">
+      <string>Mode</string>
+     </property>
+     <layout class="QHBoxLayout" name="hbSharedMode">
+      <item>
+       <widget class="QLabel" name="lblBlendMode">
+        <property name="text">
+         <string>Blend:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="cmbBlendMode">
+        <item>
+         <property name="text">
+          <string>正常</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>正片叠底</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>滤色</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>叠加</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>变暗</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>变亮</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
    <item>
     <widget class="QGroupBox" name="grpSettings">
      <property name="title">

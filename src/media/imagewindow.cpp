@@ -17,6 +17,7 @@
 //   之前 F-D/F-E (2026-09-09) 写完 cpp/h/ui 但 ctor 从没创建 — 真实接入, 不放占位
 #include "tools/LeftToolBar.h"
 #include "tools/ImageOptionBar.h"
+#include "tools/BrushOptionsPanel.h"  // P7.6.x (2026-10-14): m_brushOpt member
 // P0-3.2 (2026-09-08): 新组件 AdjustmentPanel (5 tab 色彩调整)
 #include "imagewindow/AdjustmentPanel.h"
 #include "mediators/DialogMediator.h"
@@ -534,14 +535,22 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   groupText 是 MosaicTool/TextOverlay 的旧 UI (跟 ToolMediator 无关),
     //   Q4.2.2 单独 commit 做迁移, 本次只接入 LeftToolBar + ImageOptionBar.
     //   P7.6.x: raw pointer — setWidget() below takes ownership.
+    // P7.6.x (2026-10-14): m_brushOpt 先于 m_imageOptionBar 创建. BrushOptionsPanel
+    //   是单例 (idx=7 page), 用 parent=this. ImageOptionBar::attach() 第 4 参数
+    //   撮合 BrushOptionsPanel <-> ToolContext.brushSharedState.
+    m_brushOpt = new tools::BrushOptionsPanel(this);
     m_imageOptionBar = new tools::ImageOptionBar();
     // P5.1 (2026-10-08): pass MosaicTool + TextOverlayController so
     //   ImageOptionBar can route Brush -> MosaicOptionPanel and
     //   Text -> TextOptionPanel, replacing the old Q4.2.2.1 leftPanel
     //   gridLayout_4 always-on hosting.
+    // P7.6.x (2026-10-14): pass m_brushOpt so ImageOptionBar uses it at idx=7
+    //   instead of creating a new BrushOptionsPanel each time, and so the
+    //   sharedState <-> brushSharedState 撮合 is set up.
     m_imageOptionBar->attach(m_ctx.get(),
                              m_mosaicTool.get(),
-                             m_textCtrl.get());
+                             m_textCtrl.get(),
+                             m_brushOpt);
 
     m_imageOptionDockContainer = new QDockWidget(this);
     m_imageOptionDockContainer->setObjectName(QStringLiteral("imageOptionDockContainer"));
@@ -583,66 +592,11 @@ ImageWindow::ImageWindow(QWidget *parent)
     // 初值: 标准屏幕模式 (P5.5+ 启动时默认).
     applyScreenMode(tools::AppBar::ScreenStandard);
 
-    // P7.5 (2026-10-12): 顶部水平共享工具栏 (PS 风格 mode/opacity/flow/smoothing/angle/size).
-    //   用户截图左上的 fg/bg swatch + 模式/不透明度/流量/平滑/角度/大小 全放这里.
-    //   P7.5 只画 UI + QToolBar. 接 Brush/Clone/Heal/Patch/MaskBrush 工具状态在 P7.6 commit.
-    //   P7.6.x: raw pointer — addWidget() on QToolBar takes ownership.
-    m_topOptionBar = new tools::TopOptionBar();
-    m_topToolBar = addToolBar(tr("选项"));
-    m_topToolBar->setObjectName(QStringLiteral("topOptionBar"));
-    m_topToolBar->setMovable(false);
-    m_topToolBar->setFloatable(false);
-    m_topToolBar->setIconSize(QSize(16, 16));
-    m_topToolBar->addWidget(m_topOptionBar);
-    // PS-style 紧凑 topToolBar: 28px 高 (一次高度, 允许后续 zoom + fg/bg 快捷槽位)
-
-    // P7.6 (2026-10-13): TopOptionBar <-> ToolContext.brushSharedState() 双向同步.
-    //   TopOptionBar 改值 -> 走 ToolContext setter (发 brushSettingsChanged 信号,
-    //   当前 active brush tool 接; ToolContext 状态变 (切 tool 时) -> 给 TopOptionBar 显示.
-    //   6 个控件 -> 6 个 setter 双向 (+ 当前 paint color 暂 P7.6 commit 不接):
-    //     blendMode / opacity / flow / smoothing / angle / brushSize
-    if (m_ctx) {
-        // (1) TopOptionBar -> ToolContext 写 (User 改 TopOptionBar)
-        connect(m_topOptionBar, &tools::TopOptionBar::blendModeChanged,
-                m_ctx.get(), [this](int /*idx*/) {
-                    m_ctx->setBlendMode(static_cast<int>(m_topOptionBar->blendMode()));
-                });
-        connect(m_topOptionBar, &tools::TopOptionBar::opacityChanged,
-                m_ctx.get(), [this](double pct) {
-                    m_ctx->setOpacity(pct);
-                });
-        connect(m_topOptionBar, &tools::TopOptionBar::flowChanged,
-                m_ctx.get(), [this](double pct) {
-                    m_ctx->setFlow(pct);
-                });
-        connect(m_topOptionBar, &tools::TopOptionBar::smoothingChanged,
-                m_ctx.get(), [this](double pct) {
-                    m_ctx->setSmoothing(pct);
-                });
-        connect(m_topOptionBar, &tools::TopOptionBar::angleChanged,
-                m_ctx.get(), [this](int deg) {
-                    m_ctx->setAngle(deg);
-                });
-        connect(m_topOptionBar, &tools::TopOptionBar::brushSizeChanged,
-                m_ctx.get(), [this](int px) {
-                    m_ctx->setBrushSize(px);
-                });
-
-        // (2) ToolContext -> TopOptionBar 读 (任何 setter 触发都 fetch 6 个值)
-        connect(m_ctx.get(), &tools::ToolContext::brushSettingsChanged,
-                this, [this]() {
-                    m_topOptionBar->setBlendModeIndex(m_ctx->brushSharedState().blendMode);
-                    m_topOptionBar->setOpacity(m_ctx->brushSharedState().opacity);
-                    m_topOptionBar->setFlow(m_ctx->brushSharedState().flow);
-                    m_topOptionBar->setSmoothing(m_ctx->brushSharedState().smoothing);
-                    m_topOptionBar->setAngle(m_ctx->brushSharedState().angle);
-                    m_topOptionBar->setBrushSize(m_ctx->brushSharedState().brushSize);
-                });
-
-        // 启动时同步 ToolContext 当前 6 值到 TopOptionBar UI (TopOptionBar 构造时
-        //   跟 ToolContext 默认值一致, 但显式 set 一次让 setX 经过 QSignalBlocker).
-        m_ctx->setBrushSize(m_ctx->brushSharedState().brushSize);
-    }
+    // P7.6.x (2026-10-14): TopOptionBar 删除. 6 控件 (mode/opacity/flow/smoothing/
+    //   angle/size) 搬到 ImageOptionBar 内的 BrushOptionsPanel (idx=7).
+    //   撮合在 ImageOptionBar::attach() 第 4 参数 brushOpt 里 (上面已经传入 m_brushOpt).
+    //   顶部工具栏 (QToolBar + addToolBar) 不再有, 中央画布上方就是 image 区域.
+    //   顶部菜单栏 (QMenuBar) 仍然在 MainWindow 提供 视图→放大/缩小 入口.
 
     // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel no longer hosted
     //   here. ImageOptionBar owns both and routes them per active tool
@@ -2525,18 +2479,13 @@ void ImageWindow::onTextColorClicked()
 
 void ImageWindow::buildActions()
 {
-    // 注: actOpen/actSave/actSaveAs/actClose 故意没接 — 顶部菜单已经有, 这里只接 zoom
-    connect(ui->actZoomIn,    &QAction::triggered, this, &ImageWindow::onZoomIn);
-    connect(ui->actZoomOut,   &QAction::triggered, this, &ImageWindow::onZoomOut);
-    connect(ui->actFit,       &QAction::triggered, this, &ImageWindow::onFitWindow);
-    connect(ui->actResetZoom, &QAction::triggered, this, &ImageWindow::onResetZoom);
-
-    // Stage B (2026-09-15): 撤销 P0-1.2 5 toggle + 10 slider UI, ImageAdjustmentPanel 类已删
-    // Q4.2.2 (2026-09-24): 删 5 个 connect (sliderMosaicSize / btnMosaicMode /
-    //   comboMosaicType / btnTextColor / comboTextFont / spinTextSize), 全部
-    //   移到 MosaicOptionPanel + TextOptionPanel 内部直接 connect 业务组件.
-    //   buildActions 只剩顶层 toolbar/action 路由 (zoom 4 个), 不再管 imagewindow.ui
-    //   占位 group (slider/button/combo), 那些 widget 已经从 .ui 删除 (Q4.2.2).
+    // P7.6.x (2026-10-14): 4 zoom actions (actZoomIn / actZoomOut / actFit / actResetZoom)
+    //   removed from imagewindow.ui toolbar (P7.6.x UI layout fix: 4 zoom buttons
+    //   不应该出现在中央画布上方 — PS 没有这些. MainWindow 自己拥有 m_actZoomIn/ZoomOut
+    //   并 forward 到 active ImageWindow, 这里不再需要 connect).
+    //
+    // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel connect 全部移到各自 panel
+    //   内部, buildActions 不再管 imagewindow.ui 占位 group.
 }
 
 // ---------------- 缩放 ----------------

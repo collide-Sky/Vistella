@@ -21,7 +21,9 @@ class ImageWindow;
 
 namespace tools {
 
-// P7.6 (2026-10-13): shared brush state. TopOptionBar writes, Brush/Clone/Heal/Patch/MaskBrush read.
+// P7.6 (2026-10-13): shared brush state. P7.6.x (2026-10-14) UI: BrushOptionsPanel
+//   (ImageOptionBar idx=7) writes via ImageOptionBar::onBrushSharedStateChangedFromPanel,
+//   Brush/Clone/Heal/Patch/MaskBrush read via brushSettingsChanged.
 //   Not nested (moc does not like nested struct). Top-level namespace.
 //   P7.9 commit extends (12 dynamic panel slots) and tools apply() sync.
 struct BrushSharedState {
@@ -62,10 +64,11 @@ public:
     void onKeyPress(QKeyEvent* e);
     void onKeyRelease(QKeyEvent* e);
 
-    // P7.6 (2026-10-13): shared brush state accessor (TopOptionBar in ImageWindow reads/writes).
+    // P7.6 (2026-10-13): shared brush state accessor (BrushOptionsPanel via
+    //   ImageOptionBar reads/writes). P7.6.x UI.
     BrushSharedState& brushSharedState() { return m_brushShared; }
     const BrushSharedState& brushSharedState() const { return m_brushShared; }
-    // Single setter path with refresh signal — TopOptionBar / tools can set shared.
+    // Single setter path with refresh signal — BrushOptionsPanel / tools can set shared.
     void setBlendMode(int mode);
     void setOpacity(double pct);
     void setFlow(double pct);
@@ -82,8 +85,8 @@ signals:
     void cursorChanged(const QCursor& cursor);
 
     // P7.6 (2026-10-13): brushSettingsChanged — any of opacity/flow/angle/size/blendMode change emits
-    //   signal; TopOptionBar / current active brush tool sync. P7.6 stage:
-    //   only TopOptionBar change -> ToolContext -> ToolContext change -> brush tool listen (P7.9).
+    //   signal. P7.6.x (2026-10-14) UI: subscribers are ImageOptionBar (forwards to
+    //   BrushOptionsPanel::applySharedState) + future brush tools (P7.9 commit).
     void brushSettingsChanged();
 
 private:
@@ -95,6 +98,7 @@ private:
     std::unique_ptr<ToolState>       m_current;
 
     // P7.6 (2026-10-13): shared brush state (mode/opacity/flow/smoothing/angle/brushSize).
+    //   P7.6.x (2026-10-14) UI writes via BrushOptionsPanel (ImageOptionBar).
     BrushSharedState                 m_brushShared;
 
     // Initial default tool (None state, no event response)

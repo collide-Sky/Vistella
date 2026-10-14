@@ -87,7 +87,8 @@ add_vistella_test(tst_ImageOptionBar)
 # Q4.2.4 (2026-10-08): ModeSelectorBar 5 tools (MagicWand/Lasso/Crop/Brush/Eyedropper)
 #   二级模式选择按钮组 + button click -> tool.setXxx + refresh 同步
 add_vistella_test(tst_ModeSelectorBar)
-add_vistella_test(tst_TopOptionBar)     # P7.5 (2026-10-12): PS 风格 top mode/opacity/flow/smoothing/angle/size 共享选项栏
+# P7.6.x (2026-10-14): tst_TopOptionBar 删除 - TopOptionBar 整个 class 已删,
+#   测试用例覆盖已迁到 BrushOptionsPanel (6 共享字段). 后续 P7.9 commit 加测试.
 # P5.5+ (2026-10-09): AppBar 三组 widget (Quick Mask / Screen Mode / Capture) 信号验证
 add_vistella_test(tst_AppBar)
 # F-F (2026-09-09): mainwindow 集成 WorkspaceMediator 4 工作区

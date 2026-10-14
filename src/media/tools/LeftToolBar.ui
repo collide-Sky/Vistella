@@ -28,10 +28,19 @@
    <property name="rightMargin">0</property>
    <property name="bottomMargin">0</property>
    <property name="spacing">0</property>
-   <!-- P7.1 (2026-10-12): PS-style tight 2-column tool grid.
-        Each tool button is 28x28, no margin, zero spacing. Total width 56. -->
+   <!-- P7.6.x (2026-10-14): toolGridContainer 放进 QScrollArea. PS 风格 left dock
+        通常很窄 (56px), 14 个工具 (28x28 双列) 总高 224px — 短窗口会被截断.
+        加 QScrollArea 让窗口短时垂直滚动, fg/bg swatch 始终贴底. -->
    <item>
-    <widget class="QWidget" name="toolGridContainer">
+    <widget class="QScrollArea" name="toolScrollArea">
+     <property name="widgetResizable"><bool>true</bool></property>
+     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+     <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+     <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
+     <property name="minimumSize">
+      <size><width>56</width><height>0</height></size>
+     </property>
+     <widget class="QWidget" name="toolGridContainer">
      <property name="minimumSize">
       <size><width>0</width><height>0</height></size>
      </property>
@@ -192,6 +201,7 @@
        </widget>
       </item>
      </layout>
+    </widget>
     </widget>
    </item>
    <!-- P7.1 (2026-10-12): PS-style fg/bg swatch (60x50 stacked).

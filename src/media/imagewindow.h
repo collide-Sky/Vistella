@@ -75,7 +75,9 @@ namespace tools { class ToolContext; }
 //   硬编码 groupMosaic + groupText 占位). 真实 include 进来用, 不 forward decl.
 #include "tools/LeftToolBar.h"
 #include "tools/ImageOptionBar.h"
-#include "tools/TopOptionBar.h"   // P7.5 (2026-10-12): 顶部水平工具栏 (PS 风格)
+// P7.6.x (2026-10-14): TopOptionBar 已删 - 6 控件 (mode/opacity/flow/smoothing/angle/size)
+//   搬到 ImageOptionBar 内的 BrushOptionsPanel (cmbBlendMode + 5 重叠字段).
+//   撮合 BrushOptionsPanel <-> ToolContext.brushSharedState 在 ImageOptionBar::attach() 里.
 #include "tools/AppBar.h"
 #include "tools/ModeSelectorBar.h"
 // P0-4 (2026-09-10): SelectionModel forward decl (selection state holder)
@@ -451,13 +453,17 @@ public slots:
     //   connect can invoke it without friend declaration.
     void onTextColorClicked();
 
+public slots:
+    // P7.6.x (2026-10-14): 提升到 public slots — MainWindow::onZoomIn/Out 调
+    //   activeImageWindow()->onZoomIn/Out 真实缩放, 不再只 show statusBar 文字.
+    void onZoomIn();
+    void onZoomOut();
+
 private slots:
     // 工具栏 actions
     // P0-1.4 (2026-09-07): onSave / onSaveAs / onOpen / onClose 搬到 ImageIOController
     //   这 4 个 slot 不再连接任何 signal (buildActions 里就只接了 zoom),
     //   仅作 saveAsPublic / savePublic 转发目标, 转发也搬到 m_io->onSaveAs / m_io->onSave
-    void onZoomIn();
-    void onZoomOut();
     void onResetZoom();
 
     // 撤销/重做
@@ -526,12 +532,13 @@ private:
     tools::LeftToolBar                     *m_leftToolBar = nullptr;
     QDockWidget                            *m_leftDockContainer = nullptr;
     tools::ImageOptionBar                  *m_imageOptionBar = nullptr;
+    // P7.6.x (2026-10-14): persistent BrushOptionsPanel (idx=7). Parent=this.
+    //   Replaces dynamic Brush::optionPage() creation. 撮合 lives in ImageOptionBar::attach().
+    tools::BrushOptionsPanel               *m_brushOpt = nullptr;
 
-    // P7.5 (2026-10-12): 顶部水平共享工具栏. addWidget() on QToolBar takes
-    //   ownership; m_topToolBar itself is created by QMainWindow::addToolBar
-    //   which returns a Qt-owned pointer.
-    tools::TopOptionBar                    *m_topOptionBar = nullptr;
-    QToolBar                               *m_topToolBar = nullptr;
+    // P7.6.x (2026-10-14): 顶部水平共享工具栏 (TopOptionBar) 已删. 6 控件搬进
+    //   ImageOptionBar 的 BrushOptionsPanel (idx=7). BrushOptionsPanel 撮合:
+    //   ImageOptionBar::attach() 第 4 参数 brushOpt.
     QDockWidget                            *m_imageOptionDockContainer = nullptr;
     // Q4.2.3 (2026-09-24): ModeSelectorBar — setWidget on dock container.
     tools::ModeSelectorBar                 *m_modeSelectorBar = nullptr;

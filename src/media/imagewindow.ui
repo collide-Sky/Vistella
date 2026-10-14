@@ -15,23 +15,6 @@
     <item row="0" column="0">
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
-       <widget class="QToolBar" name="toolbar">
-        <property name="iconSize">
-         <size>
-          <width>16</width>
-          <height>16</height>
-         </size>
-        </property>
-        <property name="floatable">
-         <bool>false</bool>
-        </property>
-        <addaction name="actZoomIn"/>
-        <addaction name="actZoomOut"/>
-        <addaction name="actResetZoom"/>
-        <addaction name="actFit"/>
-       </widget>
-      </item>
-      <item>
        <widget class="QGraphicsView" name="graphicsView">
         <property name="minimumSize">
          <size>
@@ -45,26 +28,6 @@
     </item>
    </layout>
   </widget>
-  <action name="actZoomIn">
-   <property name="text">
-    <string>放大</string>
-   </property>
-  </action>
-  <action name="actZoomOut">
-   <property name="text">
-    <string>缩小</string>
-   </property>
-  </action>
-  <action name="actResetZoom">
-   <property name="text">
-    <string>实际大小</string>
-   </property>
-  </action>
-  <action name="actFit">
-   <property name="text">
-    <string>适应窗口</string>
-   </property>
-  </action>
  </widget>
  <resources/>
  <connections/>

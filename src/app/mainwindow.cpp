@@ -2162,8 +2162,25 @@ void MainWindow::onReplace()
         tr("替换: '%1' → '%2' 在 %3 个文字图层中应用").arg(pattern, replacement).arg(replaced),
         4000);
 }
-void MainWindow::onZoomIn()  { statusBar()->showMessage(tr("放大"), 2000); }
-void MainWindow::onZoomOut() { statusBar()->showMessage(tr("缩小"), 2000); }
+// P7.6.x (2026-10-14): 视图 → 放大/缩小 路由到 active ImageWindow (PS 风格, 主菜单
+//   是唯一的 zoom entry point — 中央画布上方不放 zoom 按钮了). 旧实现只 show status,
+//   不真实缩放. 现在 forward 到 ImageWindow::onZoomIn/Out → m_canvas 真实缩放.
+void MainWindow::onZoomIn()
+{
+    if (auto* iw = activeImageWindow()) {
+        iw->onZoomIn();
+    } else {
+        statusBar()->showMessage(tr("没有打开的图像"), 2000);
+    }
+}
+void MainWindow::onZoomOut()
+{
+    if (auto* iw = activeImageWindow()) {
+        iw->onZoomOut();
+    } else {
+        statusBar()->showMessage(tr("没有打开的图像"), 2000);
+    }
+}
 // P2.3 (2026-09-22): onResetLayout — restore default dock/panel layout
 //   Calls QMainWindow::restoreState with the saved default state file
 //   (workspace_default.ini under QStandardPaths::AppDataLocation).
