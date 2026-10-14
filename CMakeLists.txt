@@ -351,6 +351,37 @@ if(LibRaw_FOUND AND LIBRAW_LIBRARY)
     endif()
 endif()
 
+# ---- Test-only Qt DLLs (P7.6.x v3 follow-up 2026-10-14) ----
+#   单元测试 (tst_*.exe) 跟 Vistella.exe 在同一 build 目录, 但 windeployqt 只复制
+#   Vistella 实际 link 的 Qt 库. 测试用 Qt6Test (QTest framework) + Qt6QuickWidgets
+#   (QQuickWidget demo 测试) 不会自动复制, 导致 ctest 跑时 STATUS_DLL_NOT_FOUND (0xC0000135).
+#   修法: 显式 copy_if_different 这两个 dll 到 Vistella 的 build 目录, 测试也能找到.
+if(WIN32)
+    find_file(_md_qt6test_dll
+        NAMES Qt6Testd.dll Qt6Test.dll
+        HINTS ${Qt6_DIR}/../../../bin
+        NO_DEFAULT_PATH)
+    find_file(_md_qt6quickwidgets_dll
+        NAMES Qt6QuickWidgetsd.dll Qt6QuickWidgets.dll
+        HINTS ${Qt6_DIR}/../../../bin
+        NO_DEFAULT_PATH)
+    set(_md_test_dlls "")
+    if(_md_qt6test_dll)
+        list(APPEND _md_test_dlls "${_md_qt6test_dll}")
+    endif()
+    if(_md_qt6quickwidgets_dll)
+        list(APPEND _md_test_dlls "${_md_qt6quickwidgets_dll}")
+    endif()
+    if(_md_test_dlls)
+        add_custom_command(TARGET Vistella POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${_md_test_dlls}
+                "$<TARGET_FILE_DIR:Vistella>"
+            COMMENT "Copying test-only Qt DLLs (Qt6Test, Qt6QuickWidgets) to build dir"
+        )
+    endif()
+endif()
+
 # ============================================================
 # 翻译文件 (translatefile/) - zh_CN / en_US / ja_JP
 # 流程:

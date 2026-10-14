@@ -1,4 +1,4 @@
-#include "imagewindow.h"
+﻿#include "imagewindow.h"
 #include "ui_imagewindow.h"
 #include "graphicstextitem.h"
 #include "logger.h"
@@ -17,6 +17,8 @@
 //   之前 F-D/F-E (2026-09-09) 写完 cpp/h/ui 但 ctor 从没创建 — 真实接入, 不放占位
 #include "tools/LeftToolBar.h"
 #include "tools/ImageOptionBar.h"
+#include "tools/BrushOptionsPanel.h"  // P7.6.x (2026-10-14): m_brushOpt member
+#include "tools/LeftSidePanel.h"     // P7.6.x v2 (2026-10-14): 单容器装 4 左侧 widget
 // P0-3.2 (2026-09-08): 新组件 AdjustmentPanel (5 tab 色彩调整)
 #include "imagewindow/AdjustmentPanel.h"
 #include "mediators/DialogMediator.h"
@@ -302,7 +304,8 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   之前: m_canvas 创建后 parent = this (顶层), 没进 layout, 跑到 (0,0) 显示成小方块
     //         ui->graphicsView 是空 QGraphicsView 占位, 显示空白
     //   现在: 拿掉 ui->graphicsView, 把 m_canvas 加进 verticalLayout, canvas 占满中央
-    m_canvas = std::make_unique<ImageCanvas>(this);
+    //   P7.6.x: raw pointer — parent = this 暂时, verticalLayout->addWidget 会 reparent
+    m_canvas = new ImageCanvas(this);
     m_canvas->setHost(this);
     // 用 m_canvas 替换 verticalLayout 里的 ui->graphicsView 占位 (Qt 转移所有权)
     if (ui->graphicsView) {
@@ -315,7 +318,7 @@ ImageWindow::ImageWindow(QWidget *parent)
         m_canvas->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         // 4. verticalLayout 拿掉 graphicsView, 加 m_canvas (添加到 toolbar 后面)
         ui->verticalLayout->removeWidget(ui->graphicsView);
-        ui->verticalLayout->addWidget(m_canvas.get());
+        ui->verticalLayout->addWidget(m_canvas);
     }
     // 在 m_canvas 的 viewport 上装 eventFilter (原 ui->graphicsView->viewport())
     m_canvas->viewport()->installEventFilter(this);
@@ -370,7 +373,9 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_io->setHost(this);
 
     // P0-3.2 (2026-09-08): PS 风格色彩调整 UI (5 tab Curves/Levels/HSL/B&W/ChannelMixer)
-    m_adjustmentPanel = std::make_unique<AdjustmentPanel>(this);
+    //   P7.6.x: raw pointer — parent = this initially, then reparented to
+    //   m_rightDock's tabWidget via setAdjustmentPanel().
+    m_adjustmentPanel = new AdjustmentPanel(this);
     m_adjustmentPanel->setHost(this);
 
     // P0 leftover 5 (2026-09-21): Per-window DialogMediator. Hosts the
@@ -398,9 +403,10 @@ ImageWindow::ImageWindow(QWidget *parent)
     //         resize 不联动 (imagewindow 缩小后 dock 还停在原位置)
     //   现在: 包到 QDockWidget 走 RightDockWidgetArea, Qt 自动管理 dock 与 canvas 边界,
     //         resizeDocks 设初始宽度 340, imagewindow resize 时 dock 跟着缩
-    m_rightDock = std::make_unique<docks::RightPanelDock>();
-    // F-G.3: release() 转移所有权给 m_rightDock (QTabWidget::addTab reparent 后 Qt 析构会 delete 一次)
-    m_rightDock->setAdjustmentPanel(m_adjustmentPanel.release());
+    //   P7.6.x: raw pointer — Qt takes ownership via setWidget() later.
+    m_rightDock = new docks::RightPanelDock(this);
+    // F-G.3: hand m_adjustmentPanel to m_rightDock (Qt reparent to its tabWidget)
+    m_rightDock->setAdjustmentPanel(m_adjustmentPanel);
 
     // P6 (2026-10-09): wire RightPanelDock connectors that were dangling before.
     //   Color fg/bg -> current Brush paint color; ChannelPathPanel selection
@@ -413,14 +419,9 @@ ImageWindow::ImageWindow(QWidget *parent)
     if (auto* colorDock = m_rightDock->colorDock()) {
         connect(colorDock, &docks::ColorDock::foregroundColorChanged,
                 this, &ImageWindow::onForegroundColorChanged);
-        connect(colorDock, &docks::ColorDock::foregroundColorChanged,
-                this, [this](const QColor& c) {
-                    if (m_leftToolBar) m_leftToolBar->setForegroundColor(c);
-                });
-        connect(colorDock, &docks::ColorDock::backgroundColorChanged,
-                this, [this](const QColor& c) {
-                    if (m_leftToolBar) m_leftToolBar->setBackgroundColor(c);
-                });
+        // P7.6.x v3 (2026-10-14): ColorDock fg/bg → LeftToolBar 同步搬到 MainWindow
+        //   (MainWindow::bindLeftDockWidgets 在 active image 切换时连). 避免 ImageWindow
+        //   仍然持有 m_leftToolBar 指针.
     }
     if (auto* selPanel = m_rightDock->channelPathPanel()) {
         connect(selPanel, &docks::ChannelPathPanel::saveSelectionRequested,
@@ -440,7 +441,8 @@ ImageWindow::ImageWindow(QWidget *parent)
     emptyTitle->setFixedHeight(0);
     m_rightDockContainer->setTitleBarWidget(emptyTitle);
     // 把 RightPanelDock 装到 QDockWidget 内部 (Qt 接管所有权, dock 销毁时 delete)
-    m_rightDockContainer->setWidget(m_rightDock.release());
+    //   P7.6.x: no release() needed — m_rightDock is raw pointer, Qt adopts it.
+    m_rightDockContainer->setWidget(m_rightDock);
 
     addDockWidget(Qt::RightDockWidgetArea, m_rightDockContainer);
     resizeDocks({m_rightDockContainer}, {340}, Qt::Horizontal);
@@ -456,178 +458,33 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_ctx = std::make_unique<tools::ToolContext>(this);
     m_ctx->attach(this, m_toolMed.get());
 
-    // Q4.2.1 (2026-09-23): LeftToolBar 接入左侧 dock (PS 风格 14 工具图标栏)
-    //   之前 F-D (2026-09-09) LeftToolBar.cpp/.h/.ui 写完但 ctor 从没创建,
-    //   整个图片阶段做完左侧 panel 只有 imagewindow.ui 硬编码的 groupMosaic + groupText.
-    //   Q4.2.1 拍板"真实接入", 不放占位 stub. attach(toolMed, ctx) 后 14 工具按钮
-    //   可切换: button click -> Mediator.switchTool(id) -> onToolMediatorSwitched
-    //   -> ctx->setState(createXxxTool()) 走 ToolState factory.
-    m_leftToolBar = std::make_unique<tools::LeftToolBar>();
-    m_leftToolBar->attach(m_toolMed.get(), m_ctx.get());
+    // P7.6.x v3 (2026-10-14): LeftSidePanel + 4 子 widget + m_brushOpt + 左 dock 容器
+    //   全部搬到 MainWindow (P7.6.x v3 commit 1). ImageWindow 只剩画布 + 业务数据 +
+    //   右侧 dock (P7.6.x v3 commit 5+ 处理).
+    //
+    //   MainWindow 现在负责:
+    //     - 创建 4 个 dock widget (LeftToolBar + ImageOptionBar + ModeSelectorBar + AppBar)
+    //     - 创建 LeftSidePanel 单容器 + LeftDockContainer
+    //     - 在 tabWidget->currentChanged 时重新 attach 到当前 active image 的
+    //       toolMed/ctx/mosaicTool/textCtrl/brushOpt
+    //
+    //   ImageWindow 暴露的接口 (都是 raw pointer):
+    //     - toolMediator() / toolContext() / mosaicTool() / textOverlay()
+    //   都还在, MainWindow 直接拿.
 
-    // P7.1 (2026-10-12): reverse direction sync — when LeftToolBar swatch is
-    //   picked / swapped / defaulted (typically via PS-style X/D shortcuts
-    //   handled in the dock itself), push the change into ColorDock so the
-    //   right-side color picker reflects the same fg/bg. Echo is prevented
-    //   by the `if (m_xxx == c) return;` guard in ColorDock::setXxxColor.
-    if (auto* colorDock = m_rightDock->colorDock()) {
-        connect(m_leftToolBar.get(), &tools::LeftToolBar::foregroundColorChanged,
-                colorDock, &docks::ColorDock::setForegroundColor);
-        connect(m_leftToolBar.get(), &tools::LeftToolBar::backgroundColorChanged,
-                colorDock, &docks::ColorDock::setBackgroundColor);
-    }
+    // P7.6.x (2026-10-14): TopOptionBar 删除. 6 控件 (mode/opacity/flow/smoothing/
+    //   angle/size) 搬到 ImageOptionBar 内的 BrushOptionsPanel (idx=7).
+    //   顶部工具栏 (QToolBar + addToolBar) 不再有, 中央画布上方就是 image 区域.
+    //   顶部菜单栏 (QMenuBar) 仍然在 MainWindow 提供 视图→放大/缩小 入口.
 
-    m_leftDockContainer = new QDockWidget(this);
-    m_leftDockContainer->setObjectName(QStringLiteral("leftDockContainer"));
-    m_leftDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    // 隐藏 title bar (PS 风格面板无标题栏, 跟右侧 dock 一致)
-    auto* leftEmptyTitle = new QWidget();
-    leftEmptyTitle->setFixedHeight(0);
-    m_leftDockContainer->setTitleBarWidget(leftEmptyTitle);
-    // release() 转移所有权给 QDockWidget (跟 m_rightDock 模式一致)
-    m_leftDockContainer->setWidget(m_leftToolBar.release());
+    // P5.5+ AppBar 初值: 标准屏幕模式 (启动时默认). 现在由 MainWindow 触发
+    //   (AppBar 在 MainWindow 顶层, 不再跟 ImageWindow 挂钩).
 
-    addDockWidget(Qt::LeftDockWidgetArea, m_leftDockContainer);
-    // P7.1 (2026-10-12): PS 风格工具栏缩到 56px (2 列 28px 按钮 + 0 spacing).
-    //   之前 Q4.2.1 占位 64px 是按 32px btn + 4 margin 算的, 现在 P7.1 ui 收紧
-    //   到 28px btn + 0 margin, 总宽 56px (PS 实际风格).
-    resizeDocks({m_leftDockContainer}, {56}, Qt::Horizontal);
-
-    // Q4.2.3 (2026-09-24): ModeSelectorBar 二级模式选择栏 (LeftToolBar 下方, ImageOptionBar 上方)
-    //   5 tools (Crop/MagicWand/Lasso/Brush/Eyedropper) 共享 1 个 widget, 按 currentToolId
-    //   切到对应 page (selection mode / aspect / blend / sample size). 紧凑按钮栏 32px 高,
-    //   LeftToolBar 和 ImageOptionBar 之间. 监听 ToolContext::toolChanged, 切换 tool 时
-    //   自动切 page + refresh 按钮状态 (从 tool.getter 读).
-    m_modeSelectorBar = std::make_unique<tools::ModeSelectorBar>();
-    m_modeSelectorBar->attach(m_ctx.get());
-
-    m_modeSelectorDockContainer = new QDockWidget(this);
-    m_modeSelectorDockContainer->setObjectName(QStringLiteral("modeSelectorDockContainer"));
-    m_modeSelectorDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    auto* modeEmptyTitle = new QWidget();
-    modeEmptyTitle->setFixedHeight(0);
-    m_modeSelectorDockContainer->setTitleBarWidget(modeEmptyTitle);
-    m_modeSelectorDockContainer->setWidget(m_modeSelectorBar.release());
-
-    addDockWidget(Qt::LeftDockWidgetArea, m_modeSelectorDockContainer);
-    // ModeSelectorBar 在 LeftToolBar 下方垂直排 (splitDockWidget), ImageOptionBar 在 ModeSelectorBar 下方
-    splitDockWidget(m_leftDockContainer, m_modeSelectorDockContainer, Qt::Vertical);
-    resizeDocks({m_modeSelectorDockContainer}, {36}, Qt::Vertical);  // 36px 高, 紧凑按钮栏
-
-    // Q4.2.1 (2026-09-23): ImageOptionBar 接入左侧 dock (ModeSelectorBar 下方)
-    //   二级属性面板, 监听 ToolContext::toolChanged, 根据 toolId 切到对应 page.
-    //   MaskBrush (P1.3.4) 跟 TransformTool 一样走动态 addPage 路径, page16
-    //   装 MaskOptionsPanel. 其他工具 page 默认空 (ToolState::optionPage 返 nullptr,
-    //   Q4.2.2 跟 Q4.2.3 会逐个实装). 注意: imagewindow.ui 占位 groupMosaic +
-    //   groupText 是 MosaicTool/TextOverlay 的旧 UI (跟 ToolMediator 无关),
-    //   Q4.2.2 单独 commit 做迁移, 本次只接入 LeftToolBar + ImageOptionBar.
-    m_imageOptionBar = std::make_unique<tools::ImageOptionBar>();
-    // P5.1 (2026-10-08): pass MosaicTool + TextOverlayController so
-    //   ImageOptionBar can route Brush -> MosaicOptionPanel and
-    //   Text -> TextOptionPanel, replacing the old Q4.2.2.1 leftPanel
-    //   gridLayout_4 always-on hosting.
-    m_imageOptionBar->attach(m_ctx.get(),
-                             m_mosaicTool.get(),
-                             m_textCtrl.get());
-
-    m_imageOptionDockContainer = new QDockWidget(this);
-    m_imageOptionDockContainer->setObjectName(QStringLiteral("imageOptionDockContainer"));
-    m_imageOptionDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    auto* optionEmptyTitle = new QWidget();
-    optionEmptyTitle->setFixedHeight(0);
-    m_imageOptionDockContainer->setTitleBarWidget(optionEmptyTitle);
-    m_imageOptionDockContainer->setWidget(m_imageOptionBar.release());
-
-    addDockWidget(Qt::LeftDockWidgetArea, m_imageOptionDockContainer);
-    // ImageOptionBar 在 ModeSelectorBar 下方垂直排 (splitDockWidget)
-    splitDockWidget(m_modeSelectorDockContainer, m_imageOptionDockContainer, Qt::Vertical);
-    resizeDocks({m_imageOptionDockContainer}, {220}, Qt::Vertical);
-
-    // P5.5+ (2026-10-09): AppBar 三组全局 toggle (Quick Mask / Screen Mode / Capture),
-    //   装在 ImageOptionBar 下方. 不依赖 active tool, 是 PS 风格的 "always-on"
-    //   全局工具行. 32 px 高紧凑.
-    m_appBar = std::make_unique<tools::AppBar>();
-    connect(m_appBar.get(), &tools::AppBar::quickMaskToggled,
-            this, &ImageWindow::onQuickMaskToggled);
-    connect(m_appBar.get(), &tools::AppBar::screenModeSelected,
-            this, &ImageWindow::onScreenModeSelected);
-    connect(m_appBar.get(), &tools::AppBar::captureRequested,
-            this, &ImageWindow::onCaptureRequested);
-
-    m_appBarDockContainer = new QDockWidget(this);
-    m_appBarDockContainer->setObjectName(QString("appBarDockContainer"));
-    m_appBarDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    auto* appBarEmptyTitle = new QWidget();
-    appBarEmptyTitle->setFixedHeight(0);
-    m_appBarDockContainer->setTitleBarWidget(appBarEmptyTitle);
-    m_appBarDockContainer->setWidget(m_appBar.release());
-
-    addDockWidget(Qt::LeftDockWidgetArea, m_appBarDockContainer);
-    // AppBar 在 ImageOptionBar 下方垂直排 (splitDockWidget)
-    splitDockWidget(m_imageOptionDockContainer, m_appBarDockContainer, Qt::Vertical);
-    resizeDocks({m_appBarDockContainer}, {32}, Qt::Vertical);
-    // 初值: 标准屏幕模式 (P5.5+ 启动时默认).
-    applyScreenMode(tools::AppBar::ScreenStandard);
-
-    // P7.5 (2026-10-12): 顶部水平共享工具栏 (PS 风格 mode/opacity/flow/smoothing/angle/size).
-    //   用户截图左上的 fg/bg swatch + 模式/不透明度/流量/平滑/角度/大小 全放这里.
-    //   P7.5 只画 UI + QToolBar. 接 Brush/Clone/Heal/Patch/MaskBrush 工具状态在 P7.6 commit.
-    m_topOptionBar = std::make_unique<tools::TopOptionBar>();
-    m_topToolBar = addToolBar(tr("选项"));
-    m_topToolBar->setObjectName(QStringLiteral("topOptionBar"));
-    m_topToolBar->setMovable(false);
-    m_topToolBar->setFloatable(false);
-    m_topToolBar->setIconSize(QSize(16, 16));
-    m_topToolBar->addWidget(m_topOptionBar.get());
-    // PS-style 紧凑 topToolBar: 28px 高 (一次高度, 允许后续 zoom + fg/bg 快捷槽位)
-
-    // P7.6 (2026-10-13): TopOptionBar <-> ToolContext.brushSharedState() 双向同步.
-    //   TopOptionBar 改值 -> 走 ToolContext setter (发 brushSettingsChanged 信号,
-    //   当前 active brush tool 接; ToolContext 状态变 (切 tool 时) -> 给 TopOptionBar 显示.
-    //   6 个控件 -> 6 个 setter 双向 (+ 当前 paint color 暂 P7.6 commit 不接):
-    //     blendMode / opacity / flow / smoothing / angle / brushSize
-    if (m_ctx) {
-        // (1) TopOptionBar -> ToolContext 写 (User 改 TopOptionBar)
-        connect(m_topOptionBar.get(), &tools::TopOptionBar::blendModeChanged,
-                m_ctx.get(), [this](int /*idx*/) {
-                    m_ctx->setBlendMode(static_cast<int>(m_topOptionBar->blendMode()));
-                });
-        connect(m_topOptionBar.get(), &tools::TopOptionBar::opacityChanged,
-                m_ctx.get(), [this](double pct) {
-                    m_ctx->setOpacity(pct);
-                });
-        connect(m_topOptionBar.get(), &tools::TopOptionBar::flowChanged,
-                m_ctx.get(), [this](double pct) {
-                    m_ctx->setFlow(pct);
-                });
-        connect(m_topOptionBar.get(), &tools::TopOptionBar::smoothingChanged,
-                m_ctx.get(), [this](double pct) {
-                    m_ctx->setSmoothing(pct);
-                });
-        connect(m_topOptionBar.get(), &tools::TopOptionBar::angleChanged,
-                m_ctx.get(), [this](int deg) {
-                    m_ctx->setAngle(deg);
-                });
-        connect(m_topOptionBar.get(), &tools::TopOptionBar::brushSizeChanged,
-                m_ctx.get(), [this](int px) {
-                    m_ctx->setBrushSize(px);
-                });
-
-        // (2) ToolContext -> TopOptionBar 读 (任何 setter 触发都 fetch 6 个值)
-        connect(m_ctx.get(), &tools::ToolContext::brushSettingsChanged,
-                this, [this]() {
-                    m_topOptionBar->setBlendModeIndex(m_ctx->brushSharedState().blendMode);
-                    m_topOptionBar->setOpacity(m_ctx->brushSharedState().opacity);
-                    m_topOptionBar->setFlow(m_ctx->brushSharedState().flow);
-                    m_topOptionBar->setSmoothing(m_ctx->brushSharedState().smoothing);
-                    m_topOptionBar->setAngle(m_ctx->brushSharedState().angle);
-                    m_topOptionBar->setBrushSize(m_ctx->brushSharedState().brushSize);
-                });
-
-        // 启动时同步 ToolContext 当前 6 值到 TopOptionBar UI (TopOptionBar 构造时
-        //   跟 ToolContext 默认值一致, 但显式 set 一次让 setX 经过 QSignalBlocker).
-        m_ctx->setBrushSize(m_ctx->brushSharedState().brushSize);
-    }
+    // P7.6.x (2026-10-14): TopOptionBar 删除. 6 控件 (mode/opacity/flow/smoothing/
+    //   angle/size) 搬到 ImageOptionBar 内的 BrushOptionsPanel (idx=7).
+    //   撮合在 ImageOptionBar::attach() 第 4 参数 brushOpt 里 (上面已经传入 m_brushOpt).
+    //   顶部工具栏 (QToolBar + addToolBar) 不再有, 中央画布上方就是 image 区域.
+    //   顶部菜单栏 (QMenuBar) 仍然在 MainWindow 提供 视图→放大/缩小 入口.
 
     // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel no longer hosted
     //   here. ImageOptionBar owns both and routes them per active tool
@@ -1068,25 +925,24 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     //   LayerPanel::ctor 需要 raw LayerStack*, parent = this (QObject parent-child 关系
     //   保证 unique_ptr 释放前 LayerPanel 不会被 Qt 析构). 注入 LayersDock tab 0 用
     //   setContentWidget + release() 转移, LayersDock reparent 后接管所有权.
-    m_layerPanel = std::make_unique<layers::LayerPanel>(m_layerStack.get());
-    layers::LayerPanel* rawPanel = m_layerPanel.get();   // release() 之后 unique_ptr 变 null, 先存 raw
+    //   P7.6.x: raw pointer — setContentWidget below takes ownership.
+    m_layerPanel = new layers::LayerPanel(m_layerStack.get());
     if (m_rightDock) {
         if (auto* layersDock = m_rightDock->layersDock()) {
-            // 转移所有权: LayersDock::setContentWidget 会 setParent 到自己 (m_layersDock 是其成员)
-            layersDock->setContentWidget(0, m_layerPanel.release());
+            // 转移所有权: LayersDock::setContentWidget 会 setParent 到自己
+            layersDock->setContentWidget(0, m_layerPanel);
         }
     }
-    // rawPanel 在 LayersDock 接管期间保持有效 (LayersDock 析构会 delete 它, 比 ImageWindow 早)
 
     // P1.4.3 (2026-09-17): LayerPanel 用户操作信号 → ImageWindow API (数据层)
-    //   用 rawPanel (非 m_layerPanel.get()) 连接信号, 因为 release() 后 unique_ptr 为空
-    if (rawPanel) {
-        connect(rawPanel, &layers::LayerPanel::selectionChangedFromPanel,
+    //   P7.6.x: m_layerPanel is a raw pointer that survives setContentWidget.
+    if (m_layerPanel) {
+        connect(m_layerPanel, &layers::LayerPanel::selectionChangedFromPanel,
                 this, [this](int idx) {
             if (m_layerStack) m_layerStack->setSelection(idx);
         });
         // P1.4.3: 智能对象 Edit Source (复用 P1.4.2 主菜单的 QDesktopServices 路径, 不推 undoStack)
-        connect(rawPanel, &layers::LayerPanel::editSmartObjectSourceRequested,
+        connect(m_layerPanel, &layers::LayerPanel::editSmartObjectSourceRequested,
                 this, [this](int idx) {
             if (!m_layerStack || idx < 0 || idx >= m_layerStack->count()) return;
             auto l = m_layerStack->at(idx);
@@ -1095,7 +951,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             statusBar()->showMessage(tr("已在系统默认应用打开源文件"), 3000);
         });
         // P1.4.3: 智能对象 Refresh (重新加载源文件, embed/link 都生效)
-        connect(rawPanel, &layers::LayerPanel::refreshSmartObjectRequested,
+        connect(m_layerPanel, &layers::LayerPanel::refreshSmartObjectRequested,
                 this, [this](int idx) {
             if (!m_layerStack) return;
             m_layerStack->refreshSmartObject(idx);
@@ -1103,14 +959,14 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             statusBar()->showMessage(tr("智能对象已刷新"), 3000);
         });
         // P1.4.3: 智能对象 Toggle Embed (link <-> embed 切换, 不推 undoStack - 跟 P1.4.2 mainwindow 一致)
-        connect(rawPanel, &layers::LayerPanel::toggleSmartObjectEmbedRequested,
+        connect(m_layerPanel, &layers::LayerPanel::toggleSmartObjectEmbedRequested,
                 this, [this](int idx) {
             if (!m_layerStack) return;
             m_layerStack->toggleSmartObjectEmbed(idx);
             invalidateCurrentCache();
         });
         // P1.4.3: 智能对象 Convert (Bitmap -> SmartObject, 嵌入模式) - 推 undoStack 走 makeConvertToSmartObject
-        connect(rawPanel, &layers::LayerPanel::convertToSmartObjectRequested,
+        connect(m_layerPanel, &layers::LayerPanel::convertToSmartObjectRequested,
                 this, [this](int idx) {
             if (!m_layerStack || idx < 0 || idx >= m_layerStack->count()) return;
             auto l = m_layerStack->at(idx);
@@ -1130,7 +986,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             statusBar()->showMessage(tr("已转换为智能对象 (嵌入模式)"), 3000);
         });
         // P1.4.3: 智能对象 Rasterize (SmartObject -> Bitmap) - 推 undoStack 走 makeRasterizeSmartObject
-        connect(rawPanel, &layers::LayerPanel::rasterizeSmartObjectRequested,
+        connect(m_layerPanel, &layers::LayerPanel::rasterizeSmartObjectRequested,
                 this, [this](int idx) {
             if (!m_layerStack || idx < 0 || idx >= m_layerStack->count()) return;
             auto l = m_layerStack->at(idx);
@@ -1150,7 +1006,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             statusBar()->showMessage(tr("已栅格化智能对象"), 3000);
         });
         // P1.4.3: 智能对象 Relink (重新链接源文件) - 弹 QFileDialog 选文件, 推 undoStack 走 makeSetSmartObject
-        connect(rawPanel, &layers::LayerPanel::relinkSmartObjectRequested,
+        connect(m_layerPanel, &layers::LayerPanel::relinkSmartObjectRequested,
                 this, [this](int idx) {
             if (!m_layerStack || idx < 0 || idx >= m_layerStack->count()) return;
             auto l = m_layerStack->at(idx);
@@ -1172,7 +1028,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
         // P1.4.4 (2026-09-17): SmartFilter chain entry (PS-style smart filter).
         //   Right-click on a SmartObject layer -> apply filter dialog -> append.
-        connect(rawPanel, &layers::LayerPanel::applySmartFilterRequested,
+        connect(m_layerPanel, &layers::LayerPanel::applySmartFilterRequested,
                 this, [this](int smartIdx) {
             if (!m_layerStack || smartIdx < 0 || smartIdx >= m_layerStack->count()) return;
             auto l = m_layerStack->at(smartIdx);
@@ -1211,7 +1067,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         // P1.4.6 (2026-09-17): chained QInputDialog upgraded to a single
         //   TransformDialog (Scale
         //   + Rotate + Translate + Link + Reset - 5 fields in one shot).
-        connect(rawPanel, &layers::LayerPanel::transformSmartObjectRequested,
+        connect(m_layerPanel, &layers::LayerPanel::transformSmartObjectRequested,
                 this, [this](int smartIdx) {
             if (!m_layerStack || smartIdx < 0 || smartIdx >= m_layerStack->count()) return;
             auto l = m_layerStack->at(smartIdx);
@@ -1222,7 +1078,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             applySmartObjectTransform(smartIdx, dlg.result());
         });
         // P1.4.5: clear SmartObject transform from LayerPanel right-click.
-        connect(rawPanel, &layers::LayerPanel::resetSmartObjectTransformRequested,
+        connect(m_layerPanel, &layers::LayerPanel::resetSmartObjectTransformRequested,
                 this, [this](int smartIdx) {
             if (!m_layerStack || smartIdx < 0 || smartIdx >= m_layerStack->count()) return;
             auto l = m_layerStack->at(smartIdx);
@@ -1250,7 +1106,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   absent, Layer::isValid
         //   would return false, but to not block the UI we just call addLayer
         //   so the user can continue editing).
-        connect(rawPanel, &layers::LayerPanel::addLayerKindRequested,
+        connect(m_layerPanel, &layers::LayerPanel::addLayerKindRequested,
                 this, [this](int kind) {
             if (!m_layerStack) return;
             int newIdx = -1;
@@ -1322,7 +1178,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
         // deleteLayerRequested: pushes makeRemove, undo restores the full
         //   layer (including the Mat clone).
-        connect(rawPanel, &layers::LayerPanel::deleteLayerRequested,
+        connect(m_layerPanel, &layers::LayerPanel::deleteLayerRequested,
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (m_undoStack) {
@@ -1342,7 +1198,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   (deep copy).
         //   Pushes LayerCommand::Add for undo (P1.4.1 already uses
         //   the same pattern).
-        connect(rawPanel, &layers::LayerPanel::duplicateLayerRequested,
+        connect(m_layerPanel, &layers::LayerPanel::duplicateLayerRequested,
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (!m_layerStack->duplicateLayer(index)) {
@@ -1364,7 +1220,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   be moved up.
         //   P2.5 (2026-09-22): use makeMoveUp factory (it applies moveUp
         //   itself, undo reverses). The old push+moveUp double-moved.
-        connect(rawPanel, &layers::LayerPanel::moveUpRequested,
+        connect(m_layerPanel, &layers::LayerPanel::moveUpRequested,
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (m_undoStack) {
@@ -1379,7 +1235,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // moveDownRequested: same pattern, direction = -1.
-        connect(rawPanel, &layers::LayerPanel::moveDownRequested,
+        connect(m_layerPanel, &layers::LayerPanel::moveDownRequested,
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (m_undoStack) {
@@ -1397,7 +1253,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   LayerCommand::Merge.
         //   Known Phase 1 limitation: undo only restores the lower layer
         //   image, cannot fully split the upper layer (P1.4.6 inherits this).
-        connect(rawPanel, &layers::LayerPanel::mergeDownRequested,
+        connect(m_layerPanel, &layers::LayerPanel::mergeDownRequested,
                 this, [this](int index) {
             if (!m_layerStack || index <= 0 || index >= m_layerStack->count()) {
                 statusBar()->showMessage(tr("无法合并 (已在最底层)"), 3000);
@@ -1419,7 +1275,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   (reserved for future display).
         //   P1.4.6: only re-flatten triggers cache invalidation; we do not
         //   rewrite the composition pipeline for all layers.
-        connect(rawPanel, &layers::LayerPanel::flattenVisibleRequested,
+        connect(m_layerPanel, &layers::LayerPanel::flattenVisibleRequested,
                 this, [this]() {
             if (!m_layerStack || m_layerStack->count() <= 1) {
                 statusBar()->showMessage(tr("无需拼合 (图层数 ≤ 1)"), 3000);
@@ -1448,7 +1304,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         // groupRequested: caller passes [first, last] range (toolbar emits
         //   full stack [0, count-1]). Build the indices list and push
         //   makeMergeIntoGroup onto the undo stack.
-        connect(rawPanel, &layers::LayerPanel::groupRequested,
+        connect(m_layerPanel, &layers::LayerPanel::groupRequested,
                 this, [this](int first, int last) {
             if (!m_layerStack) return;
             if (last < first || last >= m_layerStack->count()
@@ -1471,7 +1327,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
         // ungroupRequested: locate the current selection's Group and
         //   flatten it. If selection is not a Group, status-bar hint.
-        connect(rawPanel, &layers::LayerPanel::ungroupRequested,
+        connect(m_layerPanel, &layers::LayerPanel::ungroupRequested,
                 this, [this]() {
             if (!m_layerStack) return;
             const int sel = m_layerStack->selection();
@@ -1499,7 +1355,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
         // ---- Layer property -------------------------------------------
         // renameRequested: LayerCommand::Rename, stores the old name.
-        connect(rawPanel, &layers::LayerPanel::renameRequested,
+        connect(m_layerPanel, &layers::LayerPanel::renameRequested,
                 this, [this](int index, const QString &newName) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1517,7 +1373,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // setVisibleRequested: LayerCommand::Visible, stores the old bool.
-        connect(rawPanel, &layers::LayerPanel::setVisibleRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setVisibleRequested,
                 this, [this](int index, bool visible) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1536,7 +1392,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // setLockedRequested: LayerCommand::Locked
-        connect(rawPanel, &layers::LayerPanel::setLockedRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setLockedRequested,
                 this, [this](int index, bool locked) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1554,7 +1410,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // setLinkedRequested: LayerCommand::Linked
-        connect(rawPanel, &layers::LayerPanel::setLinkedRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setLinkedRequested,
                 this, [this](int index, bool linked) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1572,7 +1428,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // setOpacityRequested: LayerCommand::Opacity, stores the old float.
-        connect(rawPanel, &layers::LayerPanel::setOpacityRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setOpacityRequested,
                 this, [this](int index, float opacity) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1596,7 +1452,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   LayerCommand::Blend
         //   stores the new blend int (m_intVal); undo reads layer.blend
         //   directly to restore.
-        connect(rawPanel, &layers::LayerPanel::setBlendRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setBlendRequested,
                 this, [this](int index, int blendInt) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1616,7 +1472,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
         // ---- Layer-type specific --------------------------------------
         // setTextRequested: goes through makeSetText, stores the old text.
-        connect(rawPanel, &layers::LayerPanel::setTextRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setTextRequested,
                 this, [this](int index, const QString &text) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1635,7 +1491,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
         // setTextFontRequested: goes through makeSetTextFont, stores the old
         //   family/size/color.
-        connect(rawPanel, &layers::LayerPanel::setTextFontRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setTextFontRequested,
                 this, [this](int index, const QString &family, int size,
                               const QColor &color) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
@@ -1658,7 +1514,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         // setSmartObjectSourceRequested: P1.4.3 already uses
         //   makeSetSmartObject
         //   (Relink uses the same factory) - reuse the same path.
-        connect(rawPanel, &layers::LayerPanel::setSmartObjectSourceRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setSmartObjectSourceRequested,
                 this, [this](int index, const QString &path, bool embed) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1682,7 +1538,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // setAdjustmentTypeRequested: goes through makeSetAdjustmentType.
-        connect(rawPanel, &layers::LayerPanel::setAdjustmentTypeRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setAdjustmentTypeRequested,
                 this, [this](int index, const QString &type) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1707,7 +1563,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   P1.4.6 simplified path:
         //   write layer.adjustmentLut to identity directly, no undo push
         //   (consistent with Phase 1).
-        connect(rawPanel, &layers::LayerPanel::setAdjustmentLutResetRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setAdjustmentLutResetRequested,
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1734,7 +1590,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   load by path as a pixel mask,
         //   otherwise build the mask from selection (if selection non-empty,
         //   addPixelMaskFromSelection).
-        connect(rawPanel, &layers::LayerPanel::addMaskRequested,
+        connect(m_layerPanel, &layers::LayerPanel::addMaskRequested,
                 this, [this](int index, const QString &maskPath) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1781,7 +1637,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
         // clearMaskRequested: goes through makeClearMask, fully saves the
         //   before state of the mask.
-        connect(rawPanel, &layers::LayerPanel::clearMaskRequested,
+        connect(m_layerPanel, &layers::LayerPanel::clearMaskRequested,
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1803,7 +1659,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // toggleMaskRequested: goes through makeEnableMask.
-        connect(rawPanel, &layers::LayerPanel::toggleMaskRequested,
+        connect(m_layerPanel, &layers::LayerPanel::toggleMaskRequested,
                 this, [this](int index, bool enabled) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
@@ -1823,7 +1679,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
         // setMaskInvertRequested: P1.4.6 simplified path, no undo push
         //   (consistent with Phase 1).
-        connect(rawPanel, &layers::LayerPanel::setMaskInvertRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setMaskInvertRequested,
                 this, [this](int index, bool invert) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (!m_layerStack->setMaskInvert(index, invert)) return;
@@ -1834,7 +1690,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // setMaskDensityRequested: same as above.
-        connect(rawPanel, &layers::LayerPanel::setMaskDensityRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setMaskDensityRequested,
                 this, [this](int index, qreal density) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (!m_layerStack->setMaskDensity(index, density)) return;
@@ -1845,7 +1701,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // setMaskFeatherRequested
-        connect(rawPanel, &layers::LayerPanel::setMaskFeatherRequested,
+        connect(m_layerPanel, &layers::LayerPanel::setMaskFeatherRequested,
                 this, [this](int index, qreal featherPx) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (!m_layerStack->setMaskFeather(index, featherPx)) return;
@@ -1859,7 +1715,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   (empty path is accepted too).
         //   P1.4.6 simplification: only pushes LayerCommand::Add (mask kind /
         //   state cannot be undone, but the UI can redo).
-        connect(rawPanel, &layers::LayerPanel::addVectorMaskRequested,
+        connect(m_layerPanel, &layers::LayerPanel::addVectorMaskRequested,
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             QVector<QPainterPath> paths;   // empty - lets the user draw paths
@@ -1878,7 +1734,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         //   but goes
         //   through the selection path explicitly (LayerPanel calls this
         //   instead of addMaskRequested with empty path).
-        connect(rawPanel, &layers::LayerPanel::addPixelMaskFromSelectionRequested,
+        connect(m_layerPanel, &layers::LayerPanel::addPixelMaskFromSelectionRequested,
                 this, [this](int index) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             if (!m_selection || m_selection->mask().isNull()
@@ -2511,18 +2367,13 @@ void ImageWindow::onTextColorClicked()
 
 void ImageWindow::buildActions()
 {
-    // 注: actOpen/actSave/actSaveAs/actClose 故意没接 — 顶部菜单已经有, 这里只接 zoom
-    connect(ui->actZoomIn,    &QAction::triggered, this, &ImageWindow::onZoomIn);
-    connect(ui->actZoomOut,   &QAction::triggered, this, &ImageWindow::onZoomOut);
-    connect(ui->actFit,       &QAction::triggered, this, &ImageWindow::onFitWindow);
-    connect(ui->actResetZoom, &QAction::triggered, this, &ImageWindow::onResetZoom);
-
-    // Stage B (2026-09-15): 撤销 P0-1.2 5 toggle + 10 slider UI, ImageAdjustmentPanel 类已删
-    // Q4.2.2 (2026-09-24): 删 5 个 connect (sliderMosaicSize / btnMosaicMode /
-    //   comboMosaicType / btnTextColor / comboTextFont / spinTextSize), 全部
-    //   移到 MosaicOptionPanel + TextOptionPanel 内部直接 connect 业务组件.
-    //   buildActions 只剩顶层 toolbar/action 路由 (zoom 4 个), 不再管 imagewindow.ui
-    //   占位 group (slider/button/combo), 那些 widget 已经从 .ui 删除 (Q4.2.2).
+    // P7.6.x (2026-10-14): 4 zoom actions (actZoomIn / actZoomOut / actFit / actResetZoom)
+    //   removed from imagewindow.ui toolbar (P7.6.x UI layout fix: 4 zoom buttons
+    //   不应该出现在中央画布上方 — PS 没有这些. MainWindow 自己拥有 m_actZoomIn/ZoomOut
+    //   并 forward 到 active ImageWindow, 这里不再需要 connect).
+    //
+    // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel connect 全部移到各自 panel
+    //   内部, buildActions 不再管 imagewindow.ui 占位 group.
 }
 
 // ---------------- 缩放 ----------------
@@ -2570,16 +2421,10 @@ void ImageWindow::onChannelPathQuickMaskToggled(bool on)
 
 void ImageWindow::syncQuickMaskUi(bool on)
 {
-    // Reflect state in the AppBar btnQuickMask AND the ChannelPathPanel btn
-    //   without re-triggering their toggled signals (block-signals wrapper).
-    if (m_appBar) {
-        auto* btn = m_appBar->findChild<QToolButton*>("btnQuickMask");
-        if (btn) {
-            const bool wasBlocked = btn->blockSignals(true);
-            btn->setChecked(on);
-            btn->blockSignals(wasBlocked);
-        }
-    }
+    // P7.6.x v3 (2026-10-14): AppBar 在 MainWindow 顶层, ImageWindow 不再持有 m_appBar.
+    //   通过 quickMaskUiSync 信号通知 MainWindow, MainWindow 接到 AppBar 的 btnQuickMask.
+    //   ChannelPathPanel 仍在 m_rightDock (ImageWindow 内的右侧 dock) 内, 保留同步.
+    emit quickMaskUiSync(on);
     if (m_rightDock) {
         if (auto* sel = m_rightDock->channelPathPanel()) {
             sel->setQuickMask(on);
@@ -3187,3 +3032,4 @@ void ImageWindow::onImageRotate180()
 }
 // P0-1.4 (2026-09-07): onOpen / onSave / onSaveAs / onClose 4 个 IO slot 已搬到
 //   src/media/imagewindow/ImageIOController.cpp 实现, 这里不再保留.
+

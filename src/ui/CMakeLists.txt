@@ -46,6 +46,12 @@ target_link_libraries(vistella_ui
         vistella_models
 )
 
+# P7.6.x v3 commit 2 (2026-10-14): PS-style draggable tab + GPU/CPU placeholders.
+#   Keep dock as a separate sub-library so commit 3/4 (VTabPageBase + RightDock
+#   nested sub-dock) can extend it without churning the rest of vistella_ui.
+add_subdirectory(dock)
+target_link_libraries(vistella_ui PUBLIC vistella_ui_dock)
+
 # 让 AUTOMOC / AUTOUIC 看到 .ui
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)

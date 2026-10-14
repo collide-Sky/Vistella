@@ -114,10 +114,13 @@ void ToolContext::onKeyRelease(QKeyEvent* e)
 }
 
 // ===== P7.6 (2026-10-13) brushSharedState setters =====
-//   Single setter writes + emits brushSettingsChanged. TopOptionBar (P7.5) value change
-//   goes through these 6 setters; current active brush tool listens to brushSettingsChanged for sync (P7.9).
-//   Also ImageWindow on loadFile/active-tool change sets these 6 values so
-//   TopOptionBar shows current tool's preset (default 3 PS brush preset switching).
+//   P7.6.x (2026-10-14): Single setter writes + emits brushSettingsChanged. UI:
+//     BrushOptionsPanel (ImageOptionBar idx=7) value change goes through these 6
+//     setters via ImageOptionBar::onBrushSharedStateChangedFromPanel. Reverse
+//     direction: ToolContext set (load file / preset switch / future tools) ->
+//     brushSettingsChanged -> ImageOptionBar::onToolContextBrushStateChanged ->
+//     BrushOptionsPanel::applySharedState.
+//   P7.9 stage: current active brush tool listens to brushSettingsChanged for sync.
 //
 //   P7.6 stage: tool read path goes through setBrushSize -> Brush::setBrushSize + sync
 //   in Brush::onEnter (subsequent commit also connects 4 brush tools). 5 brush tools

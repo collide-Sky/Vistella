@@ -45,6 +45,7 @@ namespace Ui { class ImageOptionBar; }
 namespace tools {
 
 class ToolContext;
+class BrushOptionsPanel;
 
 class ImageOptionBar : public QWidget
 {
@@ -56,9 +57,14 @@ public:
     // P5.1 (2026-10-08): attach with Mosaic + TextOverlay deps.
     //   Both are optional; nullptr disables the corresponding route.
     //   Without deps, Mosaic/Text pages never show (graceful no-op).
+    // P7.6.x (2026-10-14): attach 加 brushOpt 参数. BrushOptionsPanel 已经在
+    //   stackedWidget idx=7 由 ui->stackedWidget 提供, 我们撮合它的
+    //   sharedStateChanged signal <-> ToolContext.brushSharedState 6 字段.
+    //   取代旧 TopOptionBar (P7.5) 走的 imagewindow.cpp 撮合.
     void attach(ToolContext* ctx,
                 MosaicTool* mosaic = nullptr,
-                TextOverlayController* textCtrl = nullptr);
+                TextOverlayController* textCtrl = nullptr,
+                BrushOptionsPanel* brushOpt = nullptr);
     void detach();
 
     // P5.1: actual idx of the dynamic Mosaic / Text page once added
@@ -69,6 +75,9 @@ public:
 private slots:
     void onToolChanged(mediators::ToolId id);
     void onMosaicModeChanged(bool on);
+    // P7.6.x (2026-10-14): BrushOptionsPanel <-> ToolContext.brushSharedState 撮合.
+    void onBrushSharedStateChangedFromPanel();
+    void onToolContextBrushStateChanged();
 
 private:
     // P5.1 helper: lazily register MosaicOptionPanel / TextOptionPanel as
@@ -80,6 +89,7 @@ private:
     ToolContext* m_ctx = nullptr;       // weak ref
     MosaicTool* m_mosaic = nullptr;     // weak ref, optional
     TextOverlayController* m_textCtrl = nullptr;  // weak ref, optional
+    BrushOptionsPanel* m_brushOpt = nullptr; // P7.6.x: weak ref, optional
     int m_mosaicPageIdx = -1;  // P5.1: actual idx after addWidget, -1 = not added
     int m_textPageIdx   = -1;  // P5.1: actual idx after addWidget, -1 = not added
 };

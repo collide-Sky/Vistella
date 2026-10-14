@@ -15,6 +15,9 @@
 #include "../media/masks/RefineEdge.h"
 #include "../media/masks/ColorRange.h"
 #include "../media/mediators/ToolMediator.h"
+#include "../media/docks/ColorDock.h"  // P7.6.x v3 (2026-10-14): MainWindow docks 接管 LeftToolBar fg/bg sync
+#include "../media/docks/RightPanelDock.h"  // P7.6.x v3: image->colorDock()->colorDock() 完整类型
+#include "../media/imageworker/layers/LayerMask.h"
 #include "../media/imageworker/layers/Layer.h"
 #include "../media/imageworker/layers/LayerCommand.h"
 #include "../media/imageworker/layers/LayerMaskCommand.h"
@@ -130,6 +133,40 @@ MainWindow::MainWindow(QWidget *parent)
     // PS/WPS/VS 风格主页切换 (2026-09-10): HomePage 装到 mainStack page 0 (homePageContainer)
     installHomePage();
     buildThemeConnections();
+
+    // P7.6.x v3 (2026-10-14): 左侧 4 dock 全在 MainWindow 顶层创建 (PS 风格布局).
+    //   LeftSidePanel 是单 QWidget 容器, 装 LeftToolBar + ImageOptionBar + ModeSelectorBar +
+    //   AppBar 在 QVBoxLayout 里. m_leftDockContainer 是这个容器的 QDockWidget 包装.
+    //   RightPanelDock 还在 ImageWindow 内 (下一 commit 处理).
+    m_brushOpt = new tools::BrushOptionsPanel(this);    // 共享笔刷设置 (idx=7 page)
+    m_leftSidePanel = new tools::LeftSidePanel(this);
+    m_leftDockContainer = new QDockWidget(this);
+    m_leftDockContainer->setObjectName(QStringLiteral("leftDockContainer"));
+    m_leftDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    auto* leftEmptyTitle = new QWidget();
+    leftEmptyTitle->setFixedHeight(0);
+    m_leftDockContainer->setTitleBarWidget(leftEmptyTitle);
+    m_leftDockContainer->setWidget(m_leftSidePanel);
+    addDockWidget(Qt::LeftDockWidgetArea, m_leftDockContainer);
+    resizeDocks({m_leftDockContainer}, {56}, Qt::Horizontal);
+
+    // AppBar 信号 (quickMask / screenMode / capture) 转发给当前 active ImageWindow.
+    //   AppBar 信号是 int (enum 值), ImageWindow::onScreenModeSelected / onCaptureRequested
+    //   也接 int. 用 lambda 转发: 找当前 active image, 没有就忽略.
+    if (auto* appBar = m_leftSidePanel->appBar()) {
+        connect(appBar, &tools::AppBar::quickMaskToggled, this,
+                [this](bool on) {
+            if (auto* iw = activeImageWindow()) iw->onQuickMaskToggled(on);
+        });
+        connect(appBar, &tools::AppBar::screenModeSelected, this,
+                [this](int mode) {
+            if (auto* iw = activeImageWindow()) iw->onScreenModeSelected(mode);
+        });
+        connect(appBar, &tools::AppBar::captureRequested, this,
+                [this](int kind) {
+            if (auto* iw = activeImageWindow()) iw->onCaptureRequested(kind);
+        });
+    }
 
     // F-F (2026-09-09): 工作区 Mediator (临时 mainwindow 持有, F-G 改 imagewindow 共享)
     m_workspaceMed = std::make_unique<mediators::WorkspaceMediator>(this);
@@ -1736,6 +1773,9 @@ void MainWindow::onTabChanged(int index)
     updateWindowTitle();
     // 切换时也刷新一下 tooltip (主题色变化时)
     for (int i = 0; i < ui->tabWidget->count(); ++i) refreshTabTitle(i);
+    // P7.6.x v3 (2026-10-14): 4 左侧 dock (LeftToolBar + ImageOptionBar + ModeSelectorBar
+    //   + AppBar) 在 MainWindow 顶层. active image 切换 → 重 attach 到新 image 的组件.
+    bindLeftDockWidgets(activeImageWindow());
 }
 
 void MainWindow::onTabCloseRequested(int index)
@@ -2162,8 +2202,25 @@ void MainWindow::onReplace()
         tr("替换: '%1' → '%2' 在 %3 个文字图层中应用").arg(pattern, replacement).arg(replaced),
         4000);
 }
-void MainWindow::onZoomIn()  { statusBar()->showMessage(tr("放大"), 2000); }
-void MainWindow::onZoomOut() { statusBar()->showMessage(tr("缩小"), 2000); }
+// P7.6.x (2026-10-14): 视图 → 放大/缩小 路由到 active ImageWindow (PS 风格, 主菜单
+//   是唯一的 zoom entry point — 中央画布上方不放 zoom 按钮了). 旧实现只 show status,
+//   不真实缩放. 现在 forward 到 ImageWindow::onZoomIn/Out → m_canvas 真实缩放.
+void MainWindow::onZoomIn()
+{
+    if (auto* iw = activeImageWindow()) {
+        iw->onZoomIn();
+    } else {
+        statusBar()->showMessage(tr("没有打开的图像"), 2000);
+    }
+}
+void MainWindow::onZoomOut()
+{
+    if (auto* iw = activeImageWindow()) {
+        iw->onZoomOut();
+    } else {
+        statusBar()->showMessage(tr("没有打开的图像"), 2000);
+    }
+}
 // P2.3 (2026-09-22): onResetLayout — restore default dock/panel layout
 //   Calls QMainWindow::restoreState with the saved default state file
 //   (workspace_default.ini under QStandardPaths::AppDataLocation).
@@ -3265,4 +3322,62 @@ void MainWindow::retranslateUiTexts()
     if (m_infoDock) m_infoDock->setWindowTitle(tr("信息树"));
 
     for (int i = 0; i < ui->tabWidget->count(); ++i) refreshTabTitle(i);
+}
+
+// P7.6.x v3 (2026-10-14): 把 4 左侧 dock 重新绑定到指定 active image.
+//   LeftToolBar.attach(toolMed, ctx)  切工具 → Mediator → ctx.setState
+//   ImageOptionBar.attach(ctx, mosaic, textCtrl, brushOpt)  切 page 显示 brush 等选项
+//   ModeSelectorBar.attach(ctx)  二级 mode 按钮 (Blend / SampleSize 等)
+//   AppBar 已在 MainWindow 上挂好 signal forwarding lambda (本函数不重连)
+//   同步 fg/bg swatch → active image 的 ColorDock (避免 echosetForegroundColor)
+//
+//   之前在 ImageWindow.cotr 里每个 image 都新建一份 dock, 切 tab 时 dock 不变.
+//   现在 dock 在 MainWindow 顶层一份, 切 tab 必须重 attach.
+void MainWindow::bindLeftDockWidgets(ImageWindow* iw)
+{
+    if (!m_leftSidePanel) return;
+
+    auto* leftToolBar     = m_leftSidePanel->leftToolBar();
+    auto* imageOptionBar  = m_leftSidePanel->imageOptionBar();
+    auto* modeSelectorBar = m_leftSidePanel->modeSelectorBar();
+
+    if (!iw) {
+        // 没有 active image: detach 4 dock (避免 dangling pointer).
+        // leftToolBar.attach(nullptr, nullptr) 等 — 留后续扩展, 目前只 detach LeftToolBar.
+        if (leftToolBar) leftToolBar->detach();
+        if (modeSelectorBar) modeSelectorBar->detach();
+        if (imageOptionBar) imageOptionBar->detach();
+        return;
+    }
+
+    if (leftToolBar && iw->toolMediator() && iw->toolContext()) {
+        leftToolBar->attach(iw->toolMediator(), iw->toolContext());
+    }
+    if (modeSelectorBar && iw->toolContext()) {
+        modeSelectorBar->attach(iw->toolContext());
+    }
+    if (imageOptionBar && iw->toolContext()) {
+        imageOptionBar->attach(iw->toolContext(),
+                                iw->mosaicTool(),
+                                iw->textOverlay(),
+                                m_brushOpt);
+    }
+
+    // fg/bg swatch: LeftToolBar fg/bg 改 → active image 的 ColorDock 同步 (避免回声).
+    //   iw->colorDock() 返回 RightPanelDock* (整个右侧 dock); 内部 colorDock() getter 拿到
+    //   真正的 ColorDock widget (Dock contains 一组 tab).
+    //   detach 期间 detach() 已 disconnect 本侧; RightPanelDock.colorDock() 在 ImageWindow
+    //   切走时仍存在, 所以这里用 Qt::UniqueConnection 防止多次 connect 堆积.
+    if (leftToolBar) {
+        if (auto* rightDock = iw->colorDock()) {
+            if (auto* colorDock = rightDock->colorDock()) {
+                connect(leftToolBar, &tools::LeftToolBar::foregroundColorChanged,
+                        colorDock, &docks::ColorDock::setForegroundColor,
+                        Qt::UniqueConnection);
+                connect(leftToolBar, &tools::LeftToolBar::backgroundColorChanged,
+                        colorDock, &docks::ColorDock::setBackgroundColor,
+                        Qt::UniqueConnection);
+            }
+        }
+    }
 }

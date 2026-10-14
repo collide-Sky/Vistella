@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 //
 // BrushOptionsPanel impl - P1.1 (2026-09-15)
+// P7.6.x (2026-10-14): 接入 BrushSharedState 6 字段 (blendMode/size/opacity/flow/
+//   angle/smoothing). 取代 TopOptionBar. 撮合在 ImageOptionBar::attach() 里.
 
 #include "BrushOptionsPanel.h"
 #include "ui_BrushOptionsPanel.h"
@@ -47,6 +49,10 @@ BrushOptionsPanel::BrushOptionsPanel(QWidget* parent)
 
     connect(ui->cmbPreset, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &BrushOptionsPanel::onPresetComboChanged);
+
+    // P7.6.x (2026-10-14): BlendMode 不走 presetChanged (preset 里没这值) 走 sharedStateChanged.
+    connect(ui->cmbBlendMode, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &BrushOptionsPanel::onBlendModeChanged);
 
     connect(ui->btnPicker, &QToolButton::clicked, this, &BrushOptionsPanel::pickerRequested);
 }
@@ -168,6 +174,17 @@ void BrushOptionsPanel::onAnySettingChanged()
 {
     if (m_suspend) return;
     emit presetChanged(currentPreset());
+    // P7.6.x (2026-10-14): 6 共享字段 (size/opacity/flow/angle/smoothing) 中 5 个
+    //   跟 BrushPreset 字段重叠 — 它们也会触发 sharedStateChanged 跟 ToolContext 同步.
+    //   BlendMode 由 onBlendModeChanged 单独发.
+    emit sharedStateChanged();
+}
+
+void BrushOptionsPanel::onBlendModeChanged(int /*idx*/)
+{
+    if (m_suspend) return;
+    // cmbBlendMode 不影响 BrushPreset, 仅触发 sharedStateChanged.
+    emit sharedStateChanged();
 }
 
 void BrushOptionsPanel::onPresetComboChanged(int idx)
@@ -189,6 +206,38 @@ void BrushOptionsPanel::onPresetComboChanged(int idx)
     Q_UNUSED(block);
     setPreset(p);
     emit presetChanged(p);
+    emit sharedStateChanged();  // 5 重叠字段也跟 ToolContext 同步
+}
+
+// ---------------- P7.6.x (2026-10-14) shared state ----------------
+
+BrushOptionsPanel::SharedState BrushOptionsPanel::sharedStatePulledIn() const
+{
+    SharedState s;
+    s.blendMode  = ui->cmbBlendMode->currentIndex();
+    s.size       = ui->sliderSize->value();
+    s.opacityPct = ui->sliderOpacity->value();
+    s.flowPct    = ui->sliderFlow->value();
+    s.smoothing  = ui->sliderSmoothAmount->value();
+    s.angle      = ui->sliderAngle->value();
+    return s;
+}
+
+void BrushOptionsPanel::applySharedState(const SharedState& s)
+{
+    m_suspend = true;
+    ui->cmbBlendMode->setCurrentIndex(s.blendMode);
+    ui->sliderSize->setValue(s.size);
+    ui->spinSize->setValue(s.size);
+    ui->sliderOpacity->setValue(static_cast<int>(s.opacityPct));
+    ui->spinOpacity->setValue(static_cast<int>(s.opacityPct));
+    ui->sliderFlow->setValue(static_cast<int>(s.flowPct));
+    ui->spinFlow->setValue(static_cast<int>(s.flowPct));
+    ui->sliderSmoothAmount->setValue(static_cast<int>(s.smoothing));
+    ui->spinSmoothAmount->setValue(static_cast<int>(s.smoothing));
+    ui->sliderAngle->setValue(s.angle);
+    ui->spinAngle->setValue(s.angle);
+    m_suspend = false;
 }
 
 } // namespace tools

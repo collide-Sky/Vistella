@@ -52,11 +52,13 @@ ColorTab::ColorTab(QWidget* parent) : QWidget(parent)
 
     // Right-side compact buttons: X swap + D default
     m_swapBtn = new QPushButton(QStringLiteral("X"), this);
+    m_swapBtn->setObjectName(QStringLiteral("swapBtn"));
     m_swapBtn->setToolTip(tr("交换前景/背景"));
     m_swapBtn->setFixedSize(28, 28);
     swatchRow->addWidget(m_swapBtn);
 
     m_defaultBtn = new QPushButton(QStringLiteral("D"), this);
+    m_defaultBtn->setObjectName(QStringLiteral("defaultBtn"));
     m_defaultBtn->setToolTip(tr("恢复默认前景/背景"));
     m_defaultBtn->setFixedSize(28, 28);
     swatchRow->addWidget(m_defaultBtn);
@@ -65,6 +67,7 @@ ColorTab::ColorTab(QWidget* parent) : QWidget(parent)
 
     // Pick color button (full width)
     m_pickBtn = new QPushButton(tr("拾取颜色..."), this);
+    m_pickBtn->setObjectName(QStringLiteral("pickBtn"));
     m_pickBtn->setMinimumHeight(26);
     root->addWidget(m_pickBtn);
 

@@ -28,13 +28,13 @@
    <property name="rightMargin">0</property>
    <property name="bottomMargin">0</property>
    <property name="spacing">0</property>
-   <!-- P7.1 (2026-10-12): PS-style tight 2-column tool grid.
-        Each tool button is 28x28, no margin, zero spacing. Total width 56. -->
+   <!-- P7.6.x v2 (2026-10-14): QScrollArea 简化为 sizepolicy Expanding + 14 工具
+        直接放 rootLayout. v1 加 QScrollArea 反而导致整个 dock 塌缩到 0 高度 (左侧
+        工具栏整个看不见). 现在不加 QScrollArea, 让 rootLayout 直接管 14 工具,
+        dock 高度由 QMainWindow 给的可用空间决定, 短窗口时图标自然被压缩 (layout
+        不会塌缩). -->
    <item>
     <widget class="QWidget" name="toolGridContainer">
-     <property name="minimumSize">
-      <size><width>0</width><height>0</height></size>
-     </property>
      <layout class="QGridLayout" name="gridLayout">
       <property name="leftMargin">0</property>
       <property name="topMargin">0</property>

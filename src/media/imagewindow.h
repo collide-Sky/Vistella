@@ -73,11 +73,12 @@ namespace tools { class ToolContext; }
 // Q4.2.1 (2026-09-23): LeftToolBar + ImageOptionBar 实装接入 (之前 P1.1 follow-up
 //   写完 cpp/h/ui 但 ctor 从没创建 — 整个图片阶段做完, 左侧 panel 只有 imagewindow.ui
 //   硬编码 groupMosaic + groupText 占位). 真实 include 进来用, 不 forward decl.
-#include "tools/LeftToolBar.h"
-#include "tools/ImageOptionBar.h"
-#include "tools/TopOptionBar.h"   // P7.5 (2026-10-12): 顶部水平工具栏 (PS 风格)
-#include "tools/AppBar.h"
-#include "tools/ModeSelectorBar.h"
+#include "tools/AppBar.h"  // P7.6.x v3: AppBar 在 MainWindow 顶层, ImageWindow 仍持有 ScreenMode/Capture 引用
+// P7.6.x (2026-10-14): TopOptionBar 已删 - 6 控件 (mode/opacity/flow/smoothing/angle/size)
+//   搬到 ImageOptionBar 内的 BrushOptionsPanel (cmbBlendMode + 5 重叠字段).
+//   撮合 BrushOptionsPanel <-> ToolContext.brushSharedState 在 ImageOptionBar::attach() 里.
+//   P7.6.x v3 commit 1: LeftToolBar + ImageOptionBar + ModeSelectorBar + LeftSidePanel +
+//   BrushOptionsPanel 全部从 ImageWindow 搬到 MainWindow. ImageWindow 不再 #include 它们.
 // P0-4 (2026-09-10): SelectionModel forward decl (selection state holder)
 namespace selection { class SelectionModel; }
 // P0-5 (2026-09-10): FilterStrategy forward decl (20 滤镜 PS 同款)
@@ -242,7 +243,7 @@ public:
     const cv::Mat& originalImage() const { return m_original; }
 
     // P0-3.2 (2026-09-08): AdjustmentPanel 公开访问 (供 MainWindow 等)
-    class AdjustmentPanel* adjustmentPanel() { return m_adjustmentPanel.get(); }
+    class AdjustmentPanel* adjustmentPanel() { return m_adjustmentPanel; }
     // P0 leftover 5 (2026-09-21): Per-window DialogMediator access.
     class mediators::DialogMediator* dialogMediator() { return m_dialogMed.get(); }
     // P0 leftover 5 (2026-09-21): Convenience to pop a standalone adjust
@@ -266,6 +267,11 @@ public:
     //   brushCursor(): brush cursor 控件 (P0-1.2 这一刻**不动**控件位置)
     //   renderToViewPublic(): 涂抹 in-place 修改后触发重绘
     class TextOverlayController* textOverlay() { return m_textCtrl.get(); }
+    // P7.6.x v3 (2026-10-14): 公开 MosaicTool / RightPanelDock 给 MainWindow 用.
+    //   docks 搬出 ImageWindow 后, MainWindow::bindLeftDockWidgets 通过这些拿当前
+    //   image 的组件. raw pointer, 仅在 ImageWindow 还活着时有效 (Qt 父对象关系保证).
+    class MosaicTool* mosaicTool() { return m_mosaicTool.get(); }
+    class docks::RightPanelDock* colorDock() { return m_rightDock; }
     // P2.5 (2026-09-22): returns raw pointer. Safe to use only when checked
     //   immediately before dereferencing (see MosaicTool::setSize pattern).
     //   The pointer becomes dangling when ImageCanvas->scene() deletes the
@@ -340,7 +346,7 @@ public:
 
     // P0-7.1 (2026-09-14): ImageCanvas accessor (Text 工具 hitTest scenePos 用)
     //   m_canvas 暴露给 tools::Text 走 QGraphicsScene::itemAt 找 GraphicsTextItem
-    ImageCanvas* imageCanvas() const { return m_canvas.get(); }
+    ImageCanvas* imageCanvas() const { return m_canvas; }
 
     // P0-4 (2026-09-10): Selection model accessor (for selection tools + main menu actions)
     selection::SelectionModel* selectionModel() const { return m_selection.get(); }
@@ -369,7 +375,7 @@ public:
     //   (LayersDock::setContentWidget 调用 w->setParent(tab) 后 LayersDock 负责析构).
     //   这里 unique_ptr 仅在调用 setContentWidget 前有效, 调用 .release() 后置空,
     //   避免重复 delete.
-    layers::LayerPanel* layerPanel() const { return m_layerPanel.get(); }
+    layers::LayerPanel* layerPanel() const { return m_layerPanel; }
 
     // P2.5 (2026-09-22): selected layer index from LayerPanel's QTreeWidget
     //   current row (or -1 if none selected). Used by MainWindow layer menu
@@ -398,6 +404,9 @@ signals:
     void filePathChanged(const QString &path);
     void editTimeShouldUpdate(const QString &path);
     void closeRequested();   // 自身要求关闭 (例如工具栏"关闭"按钮或 Ctrl+W)
+    // P7.6.x v3 (2026-10-14): Quick Mask UI 同步 — AppBar 在 MainWindow 顶层, ImageWindow
+    //   不能直接改它. emit 信号, MainWindow 在 bindLeftDockWidgets() 里 connect 到 AppBar.
+    void quickMaskUiSync(bool on);
 
 protected:
     void keyPressEvent(QKeyEvent *e) override;
@@ -451,13 +460,17 @@ public slots:
     //   connect can invoke it without friend declaration.
     void onTextColorClicked();
 
+public slots:
+    // P7.6.x (2026-10-14): 提升到 public slots — MainWindow::onZoomIn/Out 调
+    //   activeImageWindow()->onZoomIn/Out 真实缩放, 不再只 show statusBar 文字.
+    void onZoomIn();
+    void onZoomOut();
+
 private slots:
     // 工具栏 actions
     // P0-1.4 (2026-09-07): onSave / onSaveAs / onOpen / onClose 搬到 ImageIOController
     //   这 4 个 slot 不再连接任何 signal (buildActions 里就只接了 zoom),
     //   仅作 saveAsPublic / savePublic 转发目标, 转发也搬到 m_io->onSaveAs / m_io->onSave
-    void onZoomIn();
-    void onZoomOut();
     void onResetZoom();
 
     // 撤销/重做
@@ -491,53 +504,44 @@ private:
     // ---- P0-1: 5 component slots. nullptr in P0-1.1; P0-1.2 instantiates
     // and migrates methods from this class. Each component holds a
     // QPointer<ImageWindow> m_host back to this object.
-    std::unique_ptr<ImageCanvas>            m_canvas;        // P0-1.2
-    std::unique_ptr<MosaicTool>             m_mosaicTool;    // P0-1.2
-    std::unique_ptr<TextOverlayController>  m_textCtrl;      // P0-1.2
-    std::unique_ptr<ImageIOController>      m_io;            // P0-1.2
-    // P0-3.2 (2026-09-08): PS 风格色彩调整 UI (5 tab Curves/Levels/HSL/B&W/ChannelMixer)
-    //   跟 m_adjustment (旧 5 toggle + 10 slider) 共存, 各管各的
-    std::unique_ptr<AdjustmentPanel>        m_adjustmentPanel;  // P0-3.2 (F-G.3: parent = m_rightDock->tabWidget(), 析构时 m_rightDock 负责 delete, unique_ptr 不持有所有权)
-    std::unique_ptr<mediators::DialogMediator> m_dialogMed;       // P0 leftover 5 (2026-09-21): per-window dialog dispatcher
-
-    // F-G.3 Fix (2026-09-10): 右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
-    //   替代原来 3 个分离 dock (RightPanelStack + adjDock + infoDock) + addDockWidget 抢画布位置
-    std::unique_ptr<docks::RightPanelDock> m_rightDock;
-    // Stage C (2026-09-15): QDockWidget 容器 (走 Qt 原生 addDockWidget + resizeDocks)
-    //   之前 setGeometry 浮动覆盖 centralWidget, 跟 canvas 抢位置, resize 不联动
-    //   现在用 Qt 原生 dock 机制, resizeDocks 设初始宽度 340, 后续跟着 centralWidget 缩放
-    QDockWidget *m_rightDockContainer = nullptr;
-
-    // Q4.2.1 (2026-09-23): 左侧 PS 风格工具栏 (LeftToolBar) + 二级属性面板
-    //   (ImageOptionBar). 之前 P1.1 follow-up 写完 cpp/h/ui 但 ctor 从没创建,
-    //   整个图片阶段做完, 左侧 panel 只有 imagewindow.ui 里硬编码的 groupMosaic
-    //   + groupText 占位. 真实接入 LeftToolBar + ImageOptionBar, Q4.2.1 删
-    //   占位 group + 迁移 MosaicTool/TextOverlay 参数到 ImageOptionBar.
     //
-    //   m_leftDockContainer 装 LeftToolBar (左侧 dock 上方, PS 风格 64px 宽图标栏)
-    //   m_imageOptionDockContainer 装 ImageOptionBar (左侧 dock 下方,
-    //   splitDockWidget 垂直排, 默认 200px 高 — 显示当前工具的属性 panel)
-    //
-    //   注意: release() 转移所有权给 QDockWidget (跟 m_rightDock 模式一致),
-    //   unique_ptr 在 release 后变 null, QDockWidget 销毁时 delete 内部 widget.
-    std::unique_ptr<tools::LeftToolBar>    m_leftToolBar;
-    QDockWidget                           *m_leftDockContainer = nullptr;
-    std::unique_ptr<tools::ImageOptionBar> m_imageOptionBar;
+    // P7.6.x (2026-10-14): smart pointer policy.
+    //   - QWidget/QObject added to Qt tree (parent-managed): raw pointer
+    //   - QObject without Qt parent, single owner: unique_ptr
+    //   - Multi-owner: shared_ptr + weak_ptr
+    //   - Pure C++ class: unique_ptr or shared_ptr per usage
+    //   This rule applies project-wide (image/audio/video/visual modules).
+    //   Qt's parent-child ownership is the canonical lifetime owner for
+    //   widgets; std::unique_ptr on top of that creates double ownership
+    //   and forces the awkward release() + saved-raw-pointer dance.
 
-    // P7.5 (2026-10-12): 顶部水平共享工具栏 (PS 风格 mode/opacity/flow/smoothing/angle/size)
-    std::unique_ptr<tools::TopOptionBar> m_topOptionBar;
-    QToolBar* m_topToolBar = nullptr;        // ImageWindow addToolBar(Qt::TopToolBarArea)
-    QDockWidget                           *m_imageOptionDockContainer = nullptr;
-    // Q4.2.3 (2026-09-24): ModeSelectorBar 二级模式选择栏 (LeftToolBar 和 ImageOptionBar 之间)
-    //   监听 ToolContext::toolChanged, 切到对应 tool 时显示 mode 按钮组.
-    //   5 tools (Crop/MagicWand/Lasso/Brush/Eyedropper) 共享 1 个 widget, 按
-    //   currentToolId 切到对应 page (selection mode / aspect / blend / sample size).
-    std::unique_ptr<tools::ModeSelectorBar> m_modeSelectorBar;
-    QDockWidget                            *m_modeSelectorDockContainer = nullptr;
-    // P5.5+ (2026-10-09): AppBar 三组全局 toggle (Quick Mask / Screen Mode / Capture),
-    //   装在 ImageOptionBar 下方. 不依赖 active tool.
-    std::unique_ptr<tools::AppBar>         m_appBar;
-    QDockWidget                            *m_appBarDockContainer = nullptr;
+    // ImageCanvas is the central widget — Qt owns it via setCentralWidget.
+    ImageCanvas                            *m_canvas = nullptr;          // P0-1.2
+    // MosaicTool / TextOverlayController / ImageIOController: not added to
+    // Qt tree (no parent) and only referenced by ImageWindow. unique_ptr OK.
+    std::unique_ptr<MosaicTool>             m_mosaicTool;                // P0-1.2
+    std::unique_ptr<TextOverlayController>  m_textCtrl;                  // P0-1.2
+    std::unique_ptr<ImageIOController>      m_io;                        // P0-1.2
+    // P0-3.2 (2026-09-08): PS 风格色彩调整 UI. Parent = m_rightDock's tabWidget
+    //   (set via RightPanelDock::setAdjustmentPanel). Qt owns lifetime.
+    AdjustmentPanel                        *m_adjustmentPanel = nullptr;  // P0-3.2
+    std::unique_ptr<mediators::DialogMediator> m_dialogMed;                 // P0 leftover 5 (2026-09-21)
+
+    // F-G.3 Fix (2026-09-10): 右侧 panel. Parent = m_rightDockContainer
+    //   (set via setWidget()). Qt owns lifetime.
+    docks::RightPanelDock                  *m_rightDock = nullptr;
+    QDockWidget                            *m_rightDockContainer = nullptr;
+
+    // P7.6.x v3 (2026-10-14): LeftSidePanel + LeftDockContainer + 4 子 widget + BrushOptionsPanel
+    //   全部搬出 ImageWindow, 移到 MainWindow. ImageWindow 现在只持画布 + 业务数据 + 右侧 dock
+    //   (P7.6.x v3 commit 1 范围: 只搬 left 侧; 右侧 dock 在 commit 5+ 处理). m_leftSidePanel
+    //   / m_leftDockContainer / m_leftToolBar / m_imageOptionBar / m_modeSelectorBar / m_appBar
+    //   / m_brushOpt 成员删除; MainWindow 接管.
+    //
+    //   ImageWindow 现在不需要创建 dock, 但它仍然创建 rightDock / layerPanel / adjustmentPanel
+    //   (右侧 dock 留到下一 commit 再搬, 因为它跟 ImageWindow 的 layer/channel/path state 有
+    //   大量 signal connect, 搬动需要重新规划 setHost / setContentWidget / setAdjustmentPanel
+    //   等 API).
     // Quick Mask mode: when on, MaskBrush paint mode is "switch into" until toggled off;
     //   stores the previously active tool so onQuickMaskToggled(false) restores it.
     bool                                   m_quickMaskActive = false;
@@ -593,11 +597,9 @@ private:
     //   with the stack; emits sourceFileChanged(idx, path) -> statusBar hint.
     std::unique_ptr<layers::SmartObjectWatcher> m_smartWatcher;
 
-    // P1.4.3 (2026-09-17): LayerPanel 实例化 + 注入 LayersDock tab 0
-    //   Created in loadFile() after m_layerStack; ownership transferred to
-    //   LayersDock via release() after setContentWidget. unique_ptr 默认空,
-    //   loadFile() 后置 nullptr (因为 setContentWidget 已经 reparent + 接管).
-    std::unique_ptr<layers::LayerPanel> m_layerPanel;
+    // P1.4.3 (2026-09-17): LayerPanel — reparented into LayersDock via
+    //   setContentWidget. Qt owns lifetime; raw pointer survives.
+    layers::LayerPanel                     *m_layerPanel = nullptr;
 
     QUndoStack *m_undoStack = nullptr;
     int         m_savedIndex = 0;   // 上次保存时的栈 index, 用于 isDirty

@@ -20,10 +20,13 @@
 #include "PatchTool.h"
 #include "RedEyeTool.h"
 #include "MaskBrushTool.h"
+#include "Brush.h"        // P7.6.x (2026-10-14): presetChanged -> brush->setPreset
+#include "../brushes/BrushPickerDialog.h"  // P7.6.x: picker button -> modal dialog
 
 #include "../imagewindow/MosaicOptionPanel.h"
 #include "../imagewindow/TextOptionPanel.h"
 
+#include "BrushOptionsPanel.h"
 #include "logger.h"
 
 #include <QComboBox>
@@ -48,11 +51,13 @@ ImageOptionBar::~ImageOptionBar()
 
 void ImageOptionBar::attach(ToolContext* ctx,
                             MosaicTool* mosaic,
-                            TextOverlayController* textCtrl)
+                            TextOverlayController* textCtrl,
+                            BrushOptionsPanel* brushOpt)
 {
     m_ctx = ctx;
     m_mosaic = mosaic;
     m_textCtrl = textCtrl;
+    m_brushOpt = brushOpt;  // P7.6.x (2026-10-14): weak ref, optional
 
     if (m_ctx) {
         connect(m_ctx, &ToolContext::toolChanged,
@@ -62,6 +67,14 @@ void ImageOptionBar::attach(ToolContext* ctx,
         if (m_mosaic) {
             connect(m_mosaic, &MosaicTool::modeChanged,
                     this, &ImageOptionBar::onMosaicModeChanged);
+        }
+        // P7.6.x (2026-10-14): BrushOptionsPanel <-> ToolContext.brushSharedState
+        //   双向同步 (取代旧 TopOptionBar). 仅在 m_brushOpt 有效时撮合.
+        if (m_brushOpt) {
+            connect(m_brushOpt, &BrushOptionsPanel::sharedStateChanged,
+                    this, &ImageOptionBar::onBrushSharedStateChangedFromPanel);
+            connect(m_ctx, &ToolContext::brushSettingsChanged,
+                    this, &ImageOptionBar::onToolContextBrushStateChanged);
         }
         // Synchronize initial state (None / Brush / Text depending on
         //   current tool and mosaic enabled flag).
@@ -77,9 +90,13 @@ void ImageOptionBar::detach()
     if (m_mosaic) {
         disconnect(m_mosaic, nullptr, this, nullptr);
     }
+    if (m_brushOpt) {
+        disconnect(m_brushOpt, nullptr, this, nullptr);
+    }
     m_ctx = nullptr;
     m_mosaic = nullptr;
     m_textCtrl = nullptr;
+    m_brushOpt = nullptr;
 }
 
 void ImageOptionBar::ensureMosaicPage()
@@ -168,7 +185,48 @@ void ImageOptionBar::onToolChanged(mediators::ToolId id)
 
     // P0-9.1 (2026-09-15): Shape tool (idx=10) dynamic load optionPage
     //   P0-9.2/9.3 same pattern (Pen/Clone/Heal/Patch/RedEye).
+    // P7.6.x (2026-10-14): Brush (idx=7) 走 m_brushOpt 持久 widget, 不再调
+    //   Brush::optionPage() 每次新建 (老代码会换掉我们挂的 BrushOptionsPanel,
+    //   导致撮合丢失). 重新接 presetChanged / pickerRequested 到当前 Brush 工具.
     if (m_ctx) {
+        if (idx == static_cast<int>(mediators::ToolId::Brush) && m_brushOpt) {
+            QWidget* old = ui->stackedWidget->widget(idx);
+            if (old != m_brushOpt) {
+                if (old) ui->stackedWidget->removeWidget(old);
+                m_brushOpt->setParent(ui->stackedWidget);
+                m_brushOpt->setObjectName(QStringLiteral("page7"));
+                ui->stackedWidget->insertWidget(idx, m_brushOpt);
+            }
+            // 重接 presetChanged / pickerRequested (Brush 实例每次切工具重建).
+            // 捕获 m_ctx raw pointer — imagewindow 生命周期内稳定. m_brushOpt 作为
+            //   receiver context, panel 销毁时 Qt 自动 disconnect.
+            QObject::connect(m_brushOpt, &BrushOptionsPanel::presetChanged,
+                             m_brushOpt, [this](const brushes::BrushPreset& p) {
+                if (auto* brush = dynamic_cast<Brush*>(m_ctx->currentState())) {
+                    brush->setPreset(p);
+                }
+            });
+            QObject::connect(m_brushOpt, &BrushOptionsPanel::pickerRequested,
+                             m_brushOpt, [this]() {
+                brushes::BrushPickerDialog dlg(nullptr, m_brushOpt);
+                if (dlg.exec() == QDialog::Accepted) {
+                    const auto p = dlg.selectedPreset();
+                    if (!p.name.isEmpty()) {
+                        if (auto* brush = dynamic_cast<Brush*>(m_ctx->currentState())) {
+                            brush->setPreset(p);
+                        }
+                        m_brushOpt->setPreset(p);
+                    }
+                }
+            });
+            // 启动时初始化 UI 显示当前 Brush preset (如果当前已经是 Brush 工具).
+            if (auto* brush = dynamic_cast<Brush*>(m_ctx->currentState())) {
+                m_brushOpt->setPreset(brush->preset());
+            }
+            LOG_DEBUG("[OptionBar] onToolChanged: Brush -> m_brushOpt (persistent)");
+            ui->stackedWidget->setCurrentIndex(idx);
+            return;
+        }
         if (auto* tool = m_ctx->currentState()) {
             if (auto* page = tool->optionPage(this)) {
                 page->setObjectName(QString(QStringLiteral("page%1")).arg(idx));
@@ -197,6 +255,45 @@ void ImageOptionBar::onMosaicModeChanged(bool /*on*/)
     if (!m_ctx) return;
     if (m_ctx->currentToolId() != mediators::ToolId::Brush) return;
     // Page stays on kMosaicPageIdx (17). MosaicOptionPanel reflects new mode.
+}
+
+// ---------------- P7.6.x (2026-10-14) BrushOptionsPanel 撮合 ----------------
+//   取代旧 TopOptionBar (imagewindow.cpp 顶部 6 控件). 6 字段:
+//     blendMode / size / opacity / flow / angle / smoothing.
+//   已经在 BrushOptionsPanel 现有控件里的 5 项通过 sharedStateChanged 撮合,
+//   BlendMode 单独由 onBlendModeChanged 触发共享 signal.
+//   撮合策略:
+//     BrushOptionsPanel 改 UI -> sharedStateChanged -> 我们读 sharedStatePulledIn()
+//       -> 写 6 个 ToolContext setter -> ToolContext 发 brushSettingsChanged ->
+//       onToolContextBrushStateChanged -> applySharedState 回灌 UI (UI 没变, QSignalBlocker
+//       抑制二次 emit, 防止循环).
+//   反向: ToolContext::setX (切 tool / load file) -> brushSettingsChanged -> 我们
+//     applySharedState 回灌 UI.
+
+void ImageOptionBar::onBrushSharedStateChangedFromPanel()
+{
+    if (!m_ctx || !m_brushOpt) return;
+    const auto s = m_brushOpt->sharedStatePulledIn();
+    m_ctx->setBlendMode(s.blendMode);
+    m_ctx->setBrushSize(s.size);
+    m_ctx->setOpacity(s.opacityPct);
+    m_ctx->setFlow(s.flowPct);
+    m_ctx->setAngle(s.angle);
+    m_ctx->setSmoothing(s.smoothing);
+}
+
+void ImageOptionBar::onToolContextBrushStateChanged()
+{
+    if (!m_ctx || !m_brushOpt) return;
+    const auto& bs = m_ctx->brushSharedState();
+    BrushOptionsPanel::SharedState s;
+    s.blendMode  = bs.blendMode;
+    s.size       = bs.brushSize;
+    s.opacityPct = bs.opacity;
+    s.flowPct    = bs.flow;
+    s.smoothing  = bs.smoothing;
+    s.angle      = bs.angle;
+    m_brushOpt->applySharedState(s);
 }
 
 } // namespace tools

@@ -20,6 +20,9 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QCoreApplication>
+#include <QTreeView>
+#include <QStandardItem>
+#include <QStandardItemModel>
 
 #include "../src/media/docks/RightPanelStack.h"
 #include "../src/media/docks/ColorDock.h"
@@ -98,12 +101,25 @@ void tst_RightPanelStack::colorDock_haveFGBGSwatch()
     // 默认 fg=黑 bg=白
     QCOMPARE(color.foregroundColor(), QColor(Qt::black));
     QCOMPARE(color.backgroundColor(), QColor(Qt::white));
-    // 12 色色板 (查找所有 QFrame, 排除 fg/bg swatch)
+    // P7.8 (2026-10-14): SwatchTab is QTreeView (3 categories x 5 swatches = 15).
+    //   Walk the QStandardItemModel of the SwatchTab's QTreeView and count
+    //   items tagged with the "swatch" marker in UserRole+1.
+    QTreeView* tree = color.swatchTab()->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    QStandardItemModel* model = qobject_cast<QStandardItemModel*>(tree->model());
+    QVERIFY(model != nullptr);
     int cellCount = 0;
-    for (QFrame* f : color.findChildren<QFrame*>()) {
-        if (f->property("paletteIndex").isValid()) ++cellCount;
+    for (int r = 0; r < model->rowCount(); ++r) {
+        QStandardItem* cat = model->item(r);
+        if (!cat) continue;
+        for (int c = 0; c < cat->rowCount(); ++c) {
+            QStandardItem* item = cat->child(c);
+            if (item && item->data(Qt::UserRole + 1).toString() == QStringLiteral("swatch")) {
+                ++cellCount;
+            }
+        }
     }
-    QCOMPARE(cellCount, 12);
+    QCOMPARE(cellCount, 15);
     // pick button 存在
     QVERIFY(color.findChild<QPushButton*>() != nullptr);
 }

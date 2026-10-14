@@ -1,6 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <QObject>           // moc 需要 (P7.6.x v3 commit 1 引入 dock 类后)
 #include <QMainWindow>
 #include <QToolButton>
 #include <QStringList>
@@ -8,6 +9,16 @@
 #include <QPushButton>
 #include <QList>
 #include <memory>
+
+// P7.6.x v3 (2026-10-14): docks 搬出 ImageWindow, MainWindow 创建并管理.
+//   LeftToolBar + ImageOptionBar + ModeSelectorBar + AppBar + BrushOptionsPanel
+//   都在 MainWindow 顶层持有, 通过 attach() 注入当前 active ImageWindow 的组件.
+#include "../media/tools/LeftToolBar.h"
+#include "../media/tools/ImageOptionBar.h"
+#include "../media/tools/LeftSidePanel.h"
+#include "../media/tools/ModeSelectorBar.h"
+#include "../media/tools/AppBar.h"
+#include "../media/tools/BrushOptionsPanel.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -17,7 +28,10 @@ class QMenu;
 class QPoint;
 class DocWindow;
 class InfoTreeDock;
-class ImageWindow;
+// P7.6.x v3 (2026-10-14): MainWindow 现在创建 dock widget, 需要 ImageWindow 完整定义
+//   (QPointer<ImageWindow> 在 MosaicTool.h 里要完整 ImageWindow 才能编译 qpointer.h:76).
+//   之前 forward decl ImageWindow 就够, 现在必须 #include.
+#include "../media/imagewindow.h"
 class HomePage;
 namespace filter { enum class FilterKind : int; }
 namespace layers { class LayerStack; }
@@ -358,6 +372,26 @@ private:
 
     // P7.2: 活动 ImageWindow (当前 tab). 用于窗口 → 平铺/堆叠/最小化等.
     ImageWindow* activeImageWindow() const;
+
+    // P7.6.x v3 (2026-10-14): docks 全搬出 ImageWindow → MainWindow.
+    //   ImageWindow 现在只持画布 + 业务数据. 4 个 dock widget 在 MainWindow 顶层,
+    //   tabWidget->currentChanged 时调用 bindLeftDockWidgets(activeIw) 重 attach.
+    //   设计要点:
+    //     - 单 dock 容器 (m_leftDockContainer) 装 LeftSidePanel 单容器, 1 个 LeftArea
+    //       dock 就够 (左侧整体作为一个 PS 风格面板)
+    //     - BrushOptionsPanel 单实例 (跟 ImageWindow 无关 — 笔刷设置全局共享)
+    //     - m_leftToolBar / m_imageOptionBar / m_modeSelectorBar / m_appBar 是 dock 内部 widget,
+    //       由 LeftSidePanel 创建并持 Qt tree. MainWindow 通过 accessor 拿.
+    //   RightPanelDock (m_rightDock) 暂时还在 ImageWindow (下个 commit 再处理).
+    tools::LeftSidePanel*    m_leftSidePanel     = nullptr;  // 容器 - 含 4 子 widget
+    QDockWidget*            m_leftDockContainer = nullptr;  // QMainWindow::addDockWidget 用
+    tools::BrushOptionsPanel* m_brushOpt          = nullptr;  // 共享笔刷设置
+    void bindLeftDockWidgets(ImageWindow* iw);  // active image 改变 → 重 attach 4 dock widget
+
+    // P7.6.x v3 commit 1: 也接管 LeftToolBar / ImageOptionBar 等的全局快捷入口.
+    //   ImageWindow 不再有 dock, 但它的 onQuickMaskToggled / onScreenModeSelected /
+    //   onCaptureRequested 还需要 active image 触发. MainWindow 持 AppBar dock, 把
+    //   AppBar 信号转给 active image.
 };
 
 #endif // MAINWINDOW_H
