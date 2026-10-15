@@ -168,6 +168,23 @@ void RightPanelDock::setChannelPathQuickMask(bool on)
     }
 }
 
+void RightPanelDock::invalidateAllPageCaches()
+{
+    auto fanOut = [](vistella::ui::VDraggableTabWidget* sd) {
+        if (!sd) return;
+        for (int i = 0; i < sd->pageCount(); ++i) {
+            // pageAt() returns QWidget* (VDraggableTabWidget's API);
+            // the VTabPageBase API lives on the actual subclass. qobject_cast
+            // is safe because every page was inserted via addPage(VTabPageBase*).
+            auto* pageBase = qobject_cast<vistella::ui::VTabPageBase*>(sd->pageAt(i));
+            if (pageBase) pageBase->invalidateCache();
+        }
+    };
+    fanOut(m_subDockColor);
+    fanOut(m_subDockProperty);
+    fanOut(m_subDockLayer);
+}
+
 QSize RightPanelDock::sizeHint() const
 {
     return QSize(340, 800);

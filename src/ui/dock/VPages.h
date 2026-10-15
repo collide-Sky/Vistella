@@ -130,8 +130,18 @@ public:
     // Properties: form-style, no heavy pixel work.
     RenderPath preferredRenderPath() const { return RenderPath::CpuOnly; }
     docks::PropertiesDock* inner() const { return m_inner; }
+
+    // P7.10 (2026-10-15): active layer change → drop cached imageInfo /
+    // bbox / rotation / text. The inner PropertiesDock is stateless, so
+    // invalidate is a no-op for the data side; we just trigger a
+    // repaint via update() so any stale pixels are redrawn.
+    void invalidateCache() override;
+
+    // Test hook.
+    int testInvalidateCacheCount() const { return m_invCount; }
 private:
     docks::PropertiesDock* m_inner = nullptr;
+    int m_invCount = 0;
 };
 
 class VChannelPathPage : public VTabPageBase {
@@ -143,8 +153,17 @@ public:
     // Channel mask render + path tessellation — real pixel work, GPU wins.
     RenderPath preferredRenderPath() const { return RenderPath::GpuPreferred; }
     docks::ChannelPathPanel* inner() const { return m_inner; }
+
+    // P7.10 (2026-10-15): active channel change → drop channel mask cache
+    // + repaint. The inner panel re-reads the active channel on the next
+    // paint. Triggers the same code path the user would hit by clicking
+    // an RGB / Red / Green / Blue entry in the channel list.
+    void invalidateCache() override;
+
+    int testInvalidateCacheCount() const { return m_invCount; }
 private:
     docks::ChannelPathPanel* m_inner = nullptr;
+    int m_invCount = 0;
 };
 
 class VHistoryPage : public VTabPageBase {
@@ -159,8 +178,17 @@ public:
     // Forward the QUndoStack binding through to the inner dock.
     void setUndoStack(class QUndoStack* stack);
     docks::HistoryDock* inner() const { return m_inner; }
+
+    // P7.10 (2026-10-15): undoStack is already wired through setUndoStack()
+    // and QUndoStack::indexChanged drives HistoryDock internally. The
+    // hook here is a defensive double-check for callers that mutate
+    // the stack without going through QUndoStack::push/pop.
+    void invalidateCache() override;
+
+    int testInvalidateCacheCount() const { return m_invCount; }
 private:
     docks::HistoryDock* m_inner = nullptr;
+    int m_invCount = 0;
 };
 
 } // namespace vistella::ui

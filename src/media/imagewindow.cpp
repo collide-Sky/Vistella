@@ -924,6 +924,14 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     //   切 layer 不改像素, 但要让画布知道, 触发重绘 + 通知 MainWindow
     connect(m_layerStack.get(), &layers::LayerStack::selectionChanged,
             this, &ImageWindow::onLayerSelectionChanged);
+    // P7.10 (2026-10-15): active layer 切换 → 右侧 panel V*Page 标脏.
+    //   VPropertyPage 显示当前 layer 的属性 (color/blend/opacity/lock/link),
+    //   必须跟 selection 同步刷新. 走 RightPanelDock::invalidateAllPageCaches
+    //   fan-out, 其他 V*Page (color/swatch/...) 的 invalidateCache 是 no-op 默认.
+    connect(m_layerStack.get(), &layers::LayerStack::selectionChanged, this,
+            [this](int) {
+                if (m_rightDock) m_rightDock->invalidateAllPageCaches();
+            });
     invalidateCurrentCache();   // 强制重算 m_current
 
     // P1.4.3 (2026-09-17): 实例化 LayerPanel, 注入 LayersDock tab 0

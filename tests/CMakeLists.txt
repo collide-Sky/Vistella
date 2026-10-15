@@ -201,3 +201,5 @@ add_vistella_test(tst_VTabPageBase)
 add_vistella_test(tst_RightPanelDock)
 # P7.11 (2026-10-15): ImageCanvas dirty rect + status bar GPU/CPU + dock PS QSS
 add_vistella_test(tst_P7_11)
+# P7.10 (2026-10-15): 属性/通道/路径 tab 重写 (invalidateCache 标脏 + fan-out)
+add_vistella_test(tst_P7_10)

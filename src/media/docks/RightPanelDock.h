@@ -105,6 +105,18 @@ public:
     // Channel/path panel convenience: forward setQuickMask to VChannelPathPage.
     void setChannelPathQuickMask(bool on);
 
+    // P7.10 (2026-10-15): incremental cache invalidation fan-out.
+    //   Walks the 3 sub-docks and calls invalidateCache() on every page.
+    //   Pages with default no-op override ignore the call. The
+    //   expensive pages (VPropertyPage / VChannelPathPage) drop their
+    //   derived state and schedule a repaint.
+    //
+    //   Callers:
+    //     - ImageWindow::onActiveLayerChanged (active layer)
+    //     - ImageWindow::onActiveChannelChanged (active channel)
+    //     - any future "model side changed" event
+    void invalidateAllPageCaches();
+
     // -----------------------------------------------------------------
     // DEPRECATED: old ColorDock / PropertiesDock / LayersDock / etc
     // accessors. Return nullptr and log a warning. Kept so callers that
