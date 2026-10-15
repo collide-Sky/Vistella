@@ -199,3 +199,5 @@ add_vistella_test(tst_VDraggableTabWidget)
 add_vistella_test(tst_VTabPageBase)
 # P7.6.x v3 commit 4 (2026-10-15): RightPanelDock 3-sub-dock refactor
 add_vistella_test(tst_RightPanelDock)
+# P7.11 (2026-10-15): ImageCanvas dirty rect + status bar GPU/CPU + dock PS QSS
+add_vistella_test(tst_P7_11)

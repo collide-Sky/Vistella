@@ -71,6 +71,24 @@ public:
     selection::SelectionModel* selectionModel() const { return m_sel; }
     selection::MarchingAnts*   marchingAnts()   const { return m_ants; }
 
+    // P7.11 (2026-10-15): dirty-rect repaint.
+    //   invalidateRect(sceneRect) accumulates a scene-space rect and asks
+    //   the viewport to repaint only the corresponding area. Subsequent
+    //   calls before the next paint event are unioned. invalidateAll()
+    //   reverts to a full-viewport repaint (e.g. after zoom or setImage).
+    //   Without this API, internal callers fall back to viewport()->update()
+    //   (whole viewport), which is fine for small canvases but wasteful
+    //   for 50MP+ images where most of the viewport is unchanged.
+    void invalidateRect(const QRectF& sceneRect);
+    void invalidateAll();
+
+    // P7.11 (2026-10-15): test hooks. Exposed only for unit tests; do
+    // not call from production code.
+    QRectF testAccDirtyRect()       const { return m_pendingDirtyRect; }
+    bool   testAccDirtyRect_isNull() const { return m_pendingDirtyRect.isNull(); }
+    bool   testDirtyAll()           const { return m_dirtyAll; }
+    void   testFlushDirtyRect()           { flushDirtyRect(); }
+
     // Wire a back-pointer to ImageWindow for forwarders (zoom, fit, etc.).
     // Raw pointer (not QPointer) so this header doesn't need imagewindow.h's
     // full definition; ImageWindow is the owner of this component and
@@ -121,4 +139,17 @@ private:
     //   default off; flip on via menu / keyboard shortcut). When enabled,
     //   drawForeground fills the inverse mask region with 30% blue tint.
     bool                       m_showMaskOverlay = false;
+
+    // P7.11 (2026-10-15): dirty-rect accumulator (scene space). QRectF()
+    // means "no pending update"; a non-empty rect is unioned across
+    // invalidateRect() calls until the next paint event consumes it via
+    // flushDirtyRect(). m_dirtyAll is set by invalidateAll() to force a
+    // full viewport update on the next flush.
+    QRectF m_pendingDirtyRect;
+    bool   m_dirtyAll = false;
+
+    // P7.11: schedule a viewport update restricted to the union of all
+    // invalidateRect() calls since the last paint. Resets m_pendingDirtyRect
+    // and m_dirtyAll.
+    void flushDirtyRect();
 };

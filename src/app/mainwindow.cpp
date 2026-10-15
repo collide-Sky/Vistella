@@ -17,6 +17,9 @@
 #include "../media/mediators/ToolMediator.h"
 #include "../media/docks/ColorDock.h"  // P7.6.x v3 (2026-10-14): MainWindow docks 接管 LeftToolBar fg/bg sync
 #include "../media/docks/RightPanelDock.h"  // P7.6.x v3: image->colorDock()->colorDock() 完整类型
+#include "../ui/dock/VTabPageBase.h"        // P7.11 (2026-10-15): status bar GPU/CPU stats
+#include "../ui/dock/VDraggableTabWidget.h" // P7.11: iterate 3 sub-dock pages
+#include "../ui/dock/VRenderPath.h"         // P7.11: RenderPath enum
 #include "../media/imageworker/layers/LayerMask.h"
 #include "../media/imageworker/layers/Layer.h"
 #include "../media/imageworker/layers/LayerCommand.h"
@@ -187,6 +190,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     updateWindowTitle();
     statusBar()->showMessage(tr("就绪"));
+
+    // P7.11 (2026-10-15): 状态栏底部 GPU/CPU 状态按钮.
+    //   读 m_rightDock (active image 的) 3 sub-dock 内 V*Page
+    //   preferredRenderPath() 统计. 显示 "GPU: 3 / 5" (GpuPreferred 3 个,
+    //   CpuOnly 5 个). 实际切 GPU/CPU 在 P8.3 接, 现在只读.
+    buildStatusBar();
 
     // 加载窗口模式 + normal 尺寸 (QSettings -> m_mode + m_normalSize, 然后 show)
     loadWindowState();
@@ -1776,6 +1785,8 @@ void MainWindow::onTabChanged(int index)
     // P7.6.x v3 (2026-10-14): 4 左侧 dock (LeftToolBar + ImageOptionBar + ModeSelectorBar
     //   + AppBar) 在 MainWindow 顶层. active image 切换 → 重 attach 到新 image 的组件.
     bindLeftDockWidgets(activeImageWindow());
+    // P7.11 (2026-10-15): 状态栏底部 GPU/CPU 状态按钮刷新.
+    refreshGpuStatusButton();
 }
 
 void MainWindow::onTabCloseRequested(int index)
@@ -3380,4 +3391,87 @@ void MainWindow::bindLeftDockWidgets(ImageWindow* iw)
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// P7.11 (2026-10-15): 状态栏底部 GPU/CPU 状态按钮
+// ---------------------------------------------------------------------------
+//
+// 读 active image 的 RightPanelDock 3 sub-dock 内 9 V*Page 的
+// preferredRenderPath() 统计. 显示 "GPU: 3 / 9" (GpuPreferred 3 个 / 9 总).
+// 现在只读 (P8.3 接实际切 GPU/CPU backend). Refresh 触发:
+//   - onTabChanged (active image 切换)
+//   - 显式 refreshGpuStatusButton() (未来 P8.2 RenderBackend detect 后调)
+//
+// 现在 m_btnGpuStatus 永远在状态栏右边, 文本反映当前 active image 的
+// right panel 偏好分布. 没有 active image 时显示 "GPU: -" (N/A).
+// ---------------------------------------------------------------------------
+
+void MainWindow::buildStatusBar()
+{
+    if (m_btnGpuStatus) return;   // 幂等
+    m_btnGpuStatus = new QToolButton(this);
+    m_btnGpuStatus->setObjectName(QStringLiteral("btnGpuStatus"));
+    m_btnGpuStatus->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_btnGpuStatus->setAutoRaise(true);
+    m_btnGpuStatus->setPopupMode(QToolButton::InstantPopup);
+    m_btnGpuStatus->setText(QStringLiteral("GPU: -"));
+    m_btnGpuStatus->setToolTip(tr("当前右侧 panel 9 个 V*Page 的 GPU 偏好分布\n"
+                                 "实际 backend 切换: P8.3"));
+    m_btnGpuStatus->setEnabled(false);   // 不可点 (P8.3 接)
+
+    // 占位 menu (P8.3 接时填充, 现在空)
+    auto* menu = new QMenu(m_btnGpuStatus);
+    auto* autoAct = menu->addAction(tr("Auto (P8.3)"));
+    auto* gpuAct  = menu->addAction(tr("Force GPU (P8.3)"));
+    auto* cpuAct  = menu->addAction(tr("Force CPU (P8.3)"));
+    autoAct->setEnabled(false);
+    gpuAct->setEnabled(false);
+    cpuAct->setEnabled(false);
+    m_btnGpuStatus->setMenu(menu);
+
+    statusBar()->addPermanentWidget(m_btnGpuStatus);
+    refreshGpuStatusButton();
+}
+
+void MainWindow::refreshGpuStatusButton()
+{
+    if (!m_btnGpuStatus) return;
+    ImageWindow* iw = activeImageWindow();
+    if (!iw) {
+        m_btnGpuStatus->setText(QStringLiteral("GPU: -"));
+        return;
+    }
+    // active image 的 RightPanelDock (走 deprecated accessor colorDock() 实际返
+    // RightPanelDock*, 历史命名遗留)
+    auto* rp = iw->colorDock();
+    if (!rp) {
+        m_btnGpuStatus->setText(QStringLiteral("GPU: -"));
+        return;
+    }
+    // 遍历 3 sub-dock 内 V*Page 累计 preferredRenderPath
+    int nGpuPreferred = 0;
+    int nCpuOnly      = 0;
+    int nAuto         = 0;
+    int total         = 0;
+    auto countPage = [&](vistella::ui::VTabPageBase* p) {
+        if (!p) return;
+        ++total;
+        switch (p->preferredRenderPath()) {
+        case vistella::ui::RenderPath::GpuPreferred: ++nGpuPreferred; break;
+        case vistella::ui::RenderPath::CpuOnly:      ++nCpuOnly;      break;
+        case vistella::ui::RenderPath::Auto:         ++nAuto;         break;
+        }
+    };
+    auto countSubDock = [&](vistella::ui::VDraggableTabWidget* sd) {
+        if (!sd) return;
+        for (int i = 0; i < sd->pageCount(); ++i) {
+            countPage(static_cast<vistella::ui::VTabPageBase*>(sd->pageAt(i)));
+        }
+    };
+    countSubDock(rp->subDockColor());
+    countSubDock(rp->subDockProperty());
+    countSubDock(rp->subDockLayer());
+    m_btnGpuStatus->setText(
+        QStringLiteral("GPU: %1 / %2").arg(nGpuPreferred).arg(total));
 }

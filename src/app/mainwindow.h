@@ -220,6 +220,8 @@ private:
     void buildLeftArea();         // logo + app name + version
     void buildMidArea();          // 菜单条 + 后续 VS 风格全局工具
     void buildRightArea();        // 模式 + 主题 + 用户 + 窗控
+    void buildStatusBar();        // P7.11 (2026-10-15): 状态栏底部 GPU/CPU 状态按钮 + dock PS QSS
+    void refreshGpuStatusButton();// P7.11: 读 active image RightPanelDock V*Page stats
     void onMaximizeRestore();     // 双击标题栏 / 点最大化按钮
     QRect titleBarDragRect() const;  // 计算可拖动区域 (left+mid, 避开按钮)
     //void buildGlobalBar();       // 顶部全局命令栏放主题按钮 (已合并到 buildRightArea)
@@ -286,6 +288,12 @@ private:
     // 全局命令按钮 (右侧, modeCorner 之后)
     QToolButton  *m_btnTheme   = nullptr;
     QToolButton  *m_btnUser    = nullptr;
+
+    // P7.11 (2026-10-15): 状态栏底部 GPU/CPU 状态按钮
+    //   读 m_rightDock (持 via MainWindow) 的 3 sub-dock 内 V*Page
+    //   preferredRenderPath() 统计. 显示 "GPU: 3 / 5" (GpuPreferred 3 个,
+    //   CpuOnly 5 个). 实际切 GPU/CPU 在 P8.3 接, 现在只读.
+    class QToolButton  *m_btnGpuStatus = nullptr;
     // 拖动状态
     QPoint        m_titleDragStartGlobal;        // 拖动起始 (全局坐标 - 窗口左上)
     QPoint        m_titleDragStartLocal;         // 拖动起始 (窗口本地坐标, 用于还原时定位)
