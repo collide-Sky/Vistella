@@ -203,3 +203,6 @@ add_vistella_test(tst_RightPanelDock)
 add_vistella_test(tst_P7_11)
 # P7.10 (2026-10-15): 属性/通道/路径 tab 重写 (invalidateCache 标脏 + fan-out)
 add_vistella_test(tst_P7_10)
+# P7.9.1 (2026-10-15): BrushSharedState 9 字段 + needsGpu() + ToolContext bulk setter
+#   + BrushOptionsPanel round-trip
+add_vistella_test(tst_P7_91)

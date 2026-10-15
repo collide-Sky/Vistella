@@ -56,16 +56,23 @@ public:
     void setPresetName(const QString &name);
 
     // P7.6.x (2026-10-14): 共享 brush state 撮合接口 — 取代 TopOptionBar.
-    //   sharedStateChanged: 外部 (用户改 UI 后) 把 6 字段同步到 ToolContext.brushSharedState.
-    //   sharedStatePulledIn: ToolContext 状态变 (切 tool / load file / preset 选) 把 6 字段
+    //   sharedStateChanged: 外部 (用户改 UI 后) 把字段同步到 ToolContext.brushSharedState.
+    //   sharedStatePulledIn: ToolContext 状态变 (切 tool / load file / preset 选) 把字段
     //     拉回到 UI. ImageOptionBar 在 Brush page 显示时调一次.
+    //   P7.9.1 (2026-10-15): 6 -> 9 字段 (+ hardness/spacing/scatter). 字段跟
+    //   ToolContext::BrushSharedState 镜像, ImageOptionBar::onToolContextBrushStateChanged
+    //   做双边 round-trip.
     struct SharedState {
-        int    blendMode = 0;     // 0..5 (跟 cmbBlendMode 索引一致)
-        int    size      = 32;    // px
+        int    blendMode  = 0;     // 0..5 (跟 cmbBlendMode 索引一致)
+        int    size       = 32;    // px
         double opacityPct = 100.0;// %
         double flowPct    = 100.0;// %
-        double smoothing  = 50.0; // %
+        double smoothing  = 0.0;  // % (P7.9.1: 默认 0, was 50.0)
         int    angle      = 0;    // deg
+        // P7.9.1: 3 new advanced fields
+        double hardness   = 50.0; // %
+        double spacing    = 25.0; // %
+        double scatter    = 0.0;  // %
     };
     SharedState sharedStatePulledIn() const; // UI -> struct (用户改 UI 后读)
     void applySharedState(const SharedState& s); // struct -> UI (外部推送)

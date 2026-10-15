@@ -274,12 +274,20 @@ void ImageOptionBar::onBrushSharedStateChangedFromPanel()
 {
     if (!m_ctx || !m_brushOpt) return;
     const auto s = m_brushOpt->sharedStatePulledIn();
-    m_ctx->setBlendMode(s.blendMode);
-    m_ctx->setBrushSize(s.size);
-    m_ctx->setOpacity(s.opacityPct);
-    m_ctx->setFlow(s.flowPct);
-    m_ctx->setAngle(s.angle);
-    m_ctx->setSmoothing(s.smoothing);
+    // P7.9.1 (2026-10-15): bulk set (1 signal instead of 9). The 3 new
+    // fields (hardness/spacing/scatter) flow through automatically.
+    // Use named-aggregate-init to avoid double<->int narrowing (C2397).
+    m_ctx->setBrushSharedState(tools::BrushSharedState{
+        /*blendMode*/ s.blendMode,
+        /*opacity  */ s.opacityPct,
+        /*flow     */ s.flowPct,
+        /*smoothing*/ s.smoothing,
+        /*angle    */ s.angle,
+        /*brushSize*/ s.size,
+        /*hardness */ s.hardness,
+        /*spacing  */ s.spacing,
+        /*scatter  */ s.scatter
+    });
 }
 
 void ImageOptionBar::onToolContextBrushStateChanged()
@@ -293,6 +301,10 @@ void ImageOptionBar::onToolContextBrushStateChanged()
     s.flowPct    = bs.flow;
     s.smoothing  = bs.smoothing;
     s.angle      = bs.angle;
+    // P7.9.1: 3 new advanced fields
+    s.hardness   = bs.hardness;
+    s.spacing    = bs.spacing;
+    s.scatter    = bs.scatter;
     m_brushOpt->applySharedState(s);
 }
 

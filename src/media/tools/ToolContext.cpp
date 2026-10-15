@@ -168,4 +168,43 @@ void ToolContext::setBrushSize(int px)
     emit brushSettingsChanged();
 }
 
+// P7.9.1 (2026-10-15): 3 new shared brush state setters
+//   (hardness / spacing / scatter). Same fuzzy-compare + signal pattern.
+void ToolContext::setHardness(double pct)
+{
+    if (qFuzzyCompare(m_brushShared.hardness, pct)) return;
+    m_brushShared.hardness = pct;
+    emit brushSettingsChanged();
+}
+
+void ToolContext::setSpacing(double pct)
+{
+    if (qFuzzyCompare(m_brushShared.spacing, pct)) return;
+    m_brushShared.spacing = pct;
+    emit brushSettingsChanged();
+}
+
+void ToolContext::setScatter(double pct)
+{
+    if (qFuzzyCompare(m_brushShared.scatter, pct)) return;
+    m_brushShared.scatter = pct;
+    emit brushSettingsChanged();
+}
+
+// P7.9.1: bulk update from BrushOptionsPanel (1 signal instead of 9).
+void ToolContext::setBrushSharedState(const BrushSharedState& s)
+{
+    bool changed = false;
+    if (m_brushShared.blendMode != s.blendMode)  { m_brushShared.blendMode = s.blendMode;  changed = true; }
+    if (!qFuzzyCompare(m_brushShared.opacity,   s.opacity))   { m_brushShared.opacity   = s.opacity;   changed = true; }
+    if (!qFuzzyCompare(m_brushShared.flow,      s.flow))      { m_brushShared.flow      = s.flow;      changed = true; }
+    if (!qFuzzyCompare(m_brushShared.smoothing, s.smoothing)) { m_brushShared.smoothing = s.smoothing; changed = true; }
+    if (m_brushShared.angle != s.angle)            { m_brushShared.angle     = s.angle;     changed = true; }
+    if (m_brushShared.brushSize != s.brushSize)    { m_brushShared.brushSize = s.brushSize; changed = true; }
+    if (!qFuzzyCompare(m_brushShared.hardness,  s.hardness))  { m_brushShared.hardness  = s.hardness;  changed = true; }
+    if (!qFuzzyCompare(m_brushShared.spacing,   s.spacing))   { m_brushShared.spacing   = s.spacing;   changed = true; }
+    if (!qFuzzyCompare(m_brushShared.scatter,   s.scatter))   { m_brushShared.scatter   = s.scatter;   changed = true; }
+    if (changed) emit brushSettingsChanged();
+}
+
 } // namespace tools

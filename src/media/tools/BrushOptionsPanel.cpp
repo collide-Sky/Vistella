@@ -220,6 +220,12 @@ BrushOptionsPanel::SharedState BrushOptionsPanel::sharedStatePulledIn() const
     s.flowPct    = ui->sliderFlow->value();
     s.smoothing  = ui->sliderSmoothAmount->value();
     s.angle      = ui->sliderAngle->value();
+    // P7.9.1 (2026-10-15): 3 advanced fields — .ui already has the widgets
+    // (sliderHardness/sliderSpacing/sliderScatter + spin partners) from
+    // earlier design; we just plumb them through the shared state.
+    s.hardness   = ui->sliderHardness->value();
+    s.spacing    = ui->sliderSpacing->value();
+    s.scatter    = ui->sliderScatter->value();
     return s;
 }
 
@@ -237,6 +243,13 @@ void BrushOptionsPanel::applySharedState(const SharedState& s)
     ui->spinSmoothAmount->setValue(static_cast<int>(s.smoothing));
     ui->sliderAngle->setValue(s.angle);
     ui->spinAngle->setValue(s.angle);
+    // P7.9.1: 3 new fields
+    ui->sliderHardness->setValue(static_cast<int>(s.hardness));
+    ui->spinHardness->setValue(static_cast<int>(s.hardness));
+    ui->sliderSpacing->setValue(static_cast<int>(s.spacing));
+    ui->spinSpacing->setValue(static_cast<int>(s.spacing));
+    ui->sliderScatter->setValue(static_cast<int>(s.scatter));
+    ui->spinScatter->setValue(static_cast<int>(s.scatter));
     m_suspend = false;
 }
 
