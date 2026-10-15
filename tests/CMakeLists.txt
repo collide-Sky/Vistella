@@ -197,3 +197,5 @@ add_vistella_test(tst_P3_5_CameraRaw)
 add_vistella_test(tst_VDraggableTabWidget)
 # P7.6.x v3 commit 3 (2026-10-14): VTabPageBase + 9 V*Page adapters
 add_vistella_test(tst_VTabPageBase)
+# P7.6.x v3 commit 4 (2026-10-15): RightPanelDock 3-sub-dock refactor
+add_vistella_test(tst_RightPanelDock)

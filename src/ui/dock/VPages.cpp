@@ -1,6 +1,8 @@
 // VPages.cpp
-//   P7.6.x v3 commit 3 (2026-10-14).
+//   P7.6.x v3 commit 3 (2026-10-14) + commit 4 (2026-10-15): +VHistoryPage
 #include "VPages.h"
+
+#include <QUndoStack>
 
 namespace vistella::ui {
 
@@ -65,6 +67,17 @@ VChannelPathPage::VChannelPathPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new docks::ChannelPathPanel(this)))
 {
+}
+
+VHistoryPage::VHistoryPage(QWidget* parent)
+    : VTabPageBase(parent)
+    , m_inner(embed(this, new docks::HistoryDock(this)))
+{
+}
+
+void VHistoryPage::setUndoStack(QUndoStack* stack)
+{
+    if (m_inner) m_inner->setUndoStack(stack);
 }
 
 } // namespace vistella::ui

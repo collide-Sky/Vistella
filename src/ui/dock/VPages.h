@@ -26,6 +26,7 @@
 #include "../../media/docks/ChannelPathPanel.h"
 #include "../../media/docks/LayersDock.h"
 #include "../../media/docks/PropertiesDock.h"
+#include "../../media/docks/HistoryDock.h"
 #include "../../media/imagewindow/AdjustmentPanel.h"
 
 #include <QWidget>
@@ -144,6 +145,22 @@ public:
     docks::ChannelPathPanel* inner() const { return m_inner; }
 private:
     docks::ChannelPathPanel* m_inner = nullptr;
+};
+
+class VHistoryPage : public VTabPageBase {
+    Q_OBJECT
+public:
+    explicit VHistoryPage(QWidget* parent = nullptr);
+    QString pageTag()   const { return QStringLiteral("history"); }
+    QString pageTitle() const { return QStringLiteral("History"); }
+    // List view with no pixel work.
+    RenderPath preferredRenderPath() const { return RenderPath::CpuOnly; }
+
+    // Forward the QUndoStack binding through to the inner dock.
+    void setUndoStack(class QUndoStack* stack);
+    docks::HistoryDock* inner() const { return m_inner; }
+private:
+    docks::HistoryDock* m_inner = nullptr;
 };
 
 } // namespace vistella::ui

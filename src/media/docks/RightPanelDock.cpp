@@ -1,68 +1,114 @@
 // SPDX-License-Identifier: MIT
 //
-// RightPanelDock implementation - F-G.3 Fix (2026-09-10)
+// RightPanelDock implementation - P7.6.x v3 commit 4 (2026-10-15)
 //
 #include "RightPanelDock.h"
-#include "ColorDock.h"
+
 #include "PropertiesDock.h"
-#include "LayersDock.h"
-#include "ChannelPathPanel.h"
-#include "HistoryDock.h"
-#include "../imagewindow/AdjustmentPanel.h"
+#include "../../ui/dock/VTabPageBase.h"
 #include "../mediators/WorkspaceMediator.h"
 #include "logger.h"
 
-#include <QTabWidget>
-#include <QVBoxLayout>
+#include <QSplitter>
+#include <QUndoStack>
+#include <QSize>
+#include <QStackedWidget>
 
 namespace docks {
 
+namespace {
+
+// VColorPage wraps docks::ColorTab internally. Callers that need the
+// underlying ColorTab can use VColorPage::inner() to wire signals.
+vistella::ui::VColorPage* makeColorPage(QWidget* parent)
+{
+    return new vistella::ui::VColorPage(parent);
+}
+
+} // namespace
+
 RightPanelDock::RightPanelDock(QWidget* parent) : QWidget(parent)
 {
-    auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(2, 2, 2, 2);
-    layout->setSpacing(0);
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(2, 2, 2, 2);
+    outer->setSpacing(0);
 
-    m_tabs = new QTabWidget(this);
-    m_tabs->setTabPosition(QTabWidget::North);
-    m_tabs->setDocumentMode(true);
-    layout->addWidget(m_tabs);
+    m_splitter = new QSplitter(Qt::Vertical, this);
+    m_splitter->setChildrenCollapsible(false);
+    m_splitter->setHandleWidth(4);
+    outer->addWidget(m_splitter);
 
-    // 颜色 (F-H)
-    m_colorDock = new ColorDock(this);
-    m_tabs->addTab(m_colorDock, tr("颜色"));
+    buildSubDockColor();
+    buildSubDockProperty();
+    buildSubDockLayer();
 
-    // 属性 (F-I + P0-4.9 选区 bbox)
-    m_propsDock = new PropertiesDock(this);
-    m_tabs->addTab(m_propsDock, tr("属性"));
+    // Equal-height initial split: 1/3 each.
+    QList<int> sizes;
+    sizes << 200 << 200 << 200;
+    m_splitter->setSizes(sizes);
 
-    // 图层 (F-G.2 + F-M.3)
-    m_layersDock = new LayersDock(this);
-    m_tabs->addTab(m_layersDock, tr("图层"));
-
-    // 选区 - 通道/路径 (F-M.3 + P0-4 单独抽出)
-    m_chanPathPanel = new ChannelPathPanel(this);
-    m_tabs->addTab(m_chanPathPanel, tr("选区"));
-
-    // P0-8.1 (2026-09-15): 历史 dock (PS 同款 history panel)
-    m_historyDock = new HistoryDock(this);
-    m_tabs->addTab(m_historyDock, tr("历史"));
-
-    LOG_INFO("[RightPanelDock] created with 5 dock tabs (color/props/layers/sel/history)");
+    LOG_INFO("[RightPanelDock] v3 commit 4 created: 3 sub-docks "
+             "(color-group/property-group/layer-group)");
 }
 
 RightPanelDock::~RightPanelDock() = default;
+
+void RightPanelDock::buildSubDockColor()
+{
+    m_subDockColor = new vistella::ui::VDraggableTabWidget(this);
+    m_colorPage    = makeColorPage(m_subDockColor);
+    m_swatchPage   = new vistella::ui::VSwatchPage(m_subDockColor);
+    m_gradientPage = new vistella::ui::VGradientPage(m_subDockColor);
+    m_patternPage  = new vistella::ui::VPatternPage(m_subDockColor);
+
+    m_subDockColor->addPage(m_colorPage);
+    m_subDockColor->addPage(m_swatchPage);
+    m_subDockColor->addPage(m_gradientPage);
+    m_subDockColor->addPage(m_patternPage);
+    m_subDockColor->setCompositeStrategy(
+        vistella::ui::CompositeStrategy::Sequential);
+
+    m_splitter->addWidget(m_subDockColor);
+}
+
+void RightPanelDock::buildSubDockProperty()
+{
+    m_subDockProperty = new vistella::ui::VDraggableTabWidget(this);
+    m_propertyPage    = new vistella::ui::VPropertyPage(m_subDockProperty);
+    m_adjustmentPage  = new vistella::ui::VAdjustmentPage(m_subDockProperty);
+
+    m_subDockProperty->addPage(m_propertyPage);
+    m_subDockProperty->addPage(m_adjustmentPage);
+    m_subDockProperty->setCompositeStrategy(
+        vistella::ui::CompositeStrategy::Sequential);
+
+    m_splitter->addWidget(m_subDockProperty);
+}
+
+void RightPanelDock::buildSubDockLayer()
+{
+    m_subDockLayer     = new vistella::ui::VDraggableTabWidget(this);
+    m_layerPage        = new vistella::ui::VLayerPage(m_subDockLayer);
+    m_channelPathPage  = new vistella::ui::VChannelPathPage(m_subDockLayer);
+    m_historyPage      = new vistella::ui::VHistoryPage(m_subDockLayer);
+
+    m_subDockLayer->addPage(m_layerPage);
+    m_subDockLayer->addPage(m_channelPathPage);
+    m_subDockLayer->addPage(m_historyPage);
+    m_subDockLayer->setCompositeStrategy(
+        vistella::ui::CompositeStrategy::Sequential);
+
+    m_splitter->addWidget(m_subDockLayer);
+}
 
 void RightPanelDock::attach(mediators::WorkspaceMediator* wsMed)
 {
     m_wsMed = wsMed;
     if (m_wsMed) {
-        // Stage D (2026-09-15): 订阅信号实时同步, 之前只 setVisible 一次
         connect(m_wsMed, &mediators::WorkspaceMediator::workspaceChanged,
                 this, &RightPanelDock::onWorkspaceChanged);
         connect(m_wsMed, &mediators::WorkspaceMediator::dockVisibilityChanged,
                 this, &RightPanelDock::onDockVisibilityChanged);
-        // 同步初始状态
         onWorkspaceChanged(m_wsMed->currentWorkspace());
     }
     LOG_DEBUG("[RightPanelDock] attach wsMed={}", wsMed ? "yes" : "null");
@@ -72,37 +118,106 @@ void RightPanelDock::onWorkspaceChanged(mediators::WorkspaceId id)
 {
     if (!m_wsMed) return;
     LOG_INFO("[RightPanelDock] workspaceChanged: id={}", static_cast<int>(id));
-    // WorkspaceMediator dockCount=3 (颜色/属性/图层), RightPanelDock 5 tab
-    //   dockIndex 0 -> 颜色 tab
-    //   dockIndex 1 -> 属性 tab
-    //   dockIndex 2 -> 图层 tab
-    //   选区/调整 永远显示 (跟 workspace 无关)
-    int idxColor  = m_tabs->indexOf(m_colorDock);
-    int idxProps  = m_tabs->indexOf(m_propsDock);
-    int idxLayers = m_tabs->indexOf(m_layersDock);
-    if (idxColor  >= 0) m_tabs->setTabVisible(idxColor,  m_wsMed->isDockVisible(0));
-    if (idxProps  >= 0) m_tabs->setTabVisible(idxProps,  m_wsMed->isDockVisible(1));
-    if (idxLayers >= 0) m_tabs->setTabVisible(idxLayers, m_wsMed->isDockVisible(2));
+    // P7.6.x v3: workspace visibility now controls sub-dock 1 (color-group)
+    // and sub-dock 2 (property-group). Sub-dock 3 (layer-group) is always
+    // visible (core editing area).
+    bool visColor   = m_wsMed->isDockVisible(0);
+    bool visProperty = m_wsMed->isDockVisible(1);
+    if (m_subDockColor)    m_subDockColor->setVisible(visColor);
+    if (m_subDockProperty) m_subDockProperty->setVisible(visProperty);
+    Q_UNUSED(id);
 }
 
 void RightPanelDock::onDockVisibilityChanged(int dockIndex, bool visible)
 {
     if (!m_wsMed) return;
-    QWidget* target = nullptr;
-    if      (dockIndex == 0) target = m_colorDock;
-    else if (dockIndex == 1) target = m_propsDock;
-    else if (dockIndex == 2) target = m_layersDock;
-    if (!target) return;
-    int idx = m_tabs->indexOf(target);
-    if (idx >= 0) m_tabs->setTabVisible(idx, visible);
+    if (dockIndex == 0 && m_subDockColor)    m_subDockColor->setVisible(visible);
+    if (dockIndex == 1 && m_subDockProperty) m_subDockProperty->setVisible(visible);
+}
+
+void RightPanelDock::setUndoStack(QUndoStack* stack)
+{
+    if (m_historyPage) m_historyPage->setUndoStack(stack);
+}
+
+void RightPanelDock::setPropertyImageInfo(const PropertiesDock::ImageInfo& info)
+{
+    if (!m_propertyPage) return;
+    if (auto* inner = m_propertyPage->inner()) {
+        inner->setImageInfo(info);
+    }
+}
+
+void RightPanelDock::setLayerPanel(QWidget* panel)
+{
+    // VLayerPage currently hosts a bare LayersDock. Callers that need to
+    // install a LayerPanel into the first layer tab can do so via
+    // LayersDock::setContentWidget(0, panel). For now we look up the
+    // inner LayersDock through the VLayerPage and call setContentWidget.
+    if (!m_layerPage) return;
+    if (auto* inner = m_layerPage->inner()) {
+        inner->setContentWidget(0, panel);
+    }
+}
+
+void RightPanelDock::setChannelPathQuickMask(bool on)
+{
+    if (!m_channelPathPage) return;
+    if (auto* inner = m_channelPathPage->inner()) {
+        inner->setQuickMask(on);
+    }
+}
+
+QSize RightPanelDock::sizeHint() const
+{
+    return QSize(340, 800);
+}
+
+// ---------------------------------------------------------------------------
+// DEPRECATED shims. Return nullptr + log. Kept so callers that haven't
+// been migrated yet still compile (the deref will then fail).
+// ---------------------------------------------------------------------------
+
+ColorDock*        RightPanelDock::colorDock()        const
+{
+    LOG_WARN("[RightPanelDock] DEPRECATED colorDock() called; "
+             "use colorPage() instead (returns VColorPage*).");
+    return nullptr;
+}
+
+PropertiesDock*   RightPanelDock::propertiesDock()   const
+{
+    LOG_WARN("[RightPanelDock] DEPRECATED propertiesDock() called; "
+             "use propertyPage() instead (returns VPropertyPage*).");
+    return nullptr;
+}
+
+LayersDock*       RightPanelDock::layersDock()       const
+{
+    LOG_WARN("[RightPanelDock] DEPRECATED layersDock() called; "
+             "use layerPage() instead (returns VLayerPage*).");
+    return nullptr;
+}
+
+ChannelPathPanel* RightPanelDock::channelPathPanel() const
+{
+    LOG_WARN("[RightPanelDock] DEPRECATED channelPathPanel() called; "
+             "use channelPathPage() instead (returns VChannelPathPage*).");
+    return nullptr;
+}
+
+HistoryDock*      RightPanelDock::historyDock()      const
+{
+    LOG_WARN("[RightPanelDock] DEPRECATED historyDock() called; "
+             "use historyPage() instead (returns VHistoryPage*).");
+    return nullptr;
 }
 
 void RightPanelDock::setAdjustmentPanel(AdjustmentPanel* adj)
 {
-    if (!adj) return;
-    // 调整 tab 在 4 个 dock 之后 (5th tab)
-    m_adjTabIndex = m_tabs->addTab(adj, tr("调整"));
-    LOG_INFO("[RightPanelDock] adjustment panel attached as 5th tab (index={})", m_adjTabIndex);
+    Q_UNUSED(adj);
+    LOG_WARN("[RightPanelDock] DEPRECATED setAdjustmentPanel() called; "
+             "adjustment page is now built-in (VAdjustmentPage).");
 }
 
 } // namespace docks
