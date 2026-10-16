@@ -11,6 +11,7 @@
 #pragma once
 
 #include <QHash>
+#include <QMutex>
 #include <QSet>
 #include <opencv2/core.hpp>
 
@@ -34,14 +35,20 @@ public:
     // Drop everything.
     void clear();
 
-    int  size() const { return m_tiles.size(); }
-    bool empty() const { return m_tiles.isEmpty(); }
+    int  size() const;
+    bool empty() const { return size() == 0; }
 
     // For tests / diagnostics: distinct nodeIds currently in cache.
     QSet<CompositorNode::NodeId> cachedNodes() const;
 
 private:
     QHash<TileKey, cv::Mat> m_tiles;
+    // P8.4 (2026-10-16): thread-safe cache. tryGet / put / invalidate
+    // are guarded by a QMutex so the parallel executor (P8.4) can fan
+    // tiles across worker threads without races. Const methods take
+    // a QMutexLocker via the `mutable` lock; non-const take it the
+    // same way.
+    mutable QMutex          m_lock;
 };
 
 } // namespace compositor
