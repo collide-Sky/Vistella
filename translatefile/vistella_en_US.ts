@@ -201,162 +201,217 @@
     </message>
     <message>
         <location filename="../src/media/tools/BrushOptionsPanel.ui" line="24"/>
+        <source>Kind:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="31"/>
+        <source>Basic - Hard Round</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="38"/>
+        <source>v</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="45"/>
         <source>硬边圆笔</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="29"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="46"/>
         <source>柔边圆笔</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="34"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="47"/>
+        <source>铅笔</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="48"/>
+        <source>马克笔</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="49"/>
         <source>空气笔</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="39"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="50"/>
         <source>粉笔</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="44"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="51"/>
         <source>炭笔</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/media/tools/BrushOptionsPanel.ui" line="52"/>
+        <source>书法笔</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="53"/>
+        <source>水彩</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="54"/>
+        <source>油画</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="55"/>
+        <source>丙烯</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="56"/>
+        <source>涂抹</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="57"/>
+        <source>橡皮</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="63"/>
         <source>...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="66"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="77"/>
         <source>Mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="72"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="83"/>
         <source>Blend:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="80"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="91"/>
         <source>正常</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="85"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="96"/>
         <source>正片叠底</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="90"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="101"/>
         <source>滤色</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="95"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="106"/>
         <source>叠加</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="100"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="111"/>
         <source>变暗</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="105"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="116"/>
         <source>变亮</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="116"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="127"/>
         <source>Settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="122"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="133"/>
         <source>Size:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="158"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="169"/>
         <source>Hardness:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="194"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="205"/>
         <source>Opacity:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="230"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="241"/>
         <source>Flow:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="266"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="277"/>
         <source>Spacing:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="302"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="313"/>
         <source>Angle:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="338"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="349"/>
         <source>Roundness:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="377"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="388"/>
         <source>Shape Dynamics</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="383"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="394"/>
         <source>Size Jitter</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="404"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="415"/>
         <source>Off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="409"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="420"/>
         <source>Fade</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="414"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="425"/>
         <source>Pen Pressure</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="419"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="430"/>
         <source>Pen Tilt</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="430"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="441"/>
         <source>Scattering</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="436"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="447"/>
         <source>Enable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="443"/>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="485"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="454"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="496"/>
         <source>Amount:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="479"/>
+        <location filename="../src/media/tools/BrushOptionsPanel.ui" line="490"/>
         <source>Smoothing</source>
         <translation type="unfinished"></translation>
     </message>

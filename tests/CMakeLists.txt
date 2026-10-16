@@ -206,3 +206,7 @@ add_vistella_test(tst_P7_10)
 # P7.9.1 (2026-10-15): BrushSharedState 9 字段 + needsGpu() + ToolContext bulk setter
 #   + BrushOptionsPanel round-trip
 add_vistella_test(tst_P7_91)
+# P7.9.2 (2026-10-16): BrushKind 13-kinds taxonomy + per-kind needsGpu() override
+#   + BrushPreset::kind field + BrushPresetManager::builtIns 13 entries +
+#   BrushOptionsPanel kind picker UI
+add_vistella_test(tst_P7_92)

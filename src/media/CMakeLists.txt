@@ -57,6 +57,8 @@ add_library(vistella_media STATIC
     brushes/BrushSettings.h
     brushes/BrushDynamics.h
     brushes/BrushShape.h
+    brushes/BrushKind.h
+    brushes/BrushKind.cpp
     brushes/BrushPreset.h
     brushes/BrushPreset.cpp
     #   引擎层: stamp 生成 + paint + scatter/texture/dual

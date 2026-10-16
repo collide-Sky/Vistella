@@ -20,12 +20,14 @@
 #include "BrushSettings.h"
 #include "BrushShape.h"
 #include "BrushDynamics.h"
+#include "BrushKind.h"
 
 namespace brushes {
 
 struct BrushPreset {
     QString           name;
     QString           description;            // optional tooltip / picker description
+    BrushKind         kind = BrushKind::HardRound;  // P7.9.2: 13-kinds taxonomy
     BrushSettings     settings;
     BrushShape        shape;
     BrushDynamics     dynamics;
@@ -43,12 +45,22 @@ struct BrushPreset {
     bool saveToFile(const QString &filePath, QString *err = nullptr) const;
     static BrushPreset loadFromFile(const QString &filePath, QString *err = nullptr);
 
-    // Factory: the 5 built-in presets (PS equivalent names)
+    // Factory: the 13 built-in presets (PS equivalent names).
+    // P7.9.2: extended 5 -> 13 to cover Basic 8 + Wet 3 + Special 2.
+    // Order in this list mirrors BrushKind::allKinds() for stable indexing.
     static BrushPreset makeBuiltInHardRound();
     static BrushPreset makeBuiltInSoftRound();
+    static BrushPreset makeBuiltInPencil();
+    static BrushPreset makeBuiltInMarker();
     static BrushPreset makeBuiltInAirbrush();
     static BrushPreset makeBuiltInChalk();
     static BrushPreset makeBuiltInCharcoal();
+    static BrushPreset makeBuiltInCalligraphic();
+    static BrushPreset makeBuiltInWatercolor();
+    static BrushPreset makeBuiltInOil();
+    static BrushPreset makeBuiltInAcrylic();
+    static BrushPreset makeBuiltInSmudge();
+    static BrushPreset makeBuiltInEraser();
 };
 
 class BrushPresetManager : public QObject {
