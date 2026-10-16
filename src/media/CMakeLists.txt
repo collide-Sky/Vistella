@@ -295,6 +295,24 @@ add_library(vistella_media STATIC
     # P1.3.6 (2026-09-16): Refine Edge 4 sliders (smooth/feather/contrast/shift)
     masks/RefineEdge.h
     masks/RefineEdge.cpp
+
+    # P8.1 (2026-10-16): 增量合成器 (DAG + TileCache + RenderGraph).
+    #   compositor/CompositorNode.h (interface only) + TileGrid + TileCache +
+    #   CompositorGraph (topo + dirty cascade) + RenderGraph (main entry)
+    #   + nodes/LayerBitmapNode (demo: wraps layers::Layer).
+    #   256x256 tile default, QHash<TileKey, cv::Mat> cache, coarse dirty
+    #   propagation (markDirty -> cascade downstream).
+    compositor/TileGrid.h
+    compositor/TileGrid.cpp
+    compositor/CompositorNode.h
+    compositor/TileCache.h
+    compositor/TileCache.cpp
+    compositor/CompositorGraph.h
+    compositor/CompositorGraph.cpp
+    compositor/RenderGraph.h
+    compositor/RenderGraph.cpp
+    compositor/nodes/LayerBitmapNode.h
+    compositor/nodes/LayerBitmapNode.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

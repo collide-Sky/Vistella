@@ -210,3 +210,7 @@ add_vistella_test(tst_P7_91)
 #   + BrushPreset::kind field + BrushPresetManager::builtIns 13 entries +
 #   BrushOptionsPanel kind picker UI
 add_vistella_test(tst_P7_92)
+# P8.1 (2026-10-16): 增量合成器 (DAG + TileCache + RenderGraph).
+#   TileGrid 256x256 default + QHash<TileKey, cv::Mat> + coarse dirty
+#   propagation + LayerBitmapNode demo (renders identical to direct copy).
+add_vistella_test(tst_P8_1)
