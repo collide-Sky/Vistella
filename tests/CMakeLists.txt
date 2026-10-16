@@ -219,3 +219,8 @@ add_vistella_test(tst_P8_1)
 #   stub + BackendCapabilities (startup probe + forced override) +
 #   BackendRegistry::pick (per-tile selection via kindNeedsGpu).
 add_vistella_test(tst_P8_2)
+# P8.3 (2026-10-16): GPU user toggle + status bar wiring.
+#   BackendRegistry RenderMode 3-state (Auto/ForceGpu/ForceCpu) +
+#   modeLabel / currentBackendName + probeOpenGL (QOpenGLContext +
+#   QOffscreenSurface). Settings dialog GPU page deferred to P8.3.x.
+add_vistella_test(tst_P8_3)

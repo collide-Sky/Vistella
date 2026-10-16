@@ -43,6 +43,8 @@
 
 #include <QTimer>
 #include "../media/mediators/WorkspaceMediator.h"
+#include "../media/brushes/BrushKind.h"        // P8.3 (2026-10-16): status bar currentKind
+#include "../media/gpu/BackendRegistry.h"      // P8.3 (2026-10-16): status bar mode + backend name
 
 #include <QActionGroup>
 #include <QApplication>
@@ -3395,13 +3397,17 @@ void MainWindow::bindLeftDockWidgets(ImageWindow* iw)
 
 // ---------------------------------------------------------------------------
 // P7.11 (2026-10-15): 状态栏底部 GPU/CPU 状态按钮
+// P8.3 (2026-10-16): 接实际 GPU/CPU backend 切换
 // ---------------------------------------------------------------------------
 //
 // 读 active image 的 RightPanelDock 3 sub-dock 内 9 V*Page 的
-// preferredRenderPath() 统计. 显示 "GPU: 3 / 9" (GpuPreferred 3 个 / 9 总).
-// 现在只读 (P8.3 接实际切 GPU/CPU backend). Refresh 触发:
+// preferredRenderPath() 统计 + 当前 BackendRegistry mode + BrushOptionsPanel
+// currentKind + pick(.) 返 backend name. 显示 "AUTO | qt-opengl-stub" /
+// "FORCE CPU | cpu" / "FORCE GPU | qt-opengl-stub" (backend name 反映
+// kindNeedsGpu() + 当前能力).
+// Refresh 触发:
 //   - onTabChanged (active image 切换)
-//   - 显式 refreshGpuStatusButton() (未来 P8.2 RenderBackend detect 后调)
+//   - 显式 refreshGpuStatusButton() (mode 改 / kind 改 后调)
 //
 // 现在 m_btnGpuStatus 永远在状态栏右边, 文本反映当前 active image 的
 // right panel 偏好分布. 没有 active image 时显示 "GPU: -" (N/A).
@@ -3416,19 +3422,36 @@ void MainWindow::buildStatusBar()
     m_btnGpuStatus->setAutoRaise(true);
     m_btnGpuStatus->setPopupMode(QToolButton::InstantPopup);
     m_btnGpuStatus->setText(QStringLiteral("GPU: -"));
-    m_btnGpuStatus->setToolTip(tr("当前右侧 panel 9 个 V*Page 的 GPU 偏好分布\n"
-                                 "实际 backend 切换: P8.3"));
-    m_btnGpuStatus->setEnabled(false);   // 不可点 (P8.3 接)
+    m_btnGpuStatus->setToolTip(tr("当前 GPU 渲染模式 + backend (P8.3)\n"
+                                 "Auto / Force GPU / Force CPU\n"
+                                 "实际 backend 由 BrushKind + kindNeedsGpu() 决定"));
+    m_btnGpuStatus->setEnabled(true);   // P8.3: enabled, 实际可点
 
-    // 占位 menu (P8.3 接时填充, 现在空)
+    // P8.3 (2026-10-16): 3 menu actions wired to BackendRegistry::setMode.
+    // The action currently selected reflects the current mode.
     auto* menu = new QMenu(m_btnGpuStatus);
-    auto* autoAct = menu->addAction(tr("Auto (P8.3)"));
-    auto* gpuAct  = menu->addAction(tr("Force GPU (P8.3)"));
-    auto* cpuAct  = menu->addAction(tr("Force CPU (P8.3)"));
-    autoAct->setEnabled(false);
-    gpuAct->setEnabled(false);
-    cpuAct->setEnabled(false);
+    auto* autoAct = menu->addAction(tr("Auto"));
+    auto* gpuAct  = menu->addAction(tr("Force GPU"));
+    auto* cpuAct  = menu->addAction(tr("Force CPU"));
+    autoAct->setCheckable(true);
+    gpuAct->setCheckable(true);
+    cpuAct->setCheckable(true);
+    autoAct->setChecked(true);   // default mode = Auto
     m_btnGpuStatus->setMenu(menu);
+
+    // Connect to BackendRegistry::setMode
+    connect(autoAct, &QAction::triggered, this, [this]() {
+        gpu::BackendRegistry::setModeStatic(gpu::RenderMode::Auto);
+        refreshGpuStatusButton();
+    });
+    connect(gpuAct, &QAction::triggered, this, [this]() {
+        gpu::BackendRegistry::setModeStatic(gpu::RenderMode::ForceGpu);
+        refreshGpuStatusButton();
+    });
+    connect(cpuAct, &QAction::triggered, this, [this]() {
+        gpu::BackendRegistry::setModeStatic(gpu::RenderMode::ForceCpu);
+        refreshGpuStatusButton();
+    });
 
     statusBar()->addPermanentWidget(m_btnGpuStatus);
     refreshGpuStatusButton();
@@ -3437,41 +3460,37 @@ void MainWindow::buildStatusBar()
 void MainWindow::refreshGpuStatusButton()
 {
     if (!m_btnGpuStatus) return;
-    ImageWindow* iw = activeImageWindow();
-    if (!iw) {
-        m_btnGpuStatus->setText(QStringLiteral("GPU: -"));
-        return;
-    }
-    // active image 的 RightPanelDock (走 deprecated accessor colorDock() 实际返
-    // RightPanelDock*, 历史命名遗留)
-    auto* rp = iw->colorDock();
-    if (!rp) {
-        m_btnGpuStatus->setText(QStringLiteral("GPU: -"));
-        return;
-    }
-    // 遍历 3 sub-dock 内 V*Page 累计 preferredRenderPath
-    int nGpuPreferred = 0;
-    int nCpuOnly      = 0;
-    int nAuto         = 0;
-    int total         = 0;
-    auto countPage = [&](vistella::ui::VTabPageBase* p) {
-        if (!p) return;
-        ++total;
-        switch (p->preferredRenderPath()) {
-        case vistella::ui::RenderPath::GpuPreferred: ++nGpuPreferred; break;
-        case vistella::ui::RenderPath::CpuOnly:      ++nCpuOnly;      break;
-        case vistella::ui::RenderPath::Auto:         ++nAuto;         break;
+
+    // P8.3 (2026-10-16): status text now reflects the actual backend
+    // selection, not just the V*Page preference distribution. Format:
+    //   "AUTO | qt-opengl-stub"        (Auto mode, GPU available, Wet kind)
+    //   "FORCE CPU | cpu"              (user force, any kind)
+    //   "FORCE GPU | qt-opengl-stub"   (user force, GPU available)
+    // When no active image, show "AUTO | -".
+    using gpu::RenderMode;
+    using gpu::BackendRegistry;
+    auto& reg = BackendRegistry::instance();
+    const RenderMode mode = reg.mode();
+
+    // Pick the current kind from the brush options panel if available;
+    // otherwise default to HardRound (the default built-in). A default
+    // sharedState means smoothing=0, scatter=0, blendMode=0 -> per-state
+    // false. Wet kinds always say wantsGpu=true regardless.
+    brushes::BrushKind kind = brushes::BrushKind::HardRound;
+    if (m_brushOpt) kind = m_brushOpt->currentKind();
+    tools::BrushSharedState ss;   // default
+
+    const QString backendName = reg.currentBackendName(kind, ss);
+    const QString modeText    = BackendRegistry::modeLabel(mode);
+    m_btnGpuStatus->setText(modeText + QStringLiteral(" | ") + backendName);
+
+    // Sync the menu checkmarks to the current mode.
+    if (auto* menu = m_btnGpuStatus->menu()) {
+        const auto actions = menu->actions();
+        if (actions.size() >= 3) {
+            actions.at(0)->setChecked(mode == RenderMode::Auto);
+            actions.at(1)->setChecked(mode == RenderMode::ForceGpu);
+            actions.at(2)->setChecked(mode == RenderMode::ForceCpu);
         }
-    };
-    auto countSubDock = [&](vistella::ui::VDraggableTabWidget* sd) {
-        if (!sd) return;
-        for (int i = 0; i < sd->pageCount(); ++i) {
-            countPage(static_cast<vistella::ui::VTabPageBase*>(sd->pageAt(i)));
-        }
-    };
-    countSubDock(rp->subDockColor());
-    countSubDock(rp->subDockProperty());
-    countSubDock(rp->subDockLayer());
-    m_btnGpuStatus->setText(
-        QStringLiteral("GPU: %1 / %2").arg(nGpuPreferred).arg(total));
+    }
 }

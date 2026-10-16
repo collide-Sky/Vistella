@@ -28,8 +28,24 @@ namespace gpu {
 
 class RenderBackend;
 
+// P8.3 (2026-10-16): 3-state mode for user control. Replaces P8.2's
+// binary setForceCpu(bool). P8.3 wires this to the status bar menu
+// and the settings dialog GPU page.
+enum class RenderMode {
+    Auto      = 0,   // registry decides per kind
+    ForceGpu  = 1,   // user override: prefer GPU everywhere
+    ForceCpu  = 2,   // user override: force CPU everywhere
+};
+
 class BackendRegistry {
 public:
+    // P8.3 (2026-10-16): global registry instance + static accessors.
+    // The main status bar / settings dialog use the global instance
+    // because there's only ever one process-wide backend choice.
+    static BackendRegistry& instance();
+    static void setModeStatic(RenderMode m) { instance().setMode(m); }
+    static RenderMode modeStatic() { return instance().mode(); }
+
     BackendRegistry();
     ~BackendRegistry();
 
@@ -41,9 +57,16 @@ public:
     RenderBackend* pick(brushes::BrushKind brushKind,
                         const tools::BrushSharedState& sharedState) const;
 
-    // Test/override hook: force CPU for the rest of the session.
-    // P8.3 will wire this to the user setting.
+    // P8.3 (2026-10-16): 3-state mode. Auto = registry decides.
+    // ForceGpu = override kind decisions, always prefer GPU.
+    // ForceCpu = override kind decisions, always CPU.
+    void setMode(RenderMode m);
+    RenderMode mode() const { return m_mode; }
+
+    // P8.2 legacy: binary force CPU. Kept for backward compat; maps to
+    // ForceCpu (true) or Auto (false).
     void setForceCpu(bool force);
+    bool forceCpu() const { return m_mode == RenderMode::ForceCpu; }
 
     // Test/override hook: per-kind override. e.g. "all Wet kinds must
     // use CPU even if GPU is available". Default: empty (no override).
@@ -51,6 +74,15 @@ public:
 
     QString describeDecision(brushes::BrushKind brushKind,
                              const tools::BrushSharedState& sharedState) const;
+
+    // P8.3 helper for status bar / status text. Picks the backend name
+    // for a sample (kind, sharedState) under the current mode +
+    // capability state. Useful for the status bar GPU button.
+    QString currentBackendName(brushes::BrushKind brushKind,
+                               const tools::BrushSharedState& sharedState) const;
+
+    // Mode label for status bar (e.g. "AUTO" / "FORCE GPU" / "FORCE CPU").
+    static QString modeLabel(RenderMode m);
 
     // Accessors (for tests + status bar).
     RenderBackend* cpuBackend() const { return m_cpu; }
@@ -60,7 +92,7 @@ private:
     // Owned. Always non-null after construction.
     RenderBackend* m_cpu = nullptr;
     RenderBackend* m_gpu = nullptr;
-    bool           m_forceCpu = false;
+    RenderMode     m_mode = RenderMode::Auto;
     // Per-kind override: 0 = no override (registry decides), 1 = prefer
     // GPU (falls back to CPU if unavailable), 2 = force CPU.
     // Indexed by static_cast<int>(BrushKind).

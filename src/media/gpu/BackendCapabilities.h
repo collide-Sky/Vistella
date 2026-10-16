@@ -59,6 +59,13 @@ public:
     // Register the actual probe. P8.2.x replaces the stub.
     void setProvider(ProviderFn fn);
 
+    // P8.3 (2026-10-16): real OpenGL probe via QOpenGLContext +
+    // QOffscreenSurface. Returns true if OpenGL 2.0+ is available
+    // and a context can be made current. Tested in tst_P8_3; the
+    // result is environment-dependent (test runners may have no GPU
+    // driver, in which case the probe returns false).
+    static bool probeOpenGL();
+
 private:
     BackendCapabilities() = default;
 
