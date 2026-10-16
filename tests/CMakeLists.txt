@@ -224,3 +224,8 @@ add_vistella_test(tst_P8_2)
 #   modeLabel / currentBackendName + probeOpenGL (QOpenGLContext +
 #   QOffscreenSurface). Settings dialog GPU page deferred to P8.3.x.
 add_vistella_test(tst_P8_3)
+# P8.4 (2026-10-16): 多线程合成 (EngineContext::background fan-out +
+#   TileCache mutex). CompositeStrategy (Sequential/Parallel) selector,
+#   execute(engine) pixel-equals sequential, TileCache thread-safety
+#   (4 threads x 1000 ops).
+add_vistella_test(tst_P8_4)
