@@ -214,3 +214,8 @@ add_vistella_test(tst_P7_92)
 #   TileGrid 256x256 default + QHash<TileKey, cv::Mat> + coarse dirty
 #   propagation + LayerBitmapNode demo (renders identical to direct copy).
 add_vistella_test(tst_P8_1)
+# P8.2 (2026-10-16): GPU/CPU backend abstraction.
+#   RenderBackend interface + CpuBackend (pass-through) + GpuBackend
+#   stub + BackendCapabilities (startup probe + forced override) +
+#   BackendRegistry::pick (per-tile selection via kindNeedsGpu).
+add_vistella_test(tst_P8_2)

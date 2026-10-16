@@ -313,6 +313,23 @@ add_library(vistella_media STATIC
     compositor/RenderGraph.cpp
     compositor/nodes/LayerBitmapNode.h
     compositor/nodes/LayerBitmapNode.cpp
+
+    # P8.2 (2026-10-16): GPU/CPU backend abstraction.
+    #   Per-tile RenderBackend interface + CpuBackend (pass-through) +
+    #   GpuBackend (stub; pass-through; real shader path in P8.2.x) +
+    #   BackendCapabilities (startup probe + override) +
+    #   BackendRegistry (per-tile selection via kindNeedsGpu from P7.9.2).
+    #   MVP: declares the interface, owns the routing; doesn't change
+    #   the existing render path. P8.2.x wires it into RenderGraph.
+    gpu/RenderBackend.h
+    gpu/CpuBackend.h
+    gpu/CpuBackend.cpp
+    gpu/GpuBackend.h
+    gpu/GpuBackend.cpp
+    gpu/BackendCapabilities.h
+    gpu/BackendCapabilities.cpp
+    gpu/BackendRegistry.h
+    gpu/BackendRegistry.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
