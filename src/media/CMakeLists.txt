@@ -57,6 +57,8 @@ add_library(vistella_media STATIC
     brushes/BrushSettings.h
     brushes/BrushDynamics.h
     brushes/BrushShape.h
+    brushes/BrushKind.h
+    brushes/BrushKind.cpp
     brushes/BrushPreset.h
     brushes/BrushPreset.cpp
     #   引擎层: stamp 生成 + paint + scatter/texture/dual
@@ -293,6 +295,41 @@ add_library(vistella_media STATIC
     # P1.3.6 (2026-09-16): Refine Edge 4 sliders (smooth/feather/contrast/shift)
     masks/RefineEdge.h
     masks/RefineEdge.cpp
+
+    # P8.1 (2026-10-16): 增量合成器 (DAG + TileCache + RenderGraph).
+    #   compositor/CompositorNode.h (interface only) + TileGrid + TileCache +
+    #   CompositorGraph (topo + dirty cascade) + RenderGraph (main entry)
+    #   + nodes/LayerBitmapNode (demo: wraps layers::Layer).
+    #   256x256 tile default, QHash<TileKey, cv::Mat> cache, coarse dirty
+    #   propagation (markDirty -> cascade downstream).
+    compositor/TileGrid.h
+    compositor/TileGrid.cpp
+    compositor/CompositorNode.h
+    compositor/TileCache.h
+    compositor/TileCache.cpp
+    compositor/CompositorGraph.h
+    compositor/CompositorGraph.cpp
+    compositor/RenderGraph.h
+    compositor/RenderGraph.cpp
+    compositor/nodes/LayerBitmapNode.h
+    compositor/nodes/LayerBitmapNode.cpp
+
+    # P8.2 (2026-10-16): GPU/CPU backend abstraction.
+    #   Per-tile RenderBackend interface + CpuBackend (pass-through) +
+    #   GpuBackend (stub; pass-through; real shader path in P8.2.x) +
+    #   BackendCapabilities (startup probe + override) +
+    #   BackendRegistry (per-tile selection via kindNeedsGpu from P7.9.2).
+    #   MVP: declares the interface, owns the routing; doesn't change
+    #   the existing render path. P8.2.x wires it into RenderGraph.
+    gpu/RenderBackend.h
+    gpu/CpuBackend.h
+    gpu/CpuBackend.cpp
+    gpu/GpuBackend.h
+    gpu/GpuBackend.cpp
+    gpu/BackendCapabilities.h
+    gpu/BackendCapabilities.cpp
+    gpu/BackendRegistry.h
+    gpu/BackendRegistry.cpp
 )
 
 target_include_directories(vistella_media PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

@@ -197,3 +197,30 @@ add_vistella_test(tst_P3_5_CameraRaw)
 add_vistella_test(tst_VDraggableTabWidget)
 # P7.6.x v3 commit 3 (2026-10-14): VTabPageBase + 9 V*Page adapters
 add_vistella_test(tst_VTabPageBase)
+# P7.6.x v3 commit 4 (2026-10-15): RightPanelDock 3-sub-dock refactor
+add_vistella_test(tst_RightPanelDock)
+# P7.11 (2026-10-15): ImageCanvas dirty rect + status bar GPU/CPU + dock PS QSS
+add_vistella_test(tst_P7_11)
+# P7.10 (2026-10-15): 属性/通道/路径 tab 重写 (invalidateCache 标脏 + fan-out)
+add_vistella_test(tst_P7_10)
+# P7.9.1 (2026-10-15): BrushSharedState 9 字段 + needsGpu() + ToolContext bulk setter
+#   + BrushOptionsPanel round-trip
+add_vistella_test(tst_P7_91)
+# P7.9.2 (2026-10-16): BrushKind 13-kinds taxonomy + per-kind needsGpu() override
+#   + BrushPreset::kind field + BrushPresetManager::builtIns 13 entries +
+#   BrushOptionsPanel kind picker UI
+add_vistella_test(tst_P7_92)
+# P8.1 (2026-10-16): 增量合成器 (DAG + TileCache + RenderGraph).
+#   TileGrid 256x256 default + QHash<TileKey, cv::Mat> + coarse dirty
+#   propagation + LayerBitmapNode demo (renders identical to direct copy).
+add_vistella_test(tst_P8_1)
+# P8.2 (2026-10-16): GPU/CPU backend abstraction.
+#   RenderBackend interface + CpuBackend (pass-through) + GpuBackend
+#   stub + BackendCapabilities (startup probe + forced override) +
+#   BackendRegistry::pick (per-tile selection via kindNeedsGpu).
+add_vistella_test(tst_P8_2)
+# P8.3 (2026-10-16): GPU user toggle + status bar wiring.
+#   BackendRegistry RenderMode 3-state (Auto/ForceGpu/ForceCpu) +
+#   modeLabel / currentBackendName + probeOpenGL (QOpenGLContext +
+#   QOffscreenSurface). Settings dialog GPU page deferred to P8.3.x.
+add_vistella_test(tst_P8_3)

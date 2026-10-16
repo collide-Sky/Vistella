@@ -279,6 +279,7 @@ QString BrushPreset::toJsonString() const {
     QJsonObject o;
     o["name"]        = name;
     o["description"] = description;
+    o["kind"]        = kindToString(kind);   // P7.9.2: 13-kinds taxonomy
     o["groupName"]   = groupName;
     o["settings"]    = settingsToJson(settings);
     o["shape"]       = shapeToJson(shape);
@@ -300,6 +301,7 @@ BrushPreset BrushPreset::fromJsonString(const QString &s) {
     BrushPreset p;
     p.name        = o.value("name").toString();
     p.description = o.value("description").toString();
+    p.kind        = kindFromString(o.value("kind").toString());  // P7.9.2
     p.groupName   = o.value("groupName").toString(QStringLiteral("Default"));
     p.settings    = settingsFromJson(o.value("settings").toObject());
     p.shape       = shapeFromJson(o.value("shape").toObject());
@@ -351,13 +353,19 @@ BrushPreset BrushPreset::loadFromFile(const QString &filePath, QString *err) {
 }
 
 // ============================================================================
-//  5 built-in presets (PS equivalent)
+//  13 built-in presets (P7.9.2: 8 Basic + 3 Wet + 2 Special)
+//
+//  Defaults are PS-equivalent values: size in px, hardness/opacity/flow in %,
+//  spacing in % of diameter, angle/roundness as documented.
+//
+//  Group Name: "Built-in" for all (manager exposes via builtIns()).
 // ============================================================================
 
 BrushPreset BrushPreset::makeBuiltInHardRound() {
     BrushPreset p;
     p.name        = QStringLiteral("硬边圆笔");
     p.description = QStringLiteral("PS: Hard Round - sharp edge round brush, default Photoshop brush");
+    p.kind        = BrushKind::HardRound;
     p.groupName   = QStringLiteral("Built-in");
     p.settings    = BrushSettings{ 32, 100, 100, 100, 25, 0, 100 };
     p.shape.type  = ShapeType::Round;
@@ -369,9 +377,32 @@ BrushPreset BrushPreset::makeBuiltInSoftRound() {
     BrushPreset p;
     p.name        = QStringLiteral("柔边圆笔");
     p.description = QStringLiteral("PS: Soft Round - Gaussian falloff brush, airbrush feel");
+    p.kind        = BrushKind::SoftRound;
     p.groupName   = QStringLiteral("Built-in");
     p.settings    = BrushSettings{ 64, 20, 100, 100, 15, 0, 100 };
     p.shape.type  = ShapeType::SoftRound;
+    return p;
+}
+
+BrushPreset BrushPreset::makeBuiltInPencil() {
+    BrushPreset p;
+    p.name        = QStringLiteral("铅笔");
+    p.description = QStringLiteral("PS: Pencil - small diameter, high hardness, tight spacing");
+    p.kind        = BrushKind::Pencil;
+    p.groupName   = QStringLiteral("Built-in");
+    p.settings    = BrushSettings{ 4, 85, 80, 100, 5, 0, 80 };
+    p.shape.type  = ShapeType::Round;
+    return p;
+}
+
+BrushPreset BrushPreset::makeBuiltInMarker() {
+    BrushPreset p;
+    p.name        = QStringLiteral("马克笔");
+    p.description = QStringLiteral("PS: Marker - flat oval, 50% opacity, large spacing");
+    p.kind        = BrushKind::Marker;
+    p.groupName   = QStringLiteral("Built-in");
+    p.settings    = BrushSettings{ 20, 70, 50, 100, 10, 0, 30 };
+    p.shape.type  = ShapeType::Flat;
     return p;
 }
 
@@ -379,6 +410,7 @@ BrushPreset BrushPreset::makeBuiltInAirbrush() {
     BrushPreset p;
     p.name        = QStringLiteral("空气笔");
     p.description = QStringLiteral("PS: Airbrush - very low hardness + Airbrush mode");
+    p.kind        = BrushKind::Airbrush;
     p.groupName   = QStringLiteral("Built-in");
     p.settings    = BrushSettings{ 80, 0, 50, 50, 5, 0, 100 };
     p.shape.type  = ShapeType::Airbrush;
@@ -391,6 +423,7 @@ BrushPreset BrushPreset::makeBuiltInChalk() {
     BrushPreset p;
     p.name        = QStringLiteral("粉笔");
     p.description = QStringLiteral("PS: Chalk - noisy edges with reduced opacity");
+    p.kind        = BrushKind::Chalk;
     p.groupName   = QStringLiteral("Built-in");
     p.settings    = BrushSettings{ 48, 60, 80, 80, 10, 0, 100 };
     p.shape.type  = ShapeType::Chalk;
@@ -405,6 +438,7 @@ BrushPreset BrushPreset::makeBuiltInCharcoal() {
     BrushPreset p;
     p.name        = QStringLiteral("炭笔");
     p.description = QStringLiteral("PS: Charcoal - heavy grain texture, low flow");
+    p.kind        = BrushKind::Charcoal;
     p.groupName   = QStringLiteral("Built-in");
     p.settings    = BrushSettings{ 56, 40, 100, 30, 12, 0, 100 };
     p.shape.type  = ShapeType::Charcoal;
@@ -412,6 +446,87 @@ BrushPreset BrushPreset::makeBuiltInCharcoal() {
     p.dynamics.shape.sizeJitterMin = 0;
     p.dynamics.shape.sizeJitterMax = 20;
     p.dynamics.shape.sizeControl   = JitterControl::PenPressure;
+    return p;
+}
+
+BrushPreset BrushPreset::makeBuiltInCalligraphic() {
+    BrushPreset p;
+    p.name        = QStringLiteral("书法笔");
+    p.description = QStringLiteral("PS: Calligraphic - angle/roundness-driven, flat oval");
+    p.kind        = BrushKind::Calligraphic;
+    p.groupName   = QStringLiteral("Built-in");
+    p.settings    = BrushSettings{ 15, 80, 100, 100, 10, 45, 30 };
+    p.shape.type  = ShapeType::Flat;
+    // Calligraphic: roundness jitter with pressure for stroke feel
+    p.dynamics.shape.roundnessJitter  = 30;
+    p.dynamics.shape.roundnessControl = JitterControl::PenPressure;
+    return p;
+}
+
+// --- Wet 3 ---
+
+BrushPreset BrushPreset::makeBuiltInWatercolor() {
+    BrushPreset p;
+    p.name        = QStringLiteral("水彩");
+    p.description = QStringLiteral("PS: Watercolor - low hardness, low flow, wet edge feel");
+    p.kind        = BrushKind::Watercolor;
+    p.groupName   = QStringLiteral("Built-in");
+    p.settings    = BrushSettings{ 40, 10, 40, 30, 8, 0, 100 };
+    p.shape.type  = ShapeType::SoftRound;
+    // Watercolor: high scatter (1 stamp per stroke point splatters)
+    p.dynamics.scattering.scatterX = 15;
+    p.dynamics.scattering.scatterY = 15;
+    p.dynamics.scattering.count    = 3;
+    return p;
+}
+
+BrushPreset BrushPreset::makeBuiltInOil() {
+    BrushPreset p;
+    p.name        = QStringLiteral("油画");
+    p.description = QStringLiteral("PS: Oil - heavy deposit, no flow jitter, dense pigment");
+    p.kind        = BrushKind::Oil;
+    p.groupName   = QStringLiteral("Built-in");
+    p.settings    = BrushSettings{ 24, 60, 85, 100, 20, 0, 100 };
+    p.shape.type  = ShapeType::Round;
+    // Oil: minimal jitter; opacity/flow steady
+    p.dynamics.transfer.flowJitterMin = 0;
+    p.dynamics.transfer.flowJitterMax = 0;
+    return p;
+}
+
+BrushPreset BrushPreset::makeBuiltInAcrylic() {
+    BrushPreset p;
+    p.name        = QStringLiteral("丙烯");
+    p.description = QStringLiteral("PS: Acrylic - medium wet, soft round, high flow");
+    p.kind        = BrushKind::Acrylic;
+    p.groupName   = QStringLiteral("Built-in");
+    p.settings    = BrushSettings{ 30, 70, 90, 85, 15, 0, 100 };
+    p.shape.type  = ShapeType::SoftRound;
+    return p;
+}
+
+// --- Special 2 ---
+
+BrushPreset BrushPreset::makeBuiltInSmudge() {
+    BrushPreset p;
+    p.name        = QStringLiteral("涂抹");
+    p.description = QStringLiteral("PS: Smudge - drags existing pixels, no new color");
+    p.kind        = BrushKind::Smudge;
+    p.groupName   = QStringLiteral("Built-in");
+    p.settings    = BrushSettings{ 30, 50, 100, 50, 20, 0, 100 };
+    p.shape.type  = ShapeType::Round;
+    // Smudge: tight spacing for finger-paint feel
+    return p;
+}
+
+BrushPreset BrushPreset::makeBuiltInEraser() {
+    BrushPreset p;
+    p.name        = QStringLiteral("橡皮");
+    p.description = QStringLiteral("PS: Eraser - destination erase, hard round");
+    p.kind        = BrushKind::Eraser;
+    p.groupName   = QStringLiteral("Built-in");
+    p.settings    = BrushSettings{ 20, 80, 100, 100, 25, 0, 100 };
+    p.shape.type  = ShapeType::Round;
     return p;
 }
 
@@ -431,12 +546,24 @@ void BrushPresetManager::seedBuiltIns() {
 }
 
 QList<BrushPreset> BrushPresetManager::builtIns() const {
+    // P7.9.2: 5 -> 13 built-in presets, ordered per BrushKind::allKinds().
+    //   Basic 8: HardRound / SoftRound / Pencil / Marker / Airbrush / Chalk / Charcoal / Calligraphic
+    //   Wet 3:   Watercolor / Oil / Acrylic
+    //   Special 2: Smudge / Eraser
     return {
         BrushPreset::makeBuiltInHardRound(),
         BrushPreset::makeBuiltInSoftRound(),
+        BrushPreset::makeBuiltInPencil(),
+        BrushPreset::makeBuiltInMarker(),
         BrushPreset::makeBuiltInAirbrush(),
         BrushPreset::makeBuiltInChalk(),
         BrushPreset::makeBuiltInCharcoal(),
+        BrushPreset::makeBuiltInCalligraphic(),
+        BrushPreset::makeBuiltInWatercolor(),
+        BrushPreset::makeBuiltInOil(),
+        BrushPreset::makeBuiltInAcrylic(),
+        BrushPreset::makeBuiltInSmudge(),
+        BrushPreset::makeBuiltInEraser(),
     };
 }
 

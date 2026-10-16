@@ -192,8 +192,69 @@ void ImageCanvas::setMaskOverlayVisible(bool v)
     viewport()->update();
 }
 
+// ---------------------------------------------------------------------------
+// P7.11 (2026-10-15): dirty-rect repaint API.
+//
+// invalidateRect(sceneRect) accumulates a scene-space rectangle. All
+// calls before the next paint event are unioned. On the next paint
+// event (we hook drawForeground, the last hook before the viewport
+// commits), flushDirtyRect() is called and a viewport update is
+// requested for the unioned area only. invalidateAll() reverts to a
+// full-viewport update (used by setImage / setZoom / setTransformBox).
+//
+// This is incremental: existing internal callers still use
+// viewport()->update() directly. New code (and P7.11 internal
+// additions below) should use invalidateRect() for fine-grained
+// updates. Future P8.1 incremental compositor hooks can accumulate
+// across frames.
+// ---------------------------------------------------------------------------
+void ImageCanvas::invalidateRect(const QRectF& sceneRect)
+{
+    if (m_dirtyAll) return;   // already marked whole-viewport
+    if (!sceneRect.isValid()) return;
+    m_pendingDirtyRect = m_pendingDirtyRect.isNull()
+        ? sceneRect
+        : m_pendingDirtyRect.united(sceneRect);
+    // Defer the actual viewport()->update() call to flushDirtyRect()
+    // (called by drawForeground, the last hook before the viewport
+    // commits). This way, multiple invalidateRect() calls between two
+    // paint events collapse into a single viewport update.
+}
+
+void ImageCanvas::invalidateAll()
+{
+    m_dirtyAll = true;
+    m_pendingDirtyRect = QRectF();
+    // Schedule a full repaint (cheaper than tracking an "all" flag
+    // through the paint pipeline).
+    viewport()->update();
+}
+
+void ImageCanvas::flushDirtyRect()
+{
+    if (m_dirtyAll) {
+        // invalidateAll() already called viewport()->update(); nothing
+        // to do here, just clear the flag for the next round.
+        m_dirtyAll = false;
+        return;
+    }
+    if (m_pendingDirtyRect.isNull()) return;
+    QRect viewportRect = mapFromScene(m_pendingDirtyRect).boundingRect()
+                             .intersected(viewport()->rect());
+    if (!viewportRect.isEmpty()) {
+        viewport()->update(viewportRect);
+    }
+    m_pendingDirtyRect = QRectF();
+}
+
 void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
 {
+    // P7.11 (2026-10-15): commit any pending dirty-rect union right
+    // before the viewport commits the frame. drawForeground is the
+    // last paint hook QGraphicsView invokes before flushing, so this
+    // is the right place to schedule the accumulated update.
+    flushDirtyRect();
+
     if (!m_sel || m_sel->isEmpty()) return;
     const QImage mask = m_sel->mask();
     if (mask.isNull()) return;

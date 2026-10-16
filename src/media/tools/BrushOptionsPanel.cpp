@@ -8,7 +8,9 @@
 #include "ui_BrushOptionsPanel.h"
 
 #include "../brushes/BrushPreset.h"
+#include "../brushes/BrushKind.h"
 
+#include <QMenu>
 #include <QSignalBlocker>
 
 namespace tools {
@@ -55,6 +57,14 @@ BrushOptionsPanel::BrushOptionsPanel(QWidget* parent)
             this, &BrushOptionsPanel::onBlendModeChanged);
 
     connect(ui->btnPicker, &QToolButton::clicked, this, &BrushOptionsPanel::pickerRequested);
+
+    // P7.9.2 (2026-10-16): kind picker button -> QMenu with 13 kinds.
+    if (ui->btnKindPicker) {
+        connect(ui->btnKindPicker, &QToolButton::clicked,
+                this, &BrushOptionsPanel::onKindPickerClicked);
+    }
+    // Initialize lblKind from the default m_kind (HardRound).
+    refreshKindLabel();
 }
 
 BrushOptionsPanel::~BrushOptionsPanel()
@@ -122,6 +132,12 @@ void BrushOptionsPanel::setPreset(const brushes::BrushPreset &p)
 
     // Match preset combo to name
     setPresetName(p.name);
+
+    // P7.9.2 (2026-10-16): also reflect the preset's kind in lblKind +
+    //   m_kind. setPreset() is the canonical "load preset" path; the kind
+    //   is the preset's own kind field.
+    m_kind = p.kind;
+    refreshKindLabel();
 
     m_suspend = false;
 }
@@ -191,22 +207,19 @@ void BrushOptionsPanel::onPresetComboChanged(int idx)
 {
     if (m_suspend) return;
     m_presetIndex = idx;
-    // Load the built-in preset matching this index
-    brushes::BrushPreset p;
-    switch (idx) {
-        case 0: p = brushes::BrushPreset::makeBuiltInHardRound();  break;
-        case 1: p = brushes::BrushPreset::makeBuiltInSoftRound();  break;
-        case 2: p = brushes::BrushPreset::makeBuiltInAirbrush();   break;
-        case 3: p = brushes::BrushPreset::makeBuiltInChalk();      break;
-        case 4: p = brushes::BrushPreset::makeBuiltInCharcoal();   break;
-        default: p = brushes::BrushPreset::makeBuiltInHardRound(); break;
-    }
+    // P7.9.2 (2026-10-16): 5 -> 13 built-in presets. Switch expanded; order
+    //   matches BrushKind::allKinds() so the index of any preset is the
+    //   same as the index in the static BrushPresetManager::builtIns() list.
+    const brushes::BrushPreset p = makeBuiltInByIndex(idx);
     // Update UI to reflect chosen preset (without re-emitting)
     QSignalBlocker block(this);
     Q_UNUSED(block);
     setPreset(p);
+    // P7.9.2: also update the kind label + m_kind.
+    m_kind = p.kind;
+    refreshKindLabel();
     emit presetChanged(p);
-    emit sharedStateChanged();  // 5 重叠字段也跟 ToolContext 同步
+    emit sharedStateChanged();  // 9 重叠字段也跟 ToolContext 同步
 }
 
 // ---------------- P7.6.x (2026-10-14) shared state ----------------
@@ -220,6 +233,12 @@ BrushOptionsPanel::SharedState BrushOptionsPanel::sharedStatePulledIn() const
     s.flowPct    = ui->sliderFlow->value();
     s.smoothing  = ui->sliderSmoothAmount->value();
     s.angle      = ui->sliderAngle->value();
+    // P7.9.1 (2026-10-15): 3 advanced fields — .ui already has the widgets
+    // (sliderHardness/sliderSpacing/sliderScatter + spin partners) from
+    // earlier design; we just plumb them through the shared state.
+    s.hardness   = ui->sliderHardness->value();
+    s.spacing    = ui->sliderSpacing->value();
+    s.scatter    = ui->sliderScatter->value();
     return s;
 }
 
@@ -237,7 +256,118 @@ void BrushOptionsPanel::applySharedState(const SharedState& s)
     ui->spinSmoothAmount->setValue(static_cast<int>(s.smoothing));
     ui->sliderAngle->setValue(s.angle);
     ui->spinAngle->setValue(s.angle);
+    // P7.9.1: 3 new fields
+    ui->sliderHardness->setValue(static_cast<int>(s.hardness));
+    ui->spinHardness->setValue(static_cast<int>(s.hardness));
+    ui->sliderSpacing->setValue(static_cast<int>(s.spacing));
+    ui->spinSpacing->setValue(static_cast<int>(s.spacing));
+    ui->sliderScatter->setValue(static_cast<int>(s.scatter));
+    ui->spinScatter->setValue(static_cast<int>(s.scatter));
     m_suspend = false;
+}
+
+// ---------------- P7.9.2 (2026-10-16) 13 brush kinds ----------------
+//
+//   Design (user拍板 2026-10-16):
+//     - lblKind readonly shows "Basic - Hard Round" / "Wet - Watercolor" /
+//       "Special - Eraser" etc.
+//     - btnKindPicker (QToolButton "v") pops a QMenu with 13 QActions under
+//       3 section headers (Basic / Wet / Special).
+//     - On kind selection, combo switches to first preset of that kind.
+//     - On preset combo change (built-in index), kind is inferred from the
+//       preset's `kind` field.
+//
+//   m_kind drives: lblKind text, per-kind needsGpu() override (P8.2),
+//   and the status bar GPU indicator (P7.11 follow-up).
+
+brushes::BrushPreset BrushOptionsPanel::makeBuiltInByIndex(int idx) const
+{
+    // Order matches BrushKind::allKinds() / BrushPresetManager::builtIns().
+    switch (idx) {
+        case 0:  return brushes::BrushPreset::makeBuiltInHardRound();
+        case 1:  return brushes::BrushPreset::makeBuiltInSoftRound();
+        case 2:  return brushes::BrushPreset::makeBuiltInPencil();
+        case 3:  return brushes::BrushPreset::makeBuiltInMarker();
+        case 4:  return brushes::BrushPreset::makeBuiltInAirbrush();
+        case 5:  return brushes::BrushPreset::makeBuiltInChalk();
+        case 6:  return brushes::BrushPreset::makeBuiltInCharcoal();
+        case 7:  return brushes::BrushPreset::makeBuiltInCalligraphic();
+        case 8:  return brushes::BrushPreset::makeBuiltInWatercolor();
+        case 9:  return brushes::BrushPreset::makeBuiltInOil();
+        case 10: return brushes::BrushPreset::makeBuiltInAcrylic();
+        case 11: return brushes::BrushPreset::makeBuiltInSmudge();
+        case 12: return brushes::BrushPreset::makeBuiltInEraser();
+        default: return brushes::BrushPreset::makeBuiltInHardRound();
+    }
+}
+
+void BrushOptionsPanel::refreshKindLabel()
+{
+    if (!ui || !ui->lblKind) return;
+    ui->lblKind->setText(QString::fromLatin1(categoryName(categoryOf(m_kind)))
+                       + QStringLiteral(" - ")
+                       + kindName(m_kind));
+}
+
+void BrushOptionsPanel::setKind(brushes::BrushKind k)
+{
+    if (m_kind == k) return;
+    m_kind = k;
+    refreshKindLabel();
+    selectFirstPresetOfKind(k);
+    emit kindChanged(k);
+}
+
+void BrushOptionsPanel::selectFirstPresetOfKind(brushes::BrushKind k)
+{
+    if (!ui || !ui->cmbPreset) return;
+    // The 13 built-in combo items are in BrushKind::allKinds() order, so
+    // the index of the first preset of kind `k` is the kind's enum value.
+    const int idx = static_cast<int>(k);
+    if (idx < 0 || idx >= ui->cmbPreset->count()) return;
+    QSignalBlocker block(ui->cmbPreset);
+    Q_UNUSED(block);
+    ui->cmbPreset->setCurrentIndex(idx);
+    m_presetIndex = idx;
+}
+
+void BrushOptionsPanel::onKindPickerClicked()
+{
+    buildKindMenu();
+    if (!m_kindMenu) return;
+    const QPoint pos = ui->btnKindPicker->mapToGlobal(
+        QPoint(0, ui->btnKindPicker->height()));
+    m_kindMenu->popup(pos);
+}
+
+void BrushOptionsPanel::buildKindMenu()
+{
+    if (m_kindMenu) return;     // built once, reused
+    m_kindMenu = new QMenu(this);
+    m_kindMenu->setTitle(QStringLiteral("Pick brush kind"));
+
+    // 3 section headers (Basic / Wet / Special) + their QActions. Each
+    // QAction's data is the BrushKind enum value; triggered -> setKind.
+    for (int cat = 0; cat < 3; ++cat) {
+        const brushes::BrushCategory bc = static_cast<brushes::BrushCategory>(cat);
+        // Skip empty categories (defensive — all 3 are non-empty in P7.9.2).
+        bool any = false;
+        for (const auto k : brushes::allKinds()) {
+            if (brushes::categoryOf(k) == bc) { any = true; break; }
+        }
+        if (!any) continue;
+        m_kindMenu->addSection(QString::fromLatin1(brushes::categoryName(bc)));
+        for (const auto k : brushes::allKinds()) {
+            if (brushes::categoryOf(k) != bc) continue;
+            QAction* a = m_kindMenu->addAction(brushes::kindName(k));
+            a->setData(static_cast<int>(k));
+            a->setCheckable(true);
+            a->setChecked(k == m_kind);
+            connect(a, &QAction::triggered, this, [this, k]() {
+                setKind(k);
+            });
+        }
+    }
 }
 
 } // namespace tools

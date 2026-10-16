@@ -406,6 +406,7 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   P7.6.x: raw pointer — Qt takes ownership via setWidget() later.
     m_rightDock = new docks::RightPanelDock(this);
     // F-G.3: hand m_adjustmentPanel to m_rightDock (Qt reparent to its tabWidget)
+    //   P7.6.x v3 commit 4 (2026-10-15): deprecated; VAdjustmentPage is built-in.
     m_rightDock->setAdjustmentPanel(m_adjustmentPanel);
 
     // P6 (2026-10-09): wire RightPanelDock connectors that were dangling before.
@@ -416,20 +417,26 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   with the right-side Color dock (PS 风格 one swatch, two docks).
     //   Echo loops are guarded by the `if (m_xxx == c) return;` early-out in
     //   both setters, so the chain terminates after the first round.
-    if (auto* colorDock = m_rightDock->colorDock()) {
-        connect(colorDock, &docks::ColorDock::foregroundColorChanged,
-                this, &ImageWindow::onForegroundColorChanged);
+    // P7.6.x v3 commit 4 (2026-10-15): ColorDock moved into VColorPage ->
+    //   access via colorPage()->inner() (the underlying ColorTab widget).
+    if (auto* colorPage = m_rightDock->colorPage()) {
+        if (auto* colorTab = colorPage->inner()) {
+            connect(colorTab, &docks::ColorTab::foregroundColorChanged,
+                    this, &ImageWindow::onForegroundColorChanged);
+        }
         // P7.6.x v3 (2026-10-14): ColorDock fg/bg → LeftToolBar 同步搬到 MainWindow
         //   (MainWindow::bindLeftDockWidgets 在 active image 切换时连). 避免 ImageWindow
         //   仍然持有 m_leftToolBar 指针.
     }
-    if (auto* selPanel = m_rightDock->channelPathPanel()) {
-        connect(selPanel, &docks::ChannelPathPanel::saveSelectionRequested,
-                this, &ImageWindow::onSaveSelectionRequested);
-        connect(selPanel, &docks::ChannelPathPanel::loadSelectionRequested,
-                this, &ImageWindow::onLoadSelectionRequested);
-        connect(selPanel, &docks::ChannelPathPanel::quickMaskToggled,
-                this, &ImageWindow::onChannelPathQuickMaskToggled);
+    if (auto* chanPathPage = m_rightDock->channelPathPage()) {
+        if (auto* selPanel = chanPathPage->inner()) {
+            connect(selPanel, &docks::ChannelPathPanel::saveSelectionRequested,
+                    this, &ImageWindow::onSaveSelectionRequested);
+            connect(selPanel, &docks::ChannelPathPanel::loadSelectionRequested,
+                    this, &ImageWindow::onLoadSelectionRequested);
+            connect(selPanel, &docks::ChannelPathPanel::quickMaskToggled,
+                    this, &ImageWindow::onChannelPathQuickMaskToggled);
+        }
     }
 
     m_rightDockContainer = new QDockWidget(this);
@@ -554,11 +561,10 @@ ImageWindow::ImageWindow(QWidget *parent)
     // 主窗口在 onUndo/onRedo 里直接调 m_undoStack->undo/redo
 
     // P0-8.1 (2026-09-15): 绑定 HistoryDock -> undoStack
-    //   m_rightDock 已经创建, historyDock() 现在非 null
+    //   P7.6.x v3 commit 4 (2026-10-15): forward via RightPanelDock::setUndoStack
+    //   which routes to the VHistoryPage adapter.
     if (m_rightDock) {
-        if (auto* histDock = m_rightDock->historyDock()) {
-            histDock->setUndoStack(m_undoStack);
-        }
+        m_rightDock->setUndoStack(m_undoStack);
     }
 
     }
@@ -918,6 +924,14 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     //   切 layer 不改像素, 但要让画布知道, 触发重绘 + 通知 MainWindow
     connect(m_layerStack.get(), &layers::LayerStack::selectionChanged,
             this, &ImageWindow::onLayerSelectionChanged);
+    // P7.10 (2026-10-15): active layer 切换 → 右侧 panel V*Page 标脏.
+    //   VPropertyPage 显示当前 layer 的属性 (color/blend/opacity/lock/link),
+    //   必须跟 selection 同步刷新. 走 RightPanelDock::invalidateAllPageCaches
+    //   fan-out, 其他 V*Page (color/swatch/...) 的 invalidateCache 是 no-op 默认.
+    connect(m_layerStack.get(), &layers::LayerStack::selectionChanged, this,
+            [this](int) {
+                if (m_rightDock) m_rightDock->invalidateAllPageCaches();
+            });
     invalidateCurrentCache();   // 强制重算 m_current
 
     // P1.4.3 (2026-09-17): 实例化 LayerPanel, 注入 LayersDock tab 0
@@ -928,10 +942,10 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     //   P7.6.x: raw pointer — setContentWidget below takes ownership.
     m_layerPanel = new layers::LayerPanel(m_layerStack.get());
     if (m_rightDock) {
-        if (auto* layersDock = m_rightDock->layersDock()) {
-            // 转移所有权: LayersDock::setContentWidget 会 setParent 到自己
-            layersDock->setContentWidget(0, m_layerPanel);
-        }
+        // P7.6.x v3 commit 4 (2026-10-15): rightDock->layersDock() is now a
+        // deprecated shim returning nullptr. Use setLayerPanel() which
+        // forwards to VLayerPage->inner() (LayersDock).
+        m_rightDock->setLayerPanel(m_layerPanel);
     }
 
     // P1.4.3 (2026-09-17): LayerPanel 用户操作信号 → ImageWindow API (数据层)
@@ -1767,17 +1781,17 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     // Q4.3 (2026-10-08): PropertiesDock.setImageInfo 接入.
     //   之前 loadFile 完全没调 setImageInfo, PropertiesDock 始终显示 "(无)".
     //   现在从 m_filePath (QFileInfo 取后缀得 format, 默认 dpi=72) + img.size 注入.
+    // P7.6.x v3 commit 4 (2026-10-15): forward via RightPanelDock::setPropertyImageInfo
+    //   which routes to VPropertyPage->inner() (PropertiesDock).
     if (m_rightDock) {
-        if (auto* propsDock = m_rightDock->propertiesDock()) {
-            docks::PropertiesDock::ImageInfo info;
-            info.filePath = m_filePath;
-            info.width    = img.cols;
-            info.height   = img.rows;
-            const QString suffix = QFileInfo(m_filePath).suffix().toUpper();
-            info.format   = suffix.isEmpty() ? QStringLiteral("Unknown") : suffix;
-            info.dpi      = 72;  // 默认 dpi, 后续 P0-8 ICC embed 流程可读 EXIF
-            propsDock->setImageInfo(info);
-        }
+        docks::PropertiesDock::ImageInfo info;
+        info.filePath = m_filePath;
+        info.width    = img.cols;
+        info.height   = img.rows;
+        const QString suffix = QFileInfo(m_filePath).suffix().toUpper();
+        info.format   = suffix.isEmpty() ? QStringLiteral("Unknown") : suffix;
+        info.dpi      = 72;  // 默认 dpi, 后续 P0-8 ICC embed 流程可读 EXIF
+        m_rightDock->setPropertyImageInfo(info);
     }
     // Stage F (2026-09-15): 补回 renderToView 触发
     //   Stage B 删 m_adjustment->syncApplyCurrentParams(true) 时连带漏了渲染触发
@@ -2426,9 +2440,8 @@ void ImageWindow::syncQuickMaskUi(bool on)
     //   ChannelPathPanel 仍在 m_rightDock (ImageWindow 内的右侧 dock) 内, 保留同步.
     emit quickMaskUiSync(on);
     if (m_rightDock) {
-        if (auto* sel = m_rightDock->channelPathPanel()) {
-            sel->setQuickMask(on);
-        }
+        // P7.6.x v3 commit 4 (2026-10-15): forward via setChannelPathQuickMask
+        m_rightDock->setChannelPathQuickMask(on);
     }
 }
 

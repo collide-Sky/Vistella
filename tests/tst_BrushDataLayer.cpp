@@ -195,14 +195,15 @@ void tst_BrushDataLayer::manager_add_remove_find()
 {
     BrushPresetManager mgr;
     QCOMPARE(mgr.userPresets().size(), 0);
-    QCOMPARE(mgr.builtIns().size(), 5);
+    // P7.9.2 (2026-10-16): 5 -> 13 built-in presets (8 Basic + 3 Wet + 2 Special)
+    QCOMPARE(mgr.builtIns().size(), 13);
 
     BrushPreset p;
     p.name = "Custom 1";
     p.settings.size = 60;
     mgr.addUserPreset(p);
     QCOMPARE(mgr.userPresets().size(), 1);
-    QCOMPARE(mgr.all().size(), 6);  // 5 built-in + 1 user
+    QCOMPARE(mgr.all().size(), 14);  // 13 built-in + 1 user
 
     // Replace by same name
     p.settings.size = 80;

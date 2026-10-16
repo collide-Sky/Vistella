@@ -25,15 +25,31 @@ namespace tools {
 //   (ImageOptionBar idx=7) writes via ImageOptionBar::onBrushSharedStateChangedFromPanel,
 //   Brush/Clone/Heal/Patch/MaskBrush read via brushSettingsChanged.
 //   Not nested (moc does not like nested struct). Top-level namespace.
-//   P7.9 commit extends (12 dynamic panel slots) and tools apply() sync.
+//   P7.9.1 commit extends to 9 fields + needsGpu() flag.
 struct BrushSharedState {
-    // PS brush mode starter 3 items; P7.9 commit extends to 9
     int     blendMode = 0;     // 0=Normal
     double  opacity   = 100.0; // 0..100 %
     double  flow      = 100.0; // 0..100 %
-    double  smoothing = 10.0;  // 0..100 %; P7.9 commit changes to 0
+    double  smoothing = 0.0;   // 0..100 % (P7.9.1: default 0, was 10.0)
     int     angle     = 0;     // 0..359 deg
     int     brushSize = 13;    // 1..2000 px; PS default 13
+    // P7.9.1 (2026-10-15): PS brush mode advanced parameters
+    double  hardness  = 50.0;  // 0..100 %; 0=soft, 100=hard
+    double  spacing   = 25.0;  // 0..1000 %; stamp-to-stamp distance as % of brushSize
+    double  scatter   = 0.0;   // 0..100 %; position jitter for each stamp
+
+    // P7.9.1 (2026-10-15): P8.2 GPU backend hint.
+    //   true  = paint path benefits from GPU acceleration (hardness smoothing +
+    //           scatter jitter, blend mode >= 5 = non-trivial). CPU fallback is fine
+    //           but slower; GPU path will arrive in P8.2.
+    //   false = pure CPU is fast enough; GPU is no-op cost.
+    //   Today: read-only hint, P8.2 picks the actual backend.
+    bool needsGpu() const
+    {
+        return smoothing > 50.0
+            || scatter   > 0.0
+            || blendMode >= 5;   // 5+ = dissolve/multiplicative/darken/screen (P8.2 catalogue)
+    }
 };
 
 class ToolState;
@@ -75,6 +91,13 @@ public:
     void setSmoothing(double pct);
     void setAngle(int deg);
     void setBrushSize(int px);
+    // P7.9.1 (2026-10-15): extended shared brush state (hardness/spacing/scatter).
+    void setHardness(double pct);
+    void setSpacing(double pct);
+    void setScatter(double pct);
+    // P7.9.1: bulk update from BrushOptionsPanel (one brushSettingsChanged
+    // emit instead of 9; reduces UI-loop round-trips).
+    void setBrushSharedState(const BrushSharedState& s);
 
 signals:
     // Subscribers listen:

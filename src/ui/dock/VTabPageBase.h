@@ -62,6 +62,24 @@ public:
     // Convenience accessor: tag for diagnostics.
     QString titleForTab() const { return pageTitle(); }
 
+    // P7.10 (2026-10-15): incremental cache invalidation hook.
+    //   Called when something outside the page's reactive update path
+    //   changes (e.g. active layer change, active channel change, undo/
+    //   redo stack mutation). Default is no-op; subclasses override to
+    //   drop their derived state and re-fetch from the document model.
+    //   This is the entry point for P8.1 incremental compositor hooks:
+    //   pages that participate in incremental compositing override this
+    //   and emit whatever signals the compositor subscribes to.
+    //
+    //   Distinction from raw `update()` / `repaint()`:
+    //     - update() is the Qt paint scheduler; it doesn't drop derived
+    //       caches (e.g. PropertiesDock's parsed file path, or
+    //       ChannelPathPanel's last rendered mask thumbnail).
+    //     - invalidateCache() is the *model* side: the page's internal
+    //       cache of document state is stale and must be re-derived.
+    //       Pages may or may not trigger a repaint as part of doing so.
+    virtual void invalidateCache() {}
+
 signals:
     // Emitted when pageTitle() should change (e.g. user renames a layer).
     // VDraggableTabWidget listens and updates the tab label.

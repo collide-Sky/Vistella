@@ -16,37 +16,48 @@
      <property name="title">
       <string>Brush Preset</string>
      </property>
-     <layout class="QHBoxLayout" name="hbPreset">
-      <item>
-       <widget class="QComboBox" name="cmbPreset">
-        <item>
-         <property name="text">
-          <string>硬边圆笔</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>柔边圆笔</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>空气笔</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>粉笔</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>炭笔</string>
-         </property>
-        </item>
+     <layout class="QGridLayout" name="gridPreset">
+      <!-- P7.9.2 (2026-10-16): row 0 = kind label + kind picker button -->
+      <item row="0" column="0">
+       <widget class="QLabel" name="lblKindLabel">
+        <property name="text">
+         <string>Kind:</string>
+        </property>
        </widget>
       </item>
-      <item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="lblKind">
+        <property name="text">
+         <string>Basic - Hard Round</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QToolButton" name="btnKindPicker">
+        <property name="text">
+         <string>v</string>
+        </property>
+       </widget>
+      </item>
+      <!-- row 1 = preset combo + picker button (13 built-ins: 8 Basic + 3 Wet + 2 Special) -->
+      <item row="1" column="0" colspan="2">
+       <widget class="QComboBox" name="cmbPreset">
+        <item><property name="text"><string>硬边圆笔</string></property></item>
+        <item><property name="text"><string>柔边圆笔</string></property></item>
+        <item><property name="text"><string>铅笔</string></property></item>
+        <item><property name="text"><string>马克笔</string></property></item>
+        <item><property name="text"><string>空气笔</string></property></item>
+        <item><property name="text"><string>粉笔</string></property></item>
+        <item><property name="text"><string>炭笔</string></property></item>
+        <item><property name="text"><string>书法笔</string></property></item>
+        <item><property name="text"><string>水彩</string></property></item>
+        <item><property name="text"><string>油画</string></property></item>
+        <item><property name="text"><string>丙烯</string></property></item>
+        <item><property name="text"><string>涂抹</string></property></item>
+        <item><property name="text"><string>橡皮</string></property></item>
+       </widget>
+      </item>
+      <item row="1" column="2">
        <widget class="QToolButton" name="btnPicker">
         <property name="text">
          <string>...</string>

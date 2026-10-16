@@ -395,3 +395,40 @@ QPushButton#titleBtnClose:hover {
     background: #e81123;
     color: white;
 }
+
+/* =============================================================
+ * P7.11 (2026-10-15): dock PS 风格样式
+ *   - 3 sub-dock QSplitter handle 灰线 1px
+ *   - QTabBar tab 圆角 2px + hover 浅蓝
+ *   - QStatusBar 状态栏底部按钮扁平
+ * ============================================================= */
+QSplitter::handle {
+    background: #d0d0d0;
+    height: 1px;
+}
+QSplitter::handle:vertical {
+    background: #d0d0d0;
+    height: 4px;
+}
+QTabBar::tab {
+    padding: 4px 10px;
+    border-top-left-radius: 2px;
+    border-top-right-radius: 2px;
+}
+QTabBar::tab:selected {
+    background: #ffffff;
+    border-bottom: 2px solid {{ACCENT}};
+}
+QTabBar::tab:hover:!selected {
+    background: {{TAB_HOVER}};
+}
+QToolButton#btnGpuStatus {
+    padding: 2px 10px;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    color: #555;
+}
+QToolButton#btnGpuStatus:hover {
+    border: 1px solid {{TAB_HOVER}};
+    background: {{TAB_HOVER}};
+}

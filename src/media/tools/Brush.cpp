@@ -16,6 +16,7 @@
 
 #include "Brush.h"
 #include "BrushOptionsPanel.h"
+#include "ToolContext.h"             // P7.9.1: paintSingleStamp reads brushSharedState()
 #include "logger.h"
 
 #include "../imagewindow.h"          // ImageEditCommand + cv::Mat helpers
@@ -189,17 +190,31 @@ void Brush::paintSingleStamp(ImageWindow* host, const QPointF& scenePos, double 
     cv::Mat& target = host->currentImage();
     if (target.empty()) return;
 
+    // P7.9.1 (2026-10-15): read shared brush state from ToolContext.
+    //   Before: this used m_preset.settings.size / m_blendMode only.
+    //   Now: blendMode + brushSize + opacity + flow come from sharedState
+    //   (the panel's current values), so the brush tool reacts in real
+    //   time to panel edits. The preset is still used for the shape /
+    //   dynamics / dual brush, which is what BrushPreset is for.
+    const auto& ss = host->toolContext()->brushSharedState();
+    m_blendMode = ss.blendMode;   // keep the local copy in sync for callers
+    // Override preset.size with sharedState.brushSize (panel slider wins).
+    brushes::BrushSettings s = m_preset.settings;
+    s.size = ss.brushSize;
+
     // Resolve final per-step parameters (size jitter + opacity/flow jitter + pressure)
+    //   Opacity/flow are now taken from sharedState (panel values) so the
+    //   final stamp is consistent with what the user sees in the panel.
+    const double userOpacity = std::clamp(ss.opacity, 0.0, 100.0) / 100.0;
+    const double userFlow    = std::clamp(ss.flow,    0.0, 100.0) / 100.0;
     const brushes::BrushEngine::ResolvedParams rp =
-        brushes::BrushEngine::resolve(m_preset.settings, m_preset.shape, m_preset.dynamics,
+        brushes::BrushEngine::resolve(s, m_preset.shape, m_preset.dynamics,
                                       pressure, 1.0, 0.0);
 
     // Use the diameter from ResolvedParams (already pressure-scaled)
-    brushes::BrushSettings s = m_preset.settings;
     s.size = rp.diameter;
-    // Apply resolved opacity/flow to the applyStamp call
-    const double opacity = std::clamp(rp.opacity, 0.0, 1.0);
-    const double flow    = std::clamp(rp.flow, 0.0, 1.0);
+    const double opacity = std::clamp(rp.opacity * userOpacity, 0.0, 1.0);
+    const double flow    = std::clamp(rp.flow    * userFlow,    0.0, 1.0);
 
     // Generate stamp
     auto stamp = brushes::BrushEngine::generateStamp(s, m_preset.shape, pressure);
