@@ -337,6 +337,11 @@ target_link_libraries(vistella_media
     PUBLIC
         Qt6::Core
         Qt6::Widgets
+        # P8.2.x (2026-10-19): GpuBackend real shader pipeline
+        #   QOpenGLContext + QOpenGLFunctions + QOpenGLShaderProgram +
+        #   QOpenGLTexture + QOpenGLFramebufferObject + QOffscreenSurface
+        Qt6::OpenGL
+        Qt6::Gui
         # F-P.1 logger 统一: mediators/tools #include "logger.h" 走 PUBLIC include path
         vistella_logger
         # P0-8.3 (2026-09-15): LCMS2 for ICC profile (EmbedProfileToPng/Jpeg/Tiff)

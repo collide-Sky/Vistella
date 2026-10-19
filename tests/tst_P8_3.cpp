@@ -111,9 +111,9 @@ void tst_P8_3::currentBackendName_wetKindForcedGpu_returnsGpuName()
     auto& r = BackendRegistry::instance();
     r.setMode(RenderMode::ForceGpu);
     tools::BrushSharedState ss;
-    QCOMPARE(r.currentBackendName(BrushKind::Watercolor, ss), QStringLiteral("qt-opengl-stub"));
-    QCOMPARE(r.currentBackendName(BrushKind::Oil,        ss), QStringLiteral("qt-opengl-stub"));
-    QCOMPARE(r.currentBackendName(BrushKind::Acrylic,    ss), QStringLiteral("qt-opengl-stub"));
+    QCOMPARE(r.currentBackendName(BrushKind::Watercolor, ss), QStringLiteral("qt-opengl"));
+    QCOMPARE(r.currentBackendName(BrushKind::Oil,        ss), QStringLiteral("qt-opengl"));
+    QCOMPARE(r.currentBackendName(BrushKind::Acrylic,    ss), QStringLiteral("qt-opengl"));
 }
 
 void tst_P8_3::currentBackendName_wetKindAutoGpuAvailable_returnsGpu()
@@ -122,7 +122,7 @@ void tst_P8_3::currentBackendName_wetKindAutoGpuAvailable_returnsGpu()
     auto& r = BackendRegistry::instance();
     r.setMode(RenderMode::Auto);
     tools::BrushSharedState ss;
-    QCOMPARE(r.currentBackendName(BrushKind::Watercolor, ss), QStringLiteral("qt-opengl-stub"));
+    QCOMPARE(r.currentBackendName(BrushKind::Watercolor, ss), QStringLiteral("qt-opengl"));
 }
 
 void tst_P8_3::currentBackendName_wetKindAutoGpuUnavailable_fallsBackToCpu()
@@ -142,7 +142,7 @@ void tst_P8_3::currentBackendName_specialKindForcedGpuStillReturnsGpu()
     r.setMode(RenderMode::ForceGpu);
     tools::BrushSharedState ss;
     // ForceGpu overrides Special's per-kind preference
-    QCOMPARE(r.currentBackendName(BrushKind::Eraser, ss), QStringLiteral("qt-opengl-stub"));
+    QCOMPARE(r.currentBackendName(BrushKind::Eraser, ss), QStringLiteral("qt-opengl"));
 }
 
 void tst_P8_3::currentBackendName_specialKindAuto_returnsCpu()

@@ -231,3 +231,7 @@ add_vistella_test(tst_P8_3)
 add_vistella_test(tst_P8_4)
 # P8.3.x (2026-10-19): Settings dialog GPU page (3 radio + Apply + Probe).
 add_vistella_test(tst_P8_3_1)
+# P8.2.x (2026-10-19): real Qt OpenGL pass-through shader pipeline
+#   in GpuBackend (QOpenGLContext + texture upload + FBO readback +
+#   thread-safe mutex serialization).
+add_vistella_test(tst_P8_2_1)
