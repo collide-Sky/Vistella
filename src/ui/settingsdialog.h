@@ -25,8 +25,10 @@ private slots:
 
 private:
     void setupLogPage();
+    void setupGpuPage();   // P8.3.x
 
     Ui::SettingsDialog *ui;
+    class SettingsGpuPanel* m_gpuPanel = nullptr;   // P8.3.x: owned via stack
 };
 
 #endif // SETTINGSDIALOG_H

@@ -3282,7 +3282,7 @@ Auto / Force GPU / Force CPU
     <name>SettingsDialog</name>
     <message>
         <location filename="../src/ui/settingsdialog.ui" line="14"/>
-        <location filename="../src/ui/settingsdialog.cpp" line="16"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="17"/>
         <source>设置</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3307,8 +3307,8 @@ Auto / Force GPU / Force CPU
     <message>
         <location filename="../src/ui/settingsdialog.ui" line="106"/>
         <location filename="../src/ui/settingsdialog.ui" line="457"/>
-        <location filename="../src/ui/settingsdialog.cpp" line="170"/>
-        <location filename="../src/ui/settingsdialog.cpp" line="173"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="174"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="177"/>
         <source>日志设置</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3453,53 +3453,53 @@ Auto / Force GPU / Force CPU
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="62"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="66"/>
         <source>语言已切换</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="63"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="67"/>
         <source>界面语言已切换为 %1。
 部分已显示的文本需要重新打开窗口或重启程序后才会更新。</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="108"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="112"/>
         <source>当前状态: 模块=%1, 级别=%2, 单文件=%3 MB, 累计写入=%4 条</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="121"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="125"/>
         <source>选择日志目录</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="141"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="145"/>
         <source>模块名不能为空</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="145"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="149"/>
         <source>模块名修改失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="152"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="156"/>
         <source>日志目录修改失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="158"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="162"/>
         <source>单文件大小修改失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="163"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="167"/>
         <source>日志级别修改失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="174"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="178"/>
         <source>日志设置已应用。
 模块=%1
 目录=%2
@@ -3508,19 +3508,19 @@ Auto / Force GPU / Force CPU
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="184"/>
-        <location filename="../src/ui/settingsdialog.cpp" line="192"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="188"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="196"/>
         <source>今日日志</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="185"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="189"/>
         <source>今天没有日志文件。
 可能日志目录还没有创建文件。</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/settingsdialog.cpp" line="188"/>
+        <location filename="../src/ui/settingsdialog.cpp" line="192"/>
         <source>今天的日志文件 (%1 个):
 </source>
         <translation type="unfinished"></translation>

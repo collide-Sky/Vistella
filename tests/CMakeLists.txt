@@ -229,3 +229,5 @@ add_vistella_test(tst_P8_3)
 #   execute(engine) pixel-equals sequential, TileCache thread-safety
 #   (4 threads x 1000 ops).
 add_vistella_test(tst_P8_4)
+# P8.3.x (2026-10-19): Settings dialog GPU page (3 radio + Apply + Probe).
+add_vistella_test(tst_P8_3_1)

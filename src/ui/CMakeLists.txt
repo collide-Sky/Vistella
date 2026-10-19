@@ -27,6 +27,12 @@ add_library(vistella_ui STATIC
     settingsdialog.cpp
     settingsdialog.ui
 
+    # P8.3.x (2026-10-19): GPU / 渲染后端 settings panel
+    #   3 radio (Auto / Force GPU / Force CPU) + Apply + Probe OpenGL.
+    #   Embedded into SettingsDialog as a new stack page.
+    settingsgpupanel.h
+    settingsgpupanel.cpp
+
     themegallerydialog.h
     themegallerydialog.cpp
     themegallerydialog.ui
