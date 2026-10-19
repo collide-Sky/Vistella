@@ -95,6 +95,13 @@ private slots:
     void renderGraph_parallelOutputEqualsSequential();
     void renderGraph_parallelSubmitsAllTiles();
     void renderGraph_parallelSecondPass_allHits();
+
+    // Per-tile backend dispatch (P8.4.x)
+    void renderGraph_noBackendByDefault();
+    void renderGraph_withCpuBackend_passThroughPreservesPixels();
+    void renderGraph_backendForceCpu_skipsGpuBackend();
+    void renderGraph_backendSecondPass_doesNotRedispatch();
+    void renderGraph_parallelWithBackend_threadsSafe();
 };
 
 void tst_P8_4::initTestCase() {}
@@ -399,6 +406,126 @@ void tst_P8_4::renderGraph_parallelSecondPass_allHits()
     // No version change = no recompute; second render must not invoke
     // the node's compute() again.
     QCOMPARE(after2, after1);
+}
+
+// ---------------------------------------------------------------------------
+// Per-tile backend dispatch (P8.4.x: 2026-10-19)
+// ---------------------------------------------------------------------------
+
+#include "../src/media/gpu/BackendRegistry.h"
+#include "../src/media/gpu/CpuBackend.h"
+#include "../src/media/gpu/RenderBackend.h"
+
+void tst_P8_4::renderGraph_noBackendByDefault()
+{
+    // No setBackend() call -> dispatch is a no-op, identical to P8.4.
+    CompositorGraph g;
+    TestTileColorNode fill(cv::Scalar(50, 100, 200), "fill");
+    g.addNode(&fill);
+    TileGrid grid(256, 256);
+    RenderGraph rg(&g, fill.id(), &grid);
+    QCOMPARE(rg.backend(), nullptr);
+    cv::Mat canvas = rg.execute();
+    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[0], 50);
+    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[1], 100);
+    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[2], 200);
+}
+
+void tst_P8_4::renderGraph_withCpuBackend_passThroughPreservesPixels()
+{
+    // Wire a CpuBackend. P8.2 declares it as pass-through (input.clone()).
+    // A tile rendered via the registry under Auto mode should look
+    // identical to the no-backend render.
+    CompositorGraph g;
+    TestTileColorNode fill(cv::Scalar(50, 100, 200), "fill");
+    g.addNode(&fill);
+    TileGrid grid(256, 256);
+    RenderGraph rg(&g, fill.id(), &grid);
+
+    gpu::BackendRegistry reg;   // default-constructed (Auto mode)
+    rg.setBackend(&reg);
+
+    cv::Mat canvas = rg.execute();
+    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[0], 50);
+    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[1], 100);
+    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[2], 200);
+    QCOMPARE(rg.lastTilesDone(), 1);
+    QCOMPARE(rg.lastHitCount(), 0);
+    QCOMPARE(rg.lastMissCount(), 1);
+}
+
+void tst_P8_4::renderGraph_backendForceCpu_skipsGpuBackend()
+{
+    // With ForceCpu mode, pick() must return the CPU backend even if
+    // GpuBackend.isAvailable() reports true.
+    CompositorGraph g;
+    TestTileColorNode fill(cv::Scalar(10, 20, 30), "fill");
+    g.addNode(&fill);
+    TileGrid grid(256, 256);
+    RenderGraph rg(&g, fill.id(), &grid);
+
+    gpu::BackendRegistry reg;
+    reg.setMode(gpu::RenderMode::ForceCpu);
+    rg.setBackend(&reg);
+
+    cv::Mat canvas = rg.execute();
+    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[0], 10);
+    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[1], 20);
+    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[2], 30);
+}
+
+void tst_P8_4::renderGraph_backendSecondPass_doesNotRedispatch()
+{
+    // Second render with same version: the post-backend tile is already
+    // cached, so backend.processTile() must NOT be called again. We
+    // verify this by checking the cache hit / miss counters: the second
+    // pass should be all-hits.
+    CompositorGraph g;
+    TestTileColorNode fill(cv::Scalar(0, 0, 0), "fill");
+    g.addNode(&fill);
+    TileGrid grid(256, 256);
+    RenderGraph rg(&g, fill.id(), &grid);
+    gpu::BackendRegistry reg;
+    rg.setBackend(&reg);
+
+    (void)rg.execute();
+    QCOMPARE(rg.lastMissCount(), 1);
+    QCOMPARE(rg.lastHitCount(), 0);
+
+    (void)rg.execute();
+    // Cache hit on the second pass -> backend.processTile() not invoked
+    // again (the cached value is the post-backend result).
+    QCOMPARE(rg.lastMissCount(), 0);
+    QCOMPARE(rg.lastHitCount(), 1);
+}
+
+void tst_P8_4::renderGraph_parallelWithBackend_threadsSafe()
+{
+    // 4 tiles in parallel + CpuBackend dispatch = race-free. The
+    // CpuBackend's processTile() returns input.clone(), which writes
+    // to its own cv::Mat. No shared mutable state on the backend.
+    auto engine = std::make_unique<vistella::tp::EngineContext>(
+        vistella::tp::EngineContext::make_profile(
+            vistella::tp::EngineContext::Profile::ImageEditor, 4));
+
+    CompositorGraph g;
+    TestTileColorNode fill(cv::Scalar(50, 100, 200), "fill");
+    g.addNode(&fill);
+    TileGrid grid(512, 512);   // 2x2 = 4 tiles
+    RenderGraph rg(&g, fill.id(), &grid);
+    rg.setCompositeStrategy(CompositeStrategy::Parallel);
+
+    gpu::BackendRegistry reg;
+    rg.setBackend(&reg);
+
+    cv::Mat canvas = rg.execute(engine.get());
+    QCOMPARE(canvas.size(), cv::Size(512, 512));
+    QCOMPARE(rg.lastTilesDone(), 4);
+
+    // Each tile went through CpuBackend (Auto mode, default shared
+    // state = CPU). The output must still be the source color.
+    QCOMPARE((int)canvas.at<Vec3b>(100, 100)[0], 50);
+    QCOMPARE((int)canvas.at<Vec3b>(400, 400)[0], 50);
 }
 
 QTEST_MAIN(tst_P8_4)
