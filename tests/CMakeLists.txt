@@ -235,3 +235,10 @@ add_vistella_test(tst_P8_3_1)
 #   in GpuBackend (QOpenGLContext + texture upload + FBO readback +
 #   thread-safe mutex serialization).
 add_vistella_test(tst_P8_2_1)
+# P8.1.1 (2026-10-19): LayerStack -> CompositorGraph adapter
+#   (LayerBlendNode + LayerMaskNode + LayerStackAdapter). MVP scope:
+#   Bitmap layers only, Normal/Multiply/Screen/Darken/Lighten/
+#   Difference blend modes, visible/invisible filtering, layer
+#   masks. Vector/Text/Smart/Adjustment kinds + more blend modes
+#   deferred to P8.1.1.x.
+add_vistella_test(tst_P8_1_1)

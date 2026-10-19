@@ -314,6 +314,18 @@ add_library(vistella_media STATIC
     compositor/nodes/LayerBitmapNode.h
     compositor/nodes/LayerBitmapNode.cpp
 
+    # P8.1.1 (2026-10-19): LayerStack -> CompositorGraph adapter
+    #   + LayerBlendNode (Normal/Multiply/Screen/Darken/Lighten/
+    #     Difference for MVP; more modes in P8.1.1.x).
+    #   + LayerMaskNode (per-pixel multiplicative attenuation).
+    #   + LayerStackAdapter (builds a DAG from a layers::LayerStack).
+    compositor/nodes/LayerBlendNode.h
+    compositor/nodes/LayerBlendNode.cpp
+    compositor/nodes/LayerMaskNode.h
+    compositor/nodes/LayerMaskNode.cpp
+    compositor/nodes/LayerStackAdapter.h
+    compositor/nodes/LayerStackAdapter.cpp
+
     # P8.2 (2026-10-16): GPU/CPU backend abstraction.
     #   Per-tile RenderBackend interface + CpuBackend (pass-through) +
     #   GpuBackend (stub; pass-through; real shader path in P8.2.x) +
