@@ -326,6 +326,15 @@ add_library(vistella_media STATIC
     compositor/nodes/LayerMaskNode.cpp
     compositor/nodes/GroupNode.h
     compositor/nodes/GroupNode.cpp
+    # P8.1.1.x (2026-10-20): remaining LayerKind coverage.
+    #   LayerRasterNode     Text / Vector / SmartObject sources
+    #     (delegates rasterization to LayerStack::rasterizeLayer, and
+    #      applies a SmartObject's SmartFilter chain to the full image)
+    #   LayerAdjustmentNode LUT filter over the accumulated canvas
+    compositor/nodes/LayerRasterNode.h
+    compositor/nodes/LayerRasterNode.cpp
+    compositor/nodes/LayerAdjustmentNode.h
+    compositor/nodes/LayerAdjustmentNode.cpp
     compositor/nodes/LayerStackAdapter.h
     compositor/nodes/LayerStackAdapter.cpp
 

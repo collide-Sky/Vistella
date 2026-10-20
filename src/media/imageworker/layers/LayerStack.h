@@ -177,6 +177,31 @@ public:
     //   Used by UI to obtain the input image for a new SmartFilter.
     cv::Mat rasterizeForRender(int idx) const;
 
+    // ---- P8.1.1.x (2026-10-20): compositor source access ----
+    //   rasterizeLayer: public form of the private rasterize(), taking a
+    //   LayerPtr rather than an index.
+    //
+    //   A LayerPtr (not an int) because group children are not in
+    //   m_layers — they live in m_groups and are only reachable through
+    //   groupChildrenOf(). Compositor source nodes must rasterize both
+    //   kinds of layer, so they need a handle that works for either.
+    //
+    //   Adjustment deliberately returns an empty Mat: it is a filter
+    //   over the accumulated canvas, not a standalone image — the
+    //   compositor models it as LayerAdjustmentNode instead.
+    //
+    //   Exposed so compositor nodes reuse this single rasterization
+    //   implementation instead of re-deriving it. Diverging copies are
+    //   how the legacy path and the DAG path would silently drift apart.
+    cv::Mat rasterizeLayer(const LayerPtr &l) const;
+
+    //   applySmartFilterChain: walk smartFiltersFor(smartIdx) in order and
+    //   apply each enabled filter to `src`, returning the result.
+    //   Mirrors the chain block inside render(). Exposed for the same
+    //   single-source-of-truth reason; the per-filter implementation stays
+    //   file-local since it is stateless.
+    cv::Mat applySmartFilterChain(const cv::Mat &src, int smartIdx) const;
+
     // Phase 5 (2026-09-04): 全局 cache 清理
     //   遍历 cache dir, 删掉不被任何 layer 引用的文件
     //   返删除的文件数

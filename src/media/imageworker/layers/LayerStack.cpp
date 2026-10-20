@@ -1077,6 +1077,39 @@ cv::Mat LayerStack::rasterizeForRender(int idx) const
     return rasterize(l);
 }
 
+// P8.1.1.x (2026-10-20): public rasterize() for the compositor's
+//   source nodes. Takes a LayerPtr rather than an index because group
+//   children are only reachable through groupChildrenOf().
+cv::Mat LayerStack::rasterizeLayer(const LayerPtr &l) const
+{
+    if (!l) return cv::Mat();
+    return rasterize(l);
+}
+
+// P8.1.1.x (2026-10-20): SmartFilter chain application, factored out of
+//   render() so both render paths use one implementation.
+//
+//   The chain runs on the FULL rasterized image rather than per tile,
+//   and that is deliberate: several filters here (GaussianBlur) sample
+//   neighbouring pixels, so filtering a tile in isolation would darken
+//   every tile seam. Correct tile-boundary handling would need a halo
+//   of ceil(kernel/2) pixels per side, re-fetched from upstream and
+//   discarded after the filter. Doing that per filter node is only worth
+//   it once the DAG can express it; see LayerRasterNode.
+cv::Mat LayerStack::applySmartFilterChain(const cv::Mat &src, int smartIdx) const
+{
+    if (src.empty()) return cv::Mat();
+    const auto &chain = smartFiltersFor(smartIdx);
+    cv::Mat out = src;
+    for (int fIdx : chain) {
+        auto fL = at(fIdx);
+        if (!fL || !fL->visible || fL->opacity <= 0.0f) continue;
+        cv::Mat filtered = applySmartFilter(fL->filterType, fL->filterStrength, out);
+        if (!filtered.empty()) out = filtered;
+    }
+    return out;
+}
+
 // P1.4.4 (2026-09-17): Re-insert a SmartFilter (used by undo).
 //   The layer is appended at end of m_layers and the new index is inserted
 //   into the parent chain at `atSlot` (clamped to [0..chain.size()]). Returns
@@ -1485,19 +1518,12 @@ cv::Mat LayerStack::render() const
         cv::Mat layerMat = rasterize(l);
         if (layerMat.empty()) continue;
         // P1.4.4 (2026-09-17): SmartObject chain application.
-        //   Walk m_smartFilterChain[i] in order and re-apply each enabled
-        //   filter fresh (so reorder / strength changes take effect without
-        //   re-running append).
+        //   Walk the chain in order and re-apply each enabled filter
+        //   fresh (so reorder / strength changes take effect without
+        //   re-running append). Shared with the compositor path via
+        //   applySmartFilterChain() — P8.1.1.x.
         if (l->kind == Layer::SmartObject) {
-            const auto &chain = smartFiltersFor(i);
-            for (int fIdx : chain) {
-                auto fL = at(fIdx);
-                if (!fL || !fL->visible || fL->opacity <= 0.0f) continue;
-                cv::Mat filtered = applySmartFilter(fL->filterType,
-                                                    fL->filterStrength,
-                                                    layerMat);
-                if (!filtered.empty()) layerMat = filtered;
-            }
+            layerMat = applySmartFilterChain(layerMat, i);
         }
         // Phase 4 (2026-09-04): 应用蒙版 (mask 调制 layer alpha)
         if (l->maskEnabled && !l->layerMask.empty()) {

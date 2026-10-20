@@ -19,8 +19,17 @@
 //       a GroupNode, which applies the group's opacity with Normal
 //       blend. The group's own blendMode is ignored (matches PS and
 //       the legacy LayerStack::render() group branch).
-//     - LayerKind::Adjustment: LUT applied via a LayerAdjustmentNode
-//       (deferred to P8.1.1.x — see the adapter's default branch).
+//
+//   P8.1.1.x additions:
+//     - LayerKind::Text / Vector / SmartObject: rasterized by
+//       LayerRasterNode, which delegates to LayerStack::rasterizeLayer()
+//       so both render paths share one rasterization implementation.
+//       A SmartObject's SmartFilter chain is applied to the full
+//       rasterized image inside that node (blur kernels cross tile
+//       seams, so it cannot be a per-tile node).
+//     - LayerKind::Adjustment: a filter node over the accumulated
+//       canvas, not a source node — cv::LUT is a per-pixel table
+//       lookup, so it is exactly tile-safe.
 //
 //   Returns a Result that owns every node it created so the caller
 //   keeps them alive for the lifetime of the graph.
@@ -34,6 +43,8 @@
 #include "LayerBlendNode.h"
 #include "LayerMaskNode.h"
 #include "GroupNode.h"
+#include "LayerRasterNode.h"
+#include "LayerAdjustmentNode.h"
 
 #include <QList>
 #include <QString>
@@ -71,6 +82,11 @@ public:
         std::vector<std::unique_ptr<LayerBlendNode>>  blends;
         std::vector<std::unique_ptr<LayerMaskNode>>   masks;
         std::vector<std::unique_ptr<GroupNode>>       groups;
+
+        // P8.1.1.x: Text / Vector / SmartObject sources, and the
+        // Adjustment filter. Same lifetime rule as above.
+        std::vector<std::unique_ptr<LayerRasterNode>>    rasters;
+        std::vector<std::unique_ptr<LayerAdjustmentNode>> adjustments;
 
         // Mask source nodes (adapter-private CompositorNode subclass
         // that yields a Layer's layerMask as a single-channel tile).

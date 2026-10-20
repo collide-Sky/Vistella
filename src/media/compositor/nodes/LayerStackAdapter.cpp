@@ -41,25 +41,45 @@ static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
 
 namespace {
 
-// Build a single Bitmap layer's contribution and blend it over
-// `base`. Returns the new running node id (or `base` if the layer
-// contributes nothing).
-CompositorNode::NodeId appendBitmapLayer(const layers::Layer* layer,
-                                         CompositorNode::NodeId base,
-                                         LayerStackAdapter::Result& r) {
-    // Bitmap source node.
-    auto bitmap = std::make_unique<LayerBitmapNode>(
-        layer, QString::fromLatin1("Bitmap:%1").arg(layer->name));
-    const CompositorNode::NodeId bmId = bitmap->id();
-    r.graph.addNode(bitmap.get());
-    r.bitmaps.push_back(std::move(bitmap));
+// Build one layer's contribution and blend it over `base`. Returns the
+// new running node id (or `base` if the layer contributes nothing).
+//
+// `index` is the layer's position in m_layers, or -1 for a group child.
+// It reaches the source node because only top-level layers carry a
+// SmartFilter chain in the legacy render().
+//
+// Bitmap keeps its own zero-copy node (LayerBitmapNode reads
+// layer->image directly). Everything else rasterizes through
+// LayerRasterNode. Either way the downstream mask + blend wiring is
+// identical, which is why this is one function rather than one per kind.
+CompositorNode::NodeId appendColorLayer(const layers::LayerStack& stack,
+                                       layers::LayerPtr layer,
+                                       int index,
+                                       CompositorNode::NodeId base,
+                                       LayerStackAdapter::Result& r) {
+    if (!layer) return base;
 
-    CompositorNode::NodeId colorIn = bmId;
+    // Source node.
+    CompositorNode::NodeId colorIn = 0;
+    if (layer->kind == layers::Layer::Bitmap) {
+        auto bitmap = std::make_unique<LayerBitmapNode>(
+            layer.get(), QString::fromLatin1("Bitmap:%1").arg(layer->name));
+        colorIn = bitmap->id();
+        r.graph.addNode(bitmap.get());
+        r.bitmaps.push_back(std::move(bitmap));
+    } else {
+        auto raster = std::make_unique<LayerRasterNode>(
+            &stack, layer, index,
+            QString::fromLatin1("Raster:%1").arg(layer->name));
+        colorIn = raster->id();
+        r.graph.addNode(raster.get());
+        r.rasters.push_back(std::move(raster));
+    }
 
     // Mask (if enabled) wraps the color node.
     if (layer->maskEnabled && !layer->layerMask.empty()) {
         auto maskSrc = std::make_unique<MaskBitmapNode>(
-            layer, QString::fromLatin1("MaskSrc:%1").arg(layer->name));
+            layer.get(), QString::fromLatin1("MaskSrc:%1").arg(layer->name));
         const CompositorNode::NodeId maskSrcId = maskSrc->id();
         r.graph.addNode(maskSrc.get());
         r.maskSources.push_back(
@@ -67,11 +87,11 @@ CompositorNode::NodeId appendBitmapLayer(const layers::Layer* layer,
                 std::unique_ptr<CompositorNode>(maskSrc.release())});
 
         auto maskNode = std::make_unique<LayerMaskNode>(
-            bmId, maskSrcId,
+            colorIn, maskSrcId,
             QString::fromLatin1("Mask:%1").arg(layer->name));
         const CompositorNode::NodeId maskId = maskNode->id();
         r.graph.addNode(maskNode.get());
-        r.graph.addEdge(bmId, maskId);
+        r.graph.addEdge(colorIn, maskId);
         r.graph.addEdge(maskSrcId, maskId);
         r.masks.push_back(std::move(maskNode));
         colorIn = maskId;
@@ -117,7 +137,10 @@ static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
 
         switch (layer->kind) {
         case layers::Layer::Bitmap:
-            prev = appendBitmapLayer(layer.get(), prev, r);
+        case layers::Layer::Text:
+        case layers::Layer::Vector:
+        case layers::Layer::SmartObject:
+            prev = appendColorLayer(stack, layer, i, prev, r);
             break;
 
         case layers::Layer::Group: {
@@ -147,16 +170,31 @@ static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
             for (const auto& child : children) {
                 if (!child || !child->visible) continue;
                 if (child->kind == layers::Layer::Group) {
-                    // Nested group inside a group: flatten by
-                    // treating it as a passthrough (P8.1.1.x will
-                    // add proper nesting).
+                    // Nested group: skipped, which is what the
+                    // legacy group branch does too. rasterize() has no
+                    // case for Layer::Group (it falls through to the
+                    // empty-Mat default), so a nested group
+                    // contributes nothing there either. Changing this
+                    // needs legacy and compositor to change together.
                     continue;
                 }
-                if (child->kind != layers::Layer::Bitmap) continue;
-                inner = appendBitmapLayer(child.get(), inner, r);
+                if (child->kind == layers::Layer::SmartFilter) continue;
+                if (child->kind == layers::Layer::Adjustment) {
+                    // Legacy's group branch (render()) applies only
+                    // rasterize + mask + blend per child. Adjustment has
+                    // no standalone raster, and SmartFilter belongs to
+                    // its parent SmartObject's chain — neither can
+                    // contribute here, so skipping both mirrors what
+                    // the legacy group branch already does.
+                    continue;
+                }
+                // index -1: group children are not in m_layers, so they
+                // carry no SmartFilter chain (matching the legacy
+                // group branch, which never applies one).
+                inner = appendColorLayer(stack, child, -1, inner, r);
             }
 
-            if (inner == 0) break;   // no visible bitmap children
+            if (inner == 0) break;   // no visible color children
 
             if (prev == 0) {
                 // Root group: the composite IS the output, but we
@@ -186,20 +224,26 @@ static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
 
         case layers::Layer::SmartFilter:
             // P1.4.4: SmartFilter sub-layers render only as part of
-            // their parent SmartObject's chain. Skip here (matches
+            // their parent SmartObject's chain, which LayerRasterNode
+            // applies to the rasterized full image. Skip here (matches
             // the legacy render() loop).
             break;
 
-        case layers::Layer::Adjustment:
-            // P8.1.1.x: add LayerAdjustmentNode (LUT application).
+        case layers::Layer::Adjustment: {
+            // Not a source: an adjustment rewrites the canvas
+            // accumulated so far, so it wraps `prev` instead of
+            // contributing a layer of its own.
+            if (prev == 0) break;   // nothing to adjust yet
+            auto adj = std::make_unique<LayerAdjustmentNode>(
+                prev, layer->adjustmentLut, layer->opacity,
+                layer.get(), QString::fromLatin1("Adjust:%1").arg(layer->name));
+            const CompositorNode::NodeId adjId = adj->id();
+            r.graph.addNode(adj.get());
+            r.graph.addEdge(prev, adjId);
+            r.adjustments.push_back(std::move(adj));
+            prev = adjId;
             break;
-
-        case layers::Layer::Vector:
-        case layers::Layer::Text:
-        case layers::Layer::SmartObject:
-            // P8.1.1.x: add dedicated rasterizing nodes for these
-            // kinds. For now they contribute nothing to the DAG.
-            break;
+        }
         }
     }
     return prev;

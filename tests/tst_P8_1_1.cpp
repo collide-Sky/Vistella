@@ -9,6 +9,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/core/hal/interface.h>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
 
 using cv::Vec3b;
 
@@ -21,11 +22,17 @@ using cv::Vec3b;
 #include "../src/media/compositor/nodes/LayerBlendNode.h"
 #include "../src/media/compositor/nodes/LayerMaskNode.h"
 #include "../src/media/compositor/nodes/GroupNode.h"
+#include "../src/media/compositor/nodes/LayerRasterNode.h"
+#include "../src/media/compositor/nodes/LayerAdjustmentNode.h"
 #include "../src/media/compositor/nodes/LayerStackAdapter.h"
 
 #include "../src/media/imageworker/layers/Layer.h"
 #include "../src/media/imageworker/layers/LayerStack.h"
 #include "../src/media/imageworker/layers/BlendMode.h"
+
+#include <QDir>
+#include <QPainterPath>
+#include <QTemporaryDir>
 
 using layers::Layer;
 using layers::LayerPtr;
@@ -37,6 +44,9 @@ using compositor::RenderGraph;
 using compositor::LayerBitmapNode;
 using compositor::LayerBlendNode;
 using compositor::LayerMaskNode;
+using compositor::LayerStackAdapter;
+using compositor::LayerRasterNode;
+using compositor::LayerAdjustmentNode;
 using compositor::GroupNode;
 
 namespace {
@@ -146,6 +156,19 @@ private slots:
     void parity_emptyStack();
     void parity_allInvisible();
     void parity_canvasGeometry_followsBaseLayer();
+
+    // P8.1.1.x: the remaining LayerKinds. Each pins that the new node
+    // reproduces the legacy render() output for that kind.
+    void parity_textLayer_overBitmap();
+    void parity_vectorLayer_overBitmap();
+    void parity_adjustmentLayer_appliesLut();
+    void parity_adjustmentLayer_opacityMix();
+    void parity_adjustmentLayer_invalidLut_isNoOp();
+    void parity_smartObjectLayer_fromFile();
+    void parity_smartObject_missingSource_placeholder();
+    void parity_smartObject_filterChain_applied();
+    void parity_allFiveKinds_together();
+    void parity_tileBoundarySplit_seamFree();
 };
 
 void tst_P8_1_1::initTestCase() {}
@@ -927,6 +950,300 @@ void tst_P8_1_1::parity_canvasGeometry_followsBaseLayer()
 
     QCOMPARE(legacySz, cv::Size(kW, kH));
     QCOMPARE(directSz, legacySz);
+}
+
+// ---------------------------------------------------------------------------
+// P8.1.1.x: Text / Vector / SmartObject / Adjustment parity
+// ---------------------------------------------------------------------------
+namespace {
+
+// Render both paths and assert they agree, with the stack echoed in the
+// failure message so a mismatch names the configuration that broke.
+void requireParity(LayerStack& stack, const char* what, int tolerance = 2) {
+    const cv::Mat legacy = stack.render();
+    const cv::Mat direct = stack.renderViaCompositor();
+    if (legacy.empty() || direct.empty()) {
+        QVERIFY2(legacy.empty() && direct.empty(),
+                 qPrintable(QStringLiteral("%1: one path returned empty and "
+                                          "the other did not (legacy %2x%3, "
+                                          "direct %4x%5)")
+                                .arg(QString::fromLatin1(what))
+                                .arg(legacy.cols).arg(legacy.rows)
+                                .arg(direct.cols).arg(direct.rows)));
+        return;
+    }
+    const int d = maxDelta(legacy, direct);
+    QVERIFY2(d >= 0 && d <= tolerance,
+             qPrintable(QStringLiteral("%1: diverged by %2")
+                            .arg(QString::fromLatin1(what)).arg(d)));
+}
+
+// A 256x1 LUT that is obvious at a glance: everything above 128 inverts.
+cv::Mat invertHighLut() {
+    cv::Mat lut(256, 1, CV_8U);
+    for (int i = 0; i < 256; ++i) {
+        lut.at<uchar>(i) = static_cast<uchar>(i > 128 ? 255 - i : i);
+    }
+    return lut;
+}
+
+// Identity LUT, for isolating the opacity mix from the LUT math.
+cv::Mat identityLut() {
+    cv::Mat lut(256, 1, CV_8U);
+    for (int i = 0; i < 256; ++i) lut.at<uchar>(i) = static_cast<uchar>(i);
+    return lut;
+}
+
+// A rectangle covering roughly the middle third of the 0..100 space that
+// LayerStack::rasterize() scales vector paths into.
+QPainterPath midRectPath() {
+    QPainterPath p;
+    p.addRect(20, 20, 60, 60);
+    return p;
+}
+
+}   // namespace
+
+void tst_P8_1_1::parity_textLayer_overBitmap()
+{
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 12)));
+    stack.addTextLayer(QString("caption"), QString("P8.1.1.x"), 40,
+                       QColor(255, 255, 255));
+    requireParity(stack, "text over bitmap");
+
+    // Same again with a blend mode + partial opacity, so the test covers
+    // the whole Text -> mask/blend wiring and not just rasterization.
+    LayerStack blended;
+    blended.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 12)));
+    blended.addTextLayer(QString("caption"), QString("P8.1.1.x"), 40,
+                         QColor(0, 200, 255));
+    blended.setOpacity(1, 0.65f);
+    blended.setBlend(1, Layer::Screen);
+    requireParity(blended, "text over bitmap, Screen 0.65");
+}
+
+void tst_P8_1_1::parity_vectorLayer_overBitmap()
+{
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 13)));
+    stack.addVectorLayer(QString("shape"),
+                         QVector<QPainterPath>{ midRectPath() },
+                         QVector<QColor>{ QColor(200, 40, 40) });
+    requireParity(stack, "vector over bitmap");
+
+    LayerStack stroked;
+    stroked.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 13)));
+    stroked.addVectorLayer(QString("shape"),
+                           QVector<QPainterPath>{ midRectPath() },
+                           QVector<QColor>{ QColor(20, 220, 20) });
+    stroked.setOpacity(1, 0.4f);
+    stroked.setBlend(1, Layer::Multiply);
+    requireParity(stroked, "vector over bitmap, Multiply 0.4");
+}
+
+void tst_P8_1_1::parity_adjustmentLayer_appliesLut()
+{
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 14)));
+    stack.addAdjustmentLayer(QString("invert"), QString("custom"),
+                             invertHighLut());
+    requireParity(stack, "adjustment LUT", 1);
+
+    // Guard against a vacuous pass: the LUT must actually change pixels,
+    // otherwise this test would also pass if the node were a no-op.
+    const cv::Mat legacy = stack.render();
+    QCOMPARE(maxDelta(noisyTile(kW, kH, 14), legacy) > 0, true);
+}
+
+void tst_P8_1_1::parity_adjustmentLayer_opacityMix()
+{
+    // Identity LUT isolates the opacity mix: with an identity LUT,
+    // addWeighted(canvas, 1-op, canvas, op, 0) is exactly canvas, so
+    // legacy and compositor must agree exactly (delta 0) at any opacity.
+    const float ops[] = { 0.25f, 0.5f, 0.75f, 1.0f };
+    for (float op : ops) {
+        LayerStack stack;
+        stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 15)));
+        stack.addAdjustmentLayer(QString("id"), QString("custom"), identityLut());
+        stack.setOpacity(1, op);
+        QCOMPARE(maxDelta(stack.render(), stack.renderViaCompositor()), 0);
+    }
+
+    // Non-identity LUT at partial opacity exercises the real blend.
+    LayerStack mixed;
+    mixed.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 15)));
+    mixed.addAdjustmentLayer(QString("invert"), QString("custom"),
+                             invertHighLut());
+    mixed.setOpacity(1, 0.5f);
+    requireParity(mixed, "adjustment LUT @0.5", 1);
+}
+
+void tst_P8_1_1::parity_adjustmentLayer_invalidLut_isNoOp()
+{
+    // cv::LUT only accepts a 256x1 CV_8U table. The legacy branch guards
+    // all three conditions and skips the layer when any fails; the node
+    // bakes the same guard into hasUsableLut(). A wrong-shaped LUT must
+    // leave the canvas alone on both paths.
+    const cv::Mat badLuts[] = {
+        cv::Mat(128, 1, CV_8U),              // too short
+        cv::Mat(256, 1, CV_32F),             // wrong depth
+        cv::Mat(256, 3, CV_8UC3),            // not single-channel
+    };
+    for (const auto& bad : badLuts) {
+        LayerStack stack;
+        stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 16)));
+        stack.addAdjustmentLayer(QString("bad"), QString("custom"), bad);
+        const cv::Mat direct = stack.renderViaCompositor();
+        QCOMPARE(maxDelta(noisyTile(kW, kH, 16), direct), 0);
+        requireParity(stack, "adjustment with unusable LUT");
+    }
+}
+
+void tst_P8_1_1::parity_smartObjectLayer_fromFile()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString src = dir.filePath(QStringLiteral("smart_src.png"));
+    // Write something non-uniform so a resize or a wrong source would show.
+    QVERIFY(cv::imwrite(src.toStdString(), noisyTile(kW, kH, 17)));
+
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 18)));
+    stack.addSmartObjectLayer(QString("smart"), src, /*embed=*/false);
+    requireParity(stack, "smartObject from file");
+
+    // And with a blend + opacity on top of the default Normal 1.0.
+    LayerStack blended;
+    blended.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 18)));
+    blended.addSmartObjectLayer(QString("smart"), src, /*embed=*/false);
+    blended.setOpacity(1, 0.55f);
+    blended.setBlend(1, Layer::Overlay);
+    requireParity(blended, "smartObject, Overlay 0.55");
+}
+
+void tst_P8_1_1::parity_smartObject_missingSource_placeholder()
+{
+    // A missing source yields the grey "MISSING" placeholder rather than
+    // an empty Mat, so the layer still composites.
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 19)));
+    stack.addSmartObjectLayer(QString("smart"),
+                              QStringLiteral("Z:/definitely/not/here.png"),
+                              /*embed=*/false);
+    requireParity(stack, "smartObject missing source");
+}
+
+void tst_P8_1_1::parity_smartObject_filterChain_applied()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString src = dir.filePath(QStringLiteral("smart_filt.png"));
+    QVERIFY(cv::imwrite(src.toStdString(), noisyTile(kW, kH, 20)));
+
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 21)));
+    const int smart = stack.addSmartObjectLayer(QString("smart"), src,
+                                                /*embed=*/false);
+    QVERIFY(smart >= 0);
+
+    // GaussianBlur is the case that forced the chain to stay inside
+    // LayerRasterNode: its kernel reaches outside a single tile, so a
+    // per-tile implementation would seam at every tile border.
+    QVERIFY(stack.appendSmartFilter(smart, QStringLiteral("GaussianBlur"),
+                                    1.0, stack.rasterizeForRender(smart)) >= 0);
+    requireParity(stack, "smartObject + GaussianBlur");
+
+    // Chain of two, with the first disabled: disabled filters must be
+    // skipped, not applied at zero strength.
+    LayerStack chain;
+    chain.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 21)));
+    const int s2 = chain.addSmartObjectLayer(QString("smart"), src, false);
+    const int f1 = chain.appendSmartFilter(s2, QStringLiteral("GaussianBlur"),
+                                           1.5, chain.rasterizeForRender(s2));
+    const int f2 = chain.appendSmartFilter(s2, QStringLiteral("Brightness"),
+                                           0.5, chain.rasterizeForRender(s2));
+    QVERIFY(f1 >= 0);
+    QVERIFY(f2 >= 0);
+    QVERIFY(chain.setSmartFilterEnabled(s2, f1, /*enabled=*/false));
+    requireParity(chain, "smartObject, one disabled + one active filter");
+}
+
+void tst_P8_1_1::parity_allFiveKinds_together()
+{
+    // One stack exercising every kind the compositor now covers, in the
+    // z-order the legacy loop would walk them.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString src = dir.filePath(QStringLiteral("smart_mix.png"));
+    QVERIFY(cv::imwrite(src.toStdString(), noisyTile(kW, kH, 22)));
+
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 23)));
+
+    const int smart = stack.addSmartObjectLayer(QString("smart"), src, false);
+    QVERIFY(stack.appendSmartFilter(smart, QStringLiteral("Sharpen"),
+                                    0.8, stack.rasterizeForRender(smart)) >= 0);
+
+    stack.addVectorLayer(QString("shape"),
+                         QVector<QPainterPath>{ midRectPath() },
+                         QVector<QColor>{ QColor(180, 180, 30) });
+
+    stack.addTextLayer(QString("caption"), QString("P8"), 36,
+                       QColor(255, 255, 255));
+
+    stack.addAdjustmentLayer(QString("invert"), QString("custom"),
+                             invertHighLut());
+
+    requireParity(stack, "all five kinds", 2);
+
+    // Same stack with the adjustment at partial opacity and a group
+    // folded in, to catch wiring mistakes that only show once more than
+    // two nodes sit between the base and the output.
+    LayerStack groupy;
+    groupy.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 23)));
+    groupy.addVectorLayer(QString("s1"),
+                          QVector<QPainterPath>{ midRectPath() },
+                          QVector<QColor>{ QColor(180, 180, 30) });
+    groupy.addTextLayer(QString("caption"), QString("P8"), 36,
+                        QColor(255, 255, 255));
+    const int g = groupy.mergeIntoGroup({1, 2});
+    QVERIFY(g >= 0);
+    groupy.setOpacity(g, 0.7f);
+    groupy.addAdjustmentLayer(QString("invert"), QString("custom"),
+                              invertHighLut());
+    groupy.setOpacity(3, 0.8f);
+    requireParity(groupy, "group + adjustment + opacity", 2);
+}
+
+void tst_P8_1_1::parity_tileBoundarySplit_seamFree()
+{
+    // The render graph tiles the canvas. A node that slices per tile must
+    // reassemble into the same image the legacy single-pass render
+    // produces, including on the partial edge tiles — this is what
+    // catches an off-by-one in the tile slicing math.
+    //
+    // A canvas wider than one tile also exercises the multi-tile path,
+    // which a 128x128 single-tile canvas never touches.
+    LayerStack stack;
+    const cv::Mat base = noisyTile(kW * 2 + 37, kH * 2 + 19, 24);
+    stack.addLayer(makeBitmapLayer(QString("base"), base));
+    stack.addTextLayer(QString("caption"), QString("TILE"), 44,
+                       QColor(255, 255, 255));
+    stack.addAdjustmentLayer(QString("invert"), QString("custom"),
+                             invertHighLut());
+
+    // Same stack rendered by the compositor but with an explicitly tiny
+    // tile size, so the slicing runs many times over the same image.
+    LayerStackAdapter::Result built = LayerStackAdapter::build(stack);
+    QVERIFY(built.outputNode != 0);
+    TileGrid fine(kW * 2 + 37, kH * 2 + 19, /*tileSize=*/32);
+    RenderGraph rg(&built.graph, built.outputNode, &fine);
+    const cv::Mat fineRendered = rg.execute();
+
+    const cv::Mat legacy = stack.render();
+    QCOMPARE(fineRendered.size(), legacy.size());
+    QCOMPARE(maxDelta(legacy, fineRendered), 0);
 }
 
 QTEST_MAIN(tst_P8_1_1)
