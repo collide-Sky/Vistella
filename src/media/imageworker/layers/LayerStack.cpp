@@ -6,6 +6,11 @@
 #include "LayerStack.h"
 #include "BlendMode.h"
 
+// P8.1.2 (2026-10-20): compositor-backed render path.
+#include "../../compositor/TileGrid.h"
+#include "../../compositor/RenderGraph.h"
+#include "../../compositor/nodes/LayerStackAdapter.h"
+
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
@@ -1389,6 +1394,10 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
 
 cv::Mat LayerStack::render() const
 {
+    // P8.1.2 (2026-10-20): opt-in compositor path. Off by default
+    // until Vector / Text / SmartObject / Adjustment have their own
+    // CompositorNode subclasses (P8.1.1.x).
+    if (m_compositorEnabled) return renderViaCompositor();
     if (m_layers.isEmpty()) return cv::Mat();
 
     // Step 1: 找 base layer (kind=Bitmap 且 image 非空) 作 canvas
@@ -1585,6 +1594,46 @@ QStringList LayerStack::layerNames() const
 //   4. callback 捕获 cv::Mat 用 std::move — render() 返的 Mat move 进去避免额外 copy
 //   5. QCoreApplication::instance() 必须存在 (背景: 单元测试用 QTEST_MAIN 默认构造)
 //      兜底: instance() == nullptr → 同步兜底 (跟 engine==nullptr 路径一致)
+// =====================================================================
+//  P8.1.2 (2026-10-20): compositor-backed render
+// =====================================================================
+//
+// Renders the stack through the P8.1 CompositorGraph instead of the
+// legacy per-layer loop above. The DAG is rebuilt on every call
+// (LayerStack is mutable: add/remove/reorder/blend edits all happen
+// between renders), which is acceptable because the expensive part
+// is the per-pixel blend work and the tile cache lives on the
+// RenderGraph, not on the DAG.
+//
+// Feature flag: set via setCompositorEnabled(). Default is OFF so
+// the legacy path stays the default until the remaining layer kinds
+// (Vector / Text / SmartObject / Adjustment) have their nodes. Tests
+// in tst_P8_1_1 exercise this path directly.
+
+cv::Mat LayerStack::renderViaCompositor() const
+{
+    if (m_layers.isEmpty()) return cv::Mat();
+
+    compositor::LayerStackAdapter::Result built =
+        compositor::LayerStackAdapter::build(const_cast<LayerStack&>(*this));
+    if (built.outputNode == 0) {
+        // Nothing renderable (all layers invisible / non-bitmap and
+        // no group). Legacy render() would return a white canvas of
+        // canvasSize() here; mirror that so callers see the same
+        // "empty document" surface.
+        return cv::Mat(built.canvasSize, CV_8UC3, cv::Scalar(255, 255, 255));
+    }
+
+    // Canvas geometry comes from the adapter, which already had to
+    // resolve the compositing root — see LayerStackAdapter::Result.
+    compositor::TileGrid grid(built.canvasSize.width, built.canvasSize.height);
+    compositor::RenderGraph rg(&built.graph, built.outputNode, &grid);
+    return rg.execute();
+}
+
+bool LayerStack::compositorEnabled() const { return m_compositorEnabled; }
+void LayerStack::setCompositorEnabled(bool on) { m_compositorEnabled = on; }
+
 void LayerStack::renderAsync(vistella::tp::EngineContext *engine,
                               RenderCallback callback) const
 {

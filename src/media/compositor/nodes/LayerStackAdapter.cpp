@@ -36,7 +36,8 @@ private:
 static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
                                          int begin, int end,
                                          CompositorNode::NodeId base,
-                                         LayerStackAdapter::Result& r);
+                                         LayerStackAdapter::Result& r,
+                                         int forcedVisibleIdx = -1);
 
 namespace {
 
@@ -96,15 +97,23 @@ CompositorNode::NodeId appendBitmapLayer(const layers::Layer* layer,
 
 // Recursively build layers [begin, end) starting from `base`.
 // Handles LayerKind::Group by recursing into groupChildrenOf().
+// `forcedVisibleIdx` mirrors an asymmetry in the legacy LayerStack::render():
+// the base-layer search loop only checks `kind == Bitmap && !image.empty()`,
+// NOT `visible`. An invisible base layer still seeds the canvas, while the
+// compositing loop that follows DOES skip invisible layers. Passing the base
+// index here reproduces that behaviour exactly, so a stack whose only bitmap
+// layer is hidden still renders that layer's image rather than a blank canvas.
 static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
                                          int begin, int end,
                                          CompositorNode::NodeId base,
-                                         LayerStackAdapter::Result& r)
+                                         LayerStackAdapter::Result& r,
+                                         int forcedVisibleIdx)
 {
     CompositorNode::NodeId prev = base;
     for (int i = begin; i < end; ++i) {
         layers::LayerPtr layer = stack.at(i);
-        if (!layer || !layer->visible) continue;
+        if (!layer) continue;
+        if (i != forcedVisibleIdx && !layer->visible) continue;
 
         switch (layer->kind) {
         case layers::Layer::Bitmap:
@@ -218,11 +227,13 @@ LayerStackAdapter::Result LayerStackAdapter::build(layers::LayerStack& stack)
         // canvasSize() and composites everything over it. We can't
         // allocate that without a grid, so we start from the first
         // visible layer (best effort).
+        r.canvasSize = stack.canvasSize();
         r.outputNode = buildRange(stack, 0, n, 0, r);
         return r;
     }
 
-    r.outputNode = buildRange(stack, baseIdx, n, 0, r);
+    r.canvasSize = stack.at(baseIdx)->image.size();
+    r.outputNode = buildRange(stack, baseIdx, n, 0, r, baseIdx);
     return r;
 }
 

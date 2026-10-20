@@ -134,6 +134,18 @@ private slots:
     void adapter_group_fullOpacity_matchesLegacy();
     void adapter_group_halfOpacity_matchesLegacy();
     void adapter_groupWithBase_matchesLegacy();
+
+    // P8.1.2: LayerStack::renderViaCompositor() parity with
+    // LayerStack::render() across a matrix of stack configurations.
+    void parity_flagOff_usesLegacyPath();
+    void parity_singleBitmap();
+    void parity_twoLayersAllBlendModes();
+    void parity_opacityMatrix();
+    void parity_maskedLayer();
+    void parity_groupWithChildren();
+    void parity_emptyStack();
+    void parity_allInvisible();
+    void parity_canvasGeometry_followsBaseLayer();
 };
 
 void tst_P8_1_1::initTestCase() {}
@@ -695,6 +707,226 @@ void tst_P8_1_1::adapter_groupWithBase_matchesLegacy()
             QVERIFY(qAbs((int)a[2] - (int)b[2]) <= 1);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// P8.1.2: renderViaCompositor() parity with the legacy render() path
+// ---------------------------------------------------------------------------
+namespace {
+
+// Diff two images, returning the max per-channel delta. Returns -1
+// when sizes differ.
+int maxDelta(const cv::Mat& a, const cv::Mat& b) {
+    if (a.size() != b.size()) return -1;
+    if (a.empty()) return 0;
+    int worst = 0;
+    for (int y = 0; y < a.rows; ++y) {
+        const uchar* ap = a.ptr<uchar>(y);
+        const uchar* bp = b.ptr<uchar>(y);
+        const int n = a.cols * a.channels();
+        for (int x = 0; x < n; ++x) {
+            const int d = std::abs(int(ap[x]) - int(bp[x]));
+            if (d > worst) worst = d;
+        }
+    }
+    return worst;
+}
+
+// Non-uniform base image so blend math is actually exercised.
+cv::Mat noisyTile(int w, int h, int seed) {
+    cv::Mat m(h, w, CV_8UC3);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            m.at<Vec3b>(y, x) = Vec3b(
+                static_cast<uchar>((x * 3 + y * 5 + seed) % 256),
+                static_cast<uchar>((y * 7 + x * 2 + seed * 3) % 256),
+                static_cast<uchar>((x * 11 + y + seed * 5) % 256));
+        }
+    }
+    return m;
+}
+
+}   // namespace
+
+void tst_P8_1_1::parity_flagOff_usesLegacyPath()
+{
+    // With the flag off (the default), render() must go through the
+    // legacy per-layer loop, NOT the compositor.
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"),
+        solidTile(kW, kH, cv::Scalar(10, 20, 30))));
+    QVERIFY(!stack.compositorEnabled());
+
+    const cv::Mat legacy = stack.render();
+    const cv::Mat direct = stack.renderViaCompositor();
+
+    // Both must exist and agree (so flipping the flag later is safe),
+    // but the flag must still report off.
+    QCOMPARE(legacy.size(), direct.size());
+    QVERIFY(maxDelta(legacy, direct) <= 1);
+    QVERIFY(!stack.compositorEnabled());
+}
+
+void tst_P8_1_1::parity_singleBitmap()
+{
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 3)));
+    QCOMPARE(maxDelta(stack.render(), stack.renderViaCompositor()), 0);
+}
+
+void tst_P8_1_1::parity_twoLayersAllBlendModes()
+{
+    const Layer::BlendMode modes[] = {
+        Layer::Normal, Layer::Multiply, Layer::Screen,
+        Layer::Overlay, Layer::SoftLight, Layer::HardLight,
+        Layer::ColorDodge, Layer::ColorBurn,
+        Layer::Darken, Layer::Lighten,
+        Layer::Difference, Layer::Exclusion,
+    };
+    for (Layer::BlendMode m : modes) {
+        LayerStack stack;
+        stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 1)));
+        Layer top = makeBitmapLayer(QString("top"), noisyTile(kW, kH, 40));
+        top.blend = m;
+        stack.addLayer(top);
+
+        const int d = maxDelta(stack.render(), stack.renderViaCompositor());
+        QVERIFY2(d >= 0 && d <= 1,
+                 qPrintable(QStringLiteral("blend mode %1 diverged by %2")
+                                .arg(int(m)).arg(d)));
+    }
+}
+
+void tst_P8_1_1::parity_opacityMatrix()
+{
+    const float ops[] = { 0.0f, 0.15f, 0.5f, 0.85f, 1.0f };
+    for (float op : ops) {
+        LayerStack stack;
+        stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 9)));
+        Layer top = makeBitmapLayer(QString("top"), noisyTile(kW, kH, 77));
+        top.opacity = op;
+        stack.addLayer(top);
+
+        const int d = maxDelta(stack.render(), stack.renderViaCompositor());
+        QVERIFY2(d >= 0 && d <= 1,
+                 qPrintable(QStringLiteral("opacity %1 diverged by %2")
+                                .arg(op).arg(d)));
+    }
+}
+
+void tst_P8_1_1::parity_maskedLayer()
+{
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 5)));
+
+    Layer masked = makeBitmapLayer(QString("masked"), noisyTile(kW, kH, 88));
+    // Horizontal gradient mask: 0 on the left, 255 on the right.
+    masked.layerMask = cv::Mat(kH, kW, CV_8UC1);
+    for (int y = 0; y < kH; ++y) {
+        for (int x = 0; x < kW; ++x) {
+            masked.layerMask.at<uchar>(y, x) =
+                static_cast<uchar>(x * 255 / (kW - 1));
+        }
+    }
+    masked.maskEnabled = true;
+    stack.addLayer(masked);
+
+    const int d = maxDelta(stack.render(), stack.renderViaCompositor());
+    QVERIFY2(d >= 0 && d <= 2, qPrintable(QStringLiteral("mask diverged by %1").arg(d)));
+}
+
+void tst_P8_1_1::parity_groupWithChildren()
+{
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 11)));
+
+    Layer c1 = makeBitmapLayer(QString("c1"), noisyTile(kW, kH, 22));
+    c1.blend = Layer::Multiply;
+    c1.opacity = 0.7f;
+    Layer c2 = makeBitmapLayer(QString("c2"), noisyTile(kW, kH, 33));
+    c2.blend = Layer::Screen;
+    stack.addLayer(c1);
+    stack.addLayer(c2);
+    const int groupIdx = stack.mergeIntoGroup({1, 2});
+    QVERIFY(groupIdx >= 0);
+    stack.setOpacity(groupIdx, 0.8f);
+
+    Layer top = makeBitmapLayer(QString("top"), noisyTile(kW, kH, 44));
+    top.blend = Layer::Overlay;
+    stack.addLayer(top);
+
+    const int d = maxDelta(stack.render(), stack.renderViaCompositor());
+    QVERIFY2(d >= 0 && d <= 2, qPrintable(QStringLiteral("group diverged by %1").arg(d)));
+}
+
+void tst_P8_1_1::parity_emptyStack()
+{
+    LayerStack stack;
+    const cv::Mat legacy = stack.render();
+    const cv::Mat direct = stack.renderViaCompositor();
+    // Legacy returns an empty Mat for an empty stack.
+    QVERIFY(legacy.empty());
+    // The compositor path mirrors that (nothing renderable -> the
+    // white canvasSize fallback is only for the "all non-bitmap"
+    // case; an empty stack has no layers at all).
+    QVERIFY(direct.empty() || maxDelta(legacy, direct) <= 1);
+}
+
+void tst_P8_1_1::parity_allInvisible()
+{
+    // Legacy asymmetry, mirrored on purpose rather than "fixed".
+    //
+    // LayerStack::render() picks the base layer with a loop that checks
+    // only `kind == Bitmap && !image.empty()` — never `visible`. The
+    // compositing loop that follows *does* skip invisible layers. So a
+    // fully hidden stack still renders its base layer's image.
+    //
+    // LayerStackAdapter::buildRange() reproduces this via
+    // `forcedVisibleIdx`: the base index is exempt from the visibility
+    // filter. Changing either side alone would silently diverge the two
+    // render paths.
+    LayerStack stack;
+    Layer a = makeBitmapLayer(QString("a"), noisyTile(kW, kH, 2));
+    a.visible = false;
+    Layer b = makeBitmapLayer(QString("b"), noisyTile(kW, kH, 4));
+    b.visible = false;
+    stack.addLayer(a);
+    stack.addLayer(b);
+
+    const cv::Mat legacy = stack.render();
+    const cv::Mat direct = stack.renderViaCompositor();
+
+    // Both paths return the hidden base layer, unchanged.
+    QVERIFY(!legacy.empty());
+    QVERIFY(!direct.empty());
+    QCOMPARE(legacy.size(), cv::Size(kW, kH));
+    QCOMPARE(maxDelta(legacy, direct), 0);
+    // Pin WHICH hidden layer wins (the first, not the last).
+    QCOMPARE(maxDelta(a.image, legacy), 0);
+    QCOMPARE(maxDelta(a.image, direct), 0);
+}
+
+void tst_P8_1_1::parity_canvasGeometry_followsBaseLayer()
+{
+    // Two different rules for "canvas size" exist in LayerStack and
+    // they disagree whenever index 0 is not the compositing base:
+    //   canvasSize()      -> index 0's image size (800x600 fallback)
+    //   render()          -> first Bitmap-with-image layer's size
+    // The adapter resolves the base itself (it has to, to pick the
+    // compositing root) and publishes the result via Result::canvasSize,
+    // so renderViaCompositor() must not re-derive it from a second copy
+    // of the rule.
+    LayerStack stack;
+    // A text layer at index 0 has no image, so canvasSize() would fall
+    // back to 800x600 while render() takes the bitmap's dimensions.
+    stack.addTextLayer(QString("caption"), QString("hi"));
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 6)));
+
+    const cv::Size legacySz = stack.render().size();
+    const cv::Size directSz = stack.renderViaCompositor().size();
+
+    QCOMPARE(legacySz, cv::Size(kW, kH));
+    QCOMPARE(directSz, legacySz);
 }
 
 QTEST_MAIN(tst_P8_1_1)

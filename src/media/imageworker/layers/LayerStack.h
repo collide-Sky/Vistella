@@ -245,6 +245,21 @@ public:
     using RenderCallback = std::function<void(cv::Mat)>;
     void renderAsync(vistella::tp::EngineContext *engine, RenderCallback callback) const;
 
+    // ---- P8.1.2 (2026-10-20): compositor-backed render ----
+    //   renderViaCompositor() builds a P8.1 CompositorGraph from this
+    //   stack (LayerBitmapNode + LayerBlendNode + LayerMaskNode +
+    //   GroupNode) and renders it through RenderGraph + TileCache.
+    //
+    //   render() consults the compositorEnabled flag and dispatches
+    //   here when it is on. Default OFF, because Vector / Text /
+    //   SmartObject / Adjustment layers still have no node type
+    //   (P8.1.1.x). Those layers contribute nothing to the DAG, so
+    //   enabling the flag before they land would silently drop them
+    //   from the render.
+    cv::Mat renderViaCompositor() const;
+    bool    compositorEnabled() const;
+    void    setCompositorEnabled(bool on);
+
     // Phase 3 (2026-09-04): 画布尺寸
     //   渲染非 Bitmap (text/vector/smart) 时需要知道输出尺寸
     //   默认 = base layer image 尺寸, 或 800x600 fallback
@@ -270,6 +285,11 @@ signals:
 
 private:
     QList<LayerPtr> m_layers;
+
+    // P8.1.2 (2026-10-20): opt-in switch for renderViaCompositor().
+    // Default false; see the renderViaCompositor() declaration above
+    // for why it cannot be the default yet.
+    bool m_compositorEnabled = false;
     int  m_selection = -1;
     // Phase 3: 画布尺寸 (无 base layer 时 rasterize text/vector 用)
     cv::Size m_canvasSize = cv::Size(800, 600);

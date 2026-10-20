@@ -38,6 +38,8 @@
 #include <QList>
 #include <QString>
 
+#include <opencv2/core.hpp>
+
 #include <memory>
 #include <vector>
 
@@ -50,6 +52,18 @@ public:
     struct Result {
         CompositorGraph         graph;
         CompositorNode::NodeId  outputNode = 0;
+
+        // Canvas geometry the graph was built for. The adapter owns
+        // base-layer discovery (it has to pick the compositing root
+        // anyway), so it publishes the resulting geometry here instead
+        // of letting callers re-scan the stack with a second, drifting
+        // copy of the same rule.
+        //
+        // Rules, matching the legacy LayerStack::render():
+        //   - a base bitmap layer exists -> its image size wins
+        //     (canvas is that layer's image.clone());
+        //   - otherwise -> LayerStack::canvasSize() (white fallback).
+        cv::Size canvasSize;
 
         // Every node the adapter created. The graph stores raw
         // pointers, so the Result must outlive the graph.
