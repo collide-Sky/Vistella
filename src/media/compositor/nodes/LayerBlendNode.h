@@ -1,26 +1,27 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerBlendNode - P8.1.1 (2026-10-19) blend two layer tiles.
+// LayerBlendNode - P8.1.1 (2026-10-16) blend two layer tiles.
 //
 //   A node with two input ports (base, blend) that produces a single
 //   output tile = blend(base, blend_layer, mode, opacity).
 //
-//   MVP mode coverage (will expand in P8.1.1.x):
-//     - Normal:   out = base*(1-a) + top*a
-//     - Multiply: out = base*top / 255
-//     - Screen:   out = 255 - (255-base)*(255-top)/255
-//     - Darken:   out = min(base, top)
-//     - Lighten:  out = max(base, top)
-//     - Difference: out = |base - top|
+//   P8.1.1 Phase B (2026-10-20): delegates to layers::applyBlend() so
+//   the compositor uses EXACTLY the same math as the legacy
+//   LayerStack::render() path. Previously this node had its own
+//   hand-rolled per-pixel implementations for 6 modes, which meant
+//   two sets of blend math to keep in sync. Now there is one.
 //
-//   Other blend modes (Overlay/SoftLight/HardLight/ColorDodge/ColorBurn/
-//   Exclusion/Hue/Saturation/Color/Luminosity) fall through to Normal
-//   in P8.1.1. They will be filled in once the LayerStack adapter
-//   needs them (the Layer already enumerates 15 modes; the GPU shader
-//   path will accelerate them in P8.2.x+).
+//   Tile geometry note: layers::canBlend() requires base.size() ==
+//   blend.size(). In the compositor, edge tiles can have differing
+//   sizes (the base may be full-grid while the top is a partial
+//   edge tile). We resolve that by cropping/padding to the common
+//   size before delegating, and writing the result back into the
+//   grid's tile rect.
 //
-//   Per-tile inputs are CV_8UC3 BGR (the project-wide convention). The
-//   opacity field blends the top layer's alpha before the blend math.
+//   Supported modes: all 15 in Layer::BlendMode. The four HSV
+//   composite modes (Hue / Saturation / Color / Luminosity) fall
+//   back to Normal in BlendMode.cpp (Phase 3 declared, not
+//   implemented) — they will land in BlendMode.cpp, not here.
 
 #pragma once
 

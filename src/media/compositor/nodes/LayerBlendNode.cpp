@@ -1,138 +1,66 @@
+// SPDX-License-Identifier: MIT
+//
+// LayerBlendNode impl - P8.1.1 Phase B (2026-10-20)
+//
+//   Delegates to layers::applyBlend() so compositor blend math is
+//   identical to the legacy LayerStack::render() path. The only
+//   compositor-specific concern is tile geometry: edge tiles may
+//   have different sizes on base vs top (because the source layers
+//   can be different resolutions, or because one side is a partial
+//   edge tile). layers::canBlend() requires identical sizes, so we
+//   normalize to the grid's tile rect before delegating.
+
 #include "LayerBlendNode.h"
 
 #include "../RenderGraph.h"   // for RenderContext full definition
 #include "../TileGrid.h"
 
-#include <opencv2/core.hpp>
+#include "../../imageworker/layers/BlendMode.h"   // layers::applyBlend
+
+#include <opencv2/imgproc.hpp>   // cv::cvtColor
+#include <algorithm>
 
 namespace compositor {
 
 namespace {
 
-// Apply opacity to a CV_8UC3 tile: out = top * opacity (saturating).
-// Used to pre-multiply the top layer before blend math.
-cv::Mat applyOpacity(const cv::Mat& top, float opacity) {
-    if (opacity >= 0.999f) return top;
-    if (opacity <= 0.001f) {
-        return cv::Mat::zeros(top.size(), top.type());
-    }
-    cv::Mat out(top.size(), top.type());
-    for (int y = 0; y < out.rows; ++y) {
-        const uchar* sp = top.ptr<uchar>(y);
-        uchar* dp = out.ptr<uchar>(y);
-        for (int x = 0; x < out.cols * 3; ++x) {
-            int v = static_cast<int>(sp[x] * opacity + 0.5f);
-            dp[x] = static_cast<uchar>(v > 255 ? 255 : v);
+// Force `src` to match `dst` geometry by zero-padding or center-
+// cropping. Returns a CV_8UC3 copy of exactly dst.size().
+cv::Mat fitToSize(const cv::Mat& src, const cv::Size& target) {
+    if (src.empty()) return cv::Mat();
+    cv::Mat work = src;
+    if (work.type() != CV_8UC3) {
+        if (work.channels() == 1) {
+            cv::Mat bgr;
+            cv::cvtColor(work, bgr, cv::COLOR_GRAY2BGR);
+            work = bgr;
+        } else if (work.channels() == 4) {
+            cv::Mat bgr;
+            cv::cvtColor(work, bgr, cv::COLOR_BGRA2BGR);
+            work = bgr;
+        } else {
+            return cv::Mat();
         }
+    }
+    if (work.size() == target) return work;
+
+    const int tw = target.width;
+    const int th = target.height;
+
+    if (work.cols >= tw && work.rows >= th) {
+        // Crop from the top-left (compositor convention: the tile
+        // origin is the image origin, not the center).
+        return work(cv::Rect(0, 0, tw, th)).clone();
+    }
+    // Zero-pad (canvas origin alignment).
+    cv::Mat out(th, tw, CV_8UC3, cv::Scalar(0, 0, 0));
+    const int copyW = std::min(tw, work.cols);
+    const int copyH = std::min(th, work.rows);
+    if (copyW > 0 && copyH > 0) {
+        work(cv::Rect(0, 0, copyW, copyH))
+            .copyTo(out(cv::Rect(0, 0, copyW, copyH)));
     }
     return out;
-}
-
-// Normal blend: out = base*(1-a) + top*a, with a = opacity. The
-// caller has NOT pre-multiplied top; opacity is applied here directly.
-void blendNormal(const cv::Mat& base, const cv::Mat& top,
-                 cv::Mat& out, float opacity) {
-    out.create(base.size(), base.type());
-    const float a = opacity;
-    const float ia = 1.0f - a;
-    for (int y = 0; y < out.rows; ++y) {
-        const uchar* bp = base.ptr<uchar>(y);
-        const uchar* tp = top.ptr<uchar>(y);
-        uchar* dp = out.ptr<uchar>(y);
-        for (int x = 0; x < out.cols * 3; ++x) {
-            int v = static_cast<int>(bp[x] * ia + tp[x] * a + 0.5f);
-            dp[x] = static_cast<uchar>(v > 255 ? 255 : v);
-        }
-    }
-}
-
-// Multiply: out = (base * top + 127) / 255, then alpha-blend with base.
-//   Equivalent to:  m = (base * top)/255; out = base*(1-a) + m*a
-void blendMultiply(const cv::Mat& base, const cv::Mat& top,
-                  cv::Mat& out, float opacity) {
-    out.create(base.size(), base.type());
-    const float a = opacity;
-    const float ia = 1.0f - a;
-    for (int y = 0; y < out.rows; ++y) {
-        const uchar* bp = base.ptr<uchar>(y);
-        const uchar* tp = top.ptr<uchar>(y);
-        uchar* dp = out.ptr<uchar>(y);
-        for (int x = 0; x < out.cols * 3; ++x) {
-            const int m = (bp[x] * tp[x] + 127) / 255;
-            int v = static_cast<int>(bp[x] * ia + m * a + 0.5f);
-            dp[x] = static_cast<uchar>(v > 255 ? 255 : v);
-        }
-    }
-}
-
-// Screen: out = 255 - (255-base)*(255-top)/255, then alpha-blend.
-void blendScreen(const cv::Mat& base, const cv::Mat& top,
-                 cv::Mat& out, float opacity) {
-    out.create(base.size(), base.type());
-    const float a = opacity;
-    const float ia = 1.0f - a;
-    for (int y = 0; y < out.rows; ++y) {
-        const uchar* bp = base.ptr<uchar>(y);
-        const uchar* tp = top.ptr<uchar>(y);
-        uchar* dp = out.ptr<uchar>(y);
-        for (int x = 0; x < out.cols * 3; ++x) {
-            const int s = 255 - ((255 - bp[x]) * (255 - tp[x]) + 127) / 255;
-            int v = static_cast<int>(bp[x] * ia + s * a + 0.5f);
-            dp[x] = static_cast<uchar>(v > 255 ? 255 : (v < 0 ? 0 : v));
-        }
-    }
-}
-
-// Darken / Lighten: per-channel min/max, then alpha-blend.
-void blendDarken(const cv::Mat& base, const cv::Mat& top,
-                 cv::Mat& out, float opacity) {
-    out.create(base.size(), base.type());
-    const float a = opacity;
-    const float ia = 1.0f - a;
-    for (int y = 0; y < out.rows; ++y) {
-        const uchar* bp = base.ptr<uchar>(y);
-        const uchar* tp = top.ptr<uchar>(y);
-        uchar* dp = out.ptr<uchar>(y);
-        for (int x = 0; x < out.cols * 3; ++x) {
-            const int d = std::min(bp[x], tp[x]);
-            int v = static_cast<int>(bp[x] * ia + d * a + 0.5f);
-            dp[x] = static_cast<uchar>(v > 255 ? 255 : v);
-        }
-    }
-}
-void blendLighten(const cv::Mat& base, const cv::Mat& top,
-                  cv::Mat& out, float opacity) {
-    out.create(base.size(), base.type());
-    const float a = opacity;
-    const float ia = 1.0f - a;
-    for (int y = 0; y < out.rows; ++y) {
-        const uchar* bp = base.ptr<uchar>(y);
-        const uchar* tp = top.ptr<uchar>(y);
-        uchar* dp = out.ptr<uchar>(y);
-        for (int x = 0; x < out.cols * 3; ++x) {
-            const int l = std::max(bp[x], tp[x]);
-            int v = static_cast<int>(bp[x] * ia + l * a + 0.5f);
-            dp[x] = static_cast<uchar>(v > 255 ? 255 : v);
-        }
-    }
-}
-
-// Difference: per-channel |base - top|, then alpha-blend.
-void blendDifference(const cv::Mat& base, const cv::Mat& top,
-                    cv::Mat& out, float opacity) {
-    out.create(base.size(), base.type());
-    const float a = opacity;
-    const float ia = 1.0f - a;
-    for (int y = 0; y < out.rows; ++y) {
-        const uchar* bp = base.ptr<uchar>(y);
-        const uchar* tp = top.ptr<uchar>(y);
-        uchar* dp = out.ptr<uchar>(y);
-        for (int x = 0; x < out.cols * 3; ++x) {
-            const int di = std::abs(bp[x] - tp[x]);
-            int v = static_cast<int>(bp[x] * ia + di * a + 0.5f);
-            dp[x] = static_cast<uchar>(v > 255 ? 255 : v);
-        }
-    }
 }
 
 }   // namespace
@@ -156,52 +84,25 @@ cv::Mat LayerBlendNode::compute(int tileX, int tileY,
 {
     cv::Mat base = ctx.requestNodeTile(m_base, tileX, tileY);
     cv::Mat top  = ctx.requestNodeTile(m_top,  tileX, tileY);
+
+    // Missing base -> no output (the caller leaves the canvas black,
+    // which matches the legacy render() behavior for a missing base).
     if (base.empty()) return cv::Mat();
-    if (top.empty())  return base;   // missing top = pass-through
+    // Missing top -> pass through base unchanged.
+    if (top.empty()) return base;
 
-    // Make sure both are CV_8UC3 with the same size as the grid slot.
-    const cv::Rect r = grid.tileRect(tileX, tileY);
-    if (top.size() != r.size() || top.type() != CV_8UC3) {
-        // Mismatched geometry: bail to base (best effort).
-        return base;
-    }
-    if (base.size() != r.size() || base.type() != CV_8UC3) {
-        return top;
+    // Normalize both sides to the grid's tile rect so layers::
+    // canBlend() sees matching geometry.
+    const cv::Size want = grid.tileRect(tileX, tileY).size();
+    const cv::Mat baseFit = fitToSize(base, want);
+    const cv::Mat topFit  = fitToSize(top,  want);
+    if (baseFit.empty() || topFit.empty()) {
+        return base;   // geometry mismatch we cannot reconcile
     }
 
-    // Opacity is applied per-mode in the blend helpers (so each
-    // mode can choose how to mix base and top). We do NOT pre-scale
-    // top here because that would lose base's contribution for
-    // non-100% opacity.
-    cv::Mat out;
-    switch (m_mode) {
-    case layers::Layer::Normal:
-        blendNormal(base, top, out, m_opacity);
-        break;
-    case layers::Layer::Multiply:
-        blendMultiply(base, top, out, m_opacity);
-        break;
-    case layers::Layer::Screen:
-        blendScreen(base, top, out, m_opacity);
-        break;
-    case layers::Layer::Darken:
-        blendDarken(base, top, out, m_opacity);
-        break;
-    case layers::Layer::Lighten:
-        blendLighten(base, top, out, m_opacity);
-        break;
-    case layers::Layer::Difference:
-        blendDifference(base, top, out, m_opacity);
-        break;
-    default:
-        // P8.1.1.x will add Overlay/SoftLight/HardLight/ColorDodge/
-        // ColorBurn/Exclusion/Hue/Saturation/Color/Luminosity.
-        // For now: fall through to Normal so the rest of the
-        // pipeline still produces a usable image.
-        blendNormal(base, top, out, m_opacity);
-        break;
-    }
-    return out;
+    // Delegate. layers::applyBlend already handles opacity and all
+    // 15 blend modes (the 4 HSV modes fall back to Normal there).
+    return layers::applyBlend(m_mode, baseFit, topFit, m_opacity);
 }
 
 } // namespace compositor

@@ -315,14 +315,17 @@ add_library(vistella_media STATIC
     compositor/nodes/LayerBitmapNode.cpp
 
     # P8.1.1 (2026-10-19): LayerStack -> CompositorGraph adapter
-    #   + LayerBlendNode (Normal/Multiply/Screen/Darken/Lighten/
-    #     Difference for MVP; more modes in P8.1.1.x).
+    #   + LayerBlendNode (delegates to layers::applyBlend, all 15 modes).
     #   + LayerMaskNode (per-pixel multiplicative attenuation).
-    #   + LayerStackAdapter (builds a DAG from a layers::LayerStack).
+    #   + GroupNode (Phase B: group opacity over composited children).
+    #   + LayerStackAdapter (builds a DAG from a layers::LayerStack,
+    #     Phase B adds recursive LayerKind::Group support).
     compositor/nodes/LayerBlendNode.h
     compositor/nodes/LayerBlendNode.cpp
     compositor/nodes/LayerMaskNode.h
     compositor/nodes/LayerMaskNode.cpp
+    compositor/nodes/GroupNode.h
+    compositor/nodes/GroupNode.cpp
     compositor/nodes/LayerStackAdapter.h
     compositor/nodes/LayerStackAdapter.cpp
 
