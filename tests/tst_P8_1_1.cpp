@@ -31,6 +31,7 @@ using cv::Vec3b;
 #include "../src/media/imageworker/layers/BlendMode.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QPainterPath>
 #include <QTemporaryDir>
 
@@ -47,6 +48,8 @@ using compositor::LayerMaskNode;
 using compositor::LayerStackAdapter;
 using compositor::LayerRasterNode;
 using compositor::LayerAdjustmentNode;
+using compositor::LayerOpacityNode;
+using compositor::SolidCanvasNode;
 using compositor::GroupNode;
 
 namespace {
@@ -148,6 +151,7 @@ private slots:
     // P8.1.2: LayerStack::renderViaCompositor() parity with
     // LayerStack::render() across a matrix of stack configurations.
     void parity_flagOff_usesLegacyPath();
+    void parity_defaultUsesCompositorPath();
     void parity_singleBitmap();
     void parity_twoLayersAllBlendModes();
     void parity_opacityMatrix();
@@ -169,6 +173,11 @@ private slots:
     void parity_smartObject_filterChain_applied();
     void parity_allFiveKinds_together();
     void parity_tileBoundarySplit_seamFree();
+    void perf_compositorNotPathologicallySlower();
+    void parity_baseLayerOpacity_darkensOverBlack();
+    void parity_noBitmapBase_startsFromWhiteCanvas();
+    void opacityNode_halvesTowardBlack();
+    void solidCanvasNode_fillsEveryTile();
 };
 
 void tst_P8_1_1::initTestCase() {}
@@ -773,21 +782,48 @@ cv::Mat noisyTile(int w, int h, int seed) {
 
 void tst_P8_1_1::parity_flagOff_usesLegacyPath()
 {
-    // With the flag off (the default), render() must go through the
-    // legacy per-layer loop, NOT the compositor.
+    // The flag is turned OFF explicitly rather than relying on the
+    // default: since P8.2 the default is ON, so a test that only checks
+    // "flag is off" would stop testing anything. The legacy per-layer
+    // loop stays reachable through this switch and is what the rest of
+    // this file compares against, so it must keep working.
     LayerStack stack;
     stack.addLayer(makeBitmapLayer(QString("base"),
         solidTile(kW, kH, cv::Scalar(10, 20, 30))));
+    stack.setCompositorEnabled(false);
     QVERIFY(!stack.compositorEnabled());
 
     const cv::Mat legacy = stack.render();
     const cv::Mat direct = stack.renderViaCompositor();
 
-    // Both must exist and agree (so flipping the flag later is safe),
-    // but the flag must still report off.
+    // Both must exist and agree (so turning the flag back on is safe),
+    // and the flag must still report off after rendering.
     QCOMPARE(legacy.size(), direct.size());
     QVERIFY(maxDelta(legacy, direct) <= 1);
     QVERIFY(!stack.compositorEnabled());
+}
+
+void tst_P8_1_1::parity_defaultUsesCompositorPath()
+{
+    // P8.2: a default-constructed LayerStack renders through the
+    // compositor. This is the test that would catch the default being
+    // flipped back, or render() quietly ignoring the flag.
+    LayerStack stack;
+    QVERIFY(stack.compositorEnabled());
+
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 31)));
+    stack.addTextLayer(QString("caption"), QString("P8.2"), 32,
+                       QColor(255, 255, 255));
+
+    // render() (flag on) must equal an explicit compositor render...
+    QCOMPARE(maxDelta(stack.render(), stack.renderViaCompositor()), 0);
+
+    // ...and must equal the legacy loop with the flag off. That is the
+    // whole point of the flip: users must not see a different picture.
+    stack.setCompositorEnabled(false);
+    const cv::Mat legacy = stack.render();
+    stack.setCompositorEnabled(true);
+    QCOMPARE(maxDelta(legacy, stack.render()), 0);
 }
 
 void tst_P8_1_1::parity_singleBitmap()
@@ -1244,6 +1280,181 @@ void tst_P8_1_1::parity_tileBoundarySplit_seamFree()
     const cv::Mat legacy = stack.render();
     QCOMPARE(fineRendered.size(), legacy.size());
     QCOMPARE(maxDelta(legacy, fineRendered), 0);
+}
+
+void tst_P8_1_1::perf_compositorNotPathologicallySlower()
+{
+    // P8.2 made the compositor the default render path, so its cost is
+    // now on every render. The DAG rebuilds per render() call and slices
+    // the canvas into tiles, which the legacy single-pass loop does not,
+    // so this measures the gap on a realistically sized stack.
+    //
+    // The assertion is deliberately loose (8x). A per-pixel cost
+    // difference of this kind is machine- and build-dependent and would
+    // make a tight bound flaky. The point is to catch an accidental
+    // O(tiles * layers^2) or a per-tile re-rasterize — a regression that
+    // shows up as 100x, not 2x. The measured numbers are printed so a
+    // real slowdown is visible in the log rather than silently tolerated.
+    LayerStack stack;
+    const int W = 2048, H = 1536;   // ~3 MP, a large but ordinary photo
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(W, H, 41)));
+    for (int i = 0; i < 5; ++i) {
+        Layer top = makeBitmapLayer(QString("layer%1").arg(i),
+                                    noisyTile(W, H, 50 + i));
+        top.blend = (i % 2) ? Layer::Multiply : Layer::Screen;
+        top.opacity = 0.6f;
+        stack.addLayer(top);
+    }
+    stack.addTextLayer(QString("caption"), QString("BENCH"), 96,
+                       QColor(255, 255, 255));
+    stack.addAdjustmentLayer(QString("invert"), QString("custom"),
+                             invertHighLut());
+
+    // Warm up: the first compositor render pays one-off allocation and
+    // OpenCV lazy-init costs that would otherwise land on the legacy run.
+    stack.renderViaCompositor();
+
+    const int kRuns = 3;
+    QElapsedTimer t;
+
+    t.start();
+    for (int i = 0; i < kRuns; ++i) stack.setCompositorEnabled(false), stack.render();
+    const qint64 legacyMs = t.elapsed();
+
+    t.start();
+    for (int i = 0; i < kRuns; ++i) stack.setCompositorEnabled(true), stack.render();
+    const qint64 compositorMs = t.elapsed();
+
+    const double legacyAvg = double(legacyMs) / kRuns;
+    const double compAvg = double(compositorMs) / kRuns;
+    qInfo("render cost on %dx%d, 7 layers: legacy %.1f ms, compositor %.1f ms "
+          "(%.2fx)", W, H, legacyAvg, compAvg,
+          legacyAvg > 0 ? compAvg / legacyAvg : 0.0);
+
+    QVERIFY2(compAvg <= legacyAvg * 8.0,
+             qPrintable(QStringLiteral("compositor render is %1x slower than "
+                                      "legacy (%2 ms vs %3 ms)")
+                            .arg(legacyAvg > 0 ? compAvg / legacyAvg : 0.0, 0, 'f', 2)
+                            .arg(compAvg, 0, 'f', 1)
+                            .arg(legacyAvg, 0, 'f', 1)));
+}
+
+void tst_P8_1_1::parity_baseLayerOpacity_darkensOverBlack()
+{
+    // Regression guard for a parity bug the P8.2 flip exposed.
+    //
+    // The legacy loop treats the compositing base layer differently from
+    // every other layer: it seeds the canvas with the base image and then
+    // applies `addWeighted(canvas, opacity, zeros, 0, 0)` — compositing it
+    // over a BLACK backdrop at its own opacity. Every other layer reaches
+    // its opacity through applyBlend(). An earlier adapter version used
+    // "base == 0 means this layer is the canvas" and so skipped the step
+    // entirely, which tst_LayerStack::test_render_blend caught.
+    //
+    // Only the base layer gets this treatment, so the second layer here is
+    // the control: same opacity, reached the normal way.
+    const float ops[] = { 0.25f, 0.5f, 0.75f };
+    for (float op : ops) {
+        LayerStack stack;
+        stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 60)));
+        stack.setOpacity(0, op);
+        stack.addLayer(makeBitmapLayer(QString("top"), noisyTile(kW, kH, 61)));
+        stack.setOpacity(1, op);
+        requireParity(stack, "base layer opacity");
+    }
+
+    // A lone translucent base with nothing above it is the minimal case.
+    LayerStack lone;
+    lone.addLayer(makeBitmapLayer(QString("base"), solidTile(kW, kH,
+                                                           cv::Scalar(200, 100, 40))));
+    lone.setOpacity(0, 0.5f);
+    const cv::Mat legacy = lone.render();
+    QCOMPARE(maxDelta(lone.renderViaCompositor(), legacy), 0);
+    // Pin the actual expectation, not just agreement: 0.5 over black.
+    QCOMPARE(legacy.at<cv::Vec3b>(4, 4), cv::Vec3b(100, 50, 20));
+}
+
+void tst_P8_1_1::parity_noBitmapBase_startsFromWhiteCanvas()
+{
+    // A stack with no Bitmap-with-image layer at all. Legacy falls back
+    // to a WHITE canvas of canvasSize() and blends every visible layer
+    // onto it; the DAG reproduces that with a SolidCanvasNode root. The
+    // earlier adapter instead treated the first visible layer as the
+    // canvas, which lost that layer's opacity AND started from black.
+    LayerStack stack;
+    stack.setCanvasSize(cv::Size(kW, kH));
+    stack.addTextLayer(QString("caption"), QString("ONLY"), 40,
+                       QColor(0, 0, 0));
+
+    const cv::Mat legacy = stack.render();
+    const cv::Mat direct = stack.renderViaCompositor();
+    QVERIFY(!legacy.empty());
+    QCOMPARE(direct.size(), legacy.size());
+    QCOMPARE(maxDelta(legacy, direct), 0);
+
+    // Note the text layer cannot itself prove the root colour: rasterize()
+    // drops the alpha channel in its BGRA->BGR conversion, so a
+    // transparent background becomes black and the text raster covers
+    // the whole canvas. Whatever the root was, Normal blend at opacity 1
+    // replaces it outright.
+    //
+    // An Adjustment layer is the one that reads the root through, so it
+    // is the discriminator. The marker LUT maps 255 -> 77 and is the
+    // identity elsewhere: a white root yields 77, a black root yields 0.
+    cv::Mat marker(256, 1, CV_8U);
+    for (int i = 0; i < 256; ++i) marker.at<uchar>(i) = static_cast<uchar>(i);
+    marker.at<uchar>(255) = 77;
+
+    LayerStack probe;
+    probe.setCanvasSize(cv::Size(kW, kH));
+    probe.addAdjustmentLayer(QString("marker"), QString("custom"), marker);
+
+    const cv::Mat probedLegacy = probe.render();
+    const cv::Mat probedDirect = probe.renderViaCompositor();
+    QCOMPARE(maxDelta(probedLegacy, probedDirect), 0);
+    QCOMPARE(probedLegacy.at<cv::Vec3b>(2, 2), cv::Vec3b(77, 77, 77));
+    QCOMPARE(probedDirect.at<cv::Vec3b>(2, 2), cv::Vec3b(77, 77, 77));
+}
+
+void tst_P8_1_1::opacityNode_halvesTowardBlack()
+{
+    // Unit-level check of the node the base layer relies on, so a break
+    // here names the node rather than surfacing as a stack-level mismatch.
+    Layer srcLayer = makeBitmapLayer(QString("l"),
+                                     solidTile(8, 8, cv::Scalar(200, 100, 40)));
+    LayerBitmapNode src(&srcLayer);
+    LayerOpacityNode fade(src.id(), 0.5f);
+
+    CompositorGraph g;
+    g.addNode(&src);
+    g.addNode(&fade);
+    g.addEdge(src.id(), fade.id());
+
+    TileGrid grid(8, 8);
+    RenderGraph rg(&g, fade.id(), &grid);
+    const cv::Mat out = rg.execute();
+
+    QCOMPARE(out.at<cv::Vec3b>(4, 4), cv::Vec3b(100, 50, 20));
+}
+
+void tst_P8_1_1::solidCanvasNode_fillsEveryTile()
+{
+    // Multi-tile canvas with partial edge tiles: every tile must come
+    // back solid, including the ones the canvas does not fully cover.
+    SolidCanvasNode canvas(cv::Size(70, 50), cv::Scalar(255, 255, 255),
+                           QStringLiteral("white"));
+    CompositorGraph g;
+    g.addNode(&canvas);
+    TileGrid grid(70, 50, /*tileSize=*/32);
+    RenderGraph rg(&g, canvas.id(), &grid);
+
+    const cv::Mat out = rg.execute();
+    QCOMPARE(out.size(), cv::Size(70, 50));
+    for (int y = 0; y < out.rows; ++y) {
+        for (int x = 0; x < out.cols; ++x) {
+            QCOMPARE(out.at<cv::Vec3b>(y, x), cv::Vec3b(255, 255, 255));
+        }
+    }
 }
 
 QTEST_MAIN(tst_P8_1_1)

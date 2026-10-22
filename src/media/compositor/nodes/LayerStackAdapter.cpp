@@ -32,12 +32,76 @@ private:
 
 }   // namespace
 
+namespace {
+
+// Build the graph's root node and the canvas geometry it implies.
+//
+// Two legacy rules live here, both from LayerStack::render():
+//
+// 1. Base layer present (baseIdx >= 0)
+//      canvas = baseLayer->image.clone()
+//      if (baseLayer->opacity < 1)
+//          canvas = addWeighted(canvas, opacity, zeros, 0, 0)
+//    The base layer is composited over a BLACK backdrop at its own
+//    opacity — unlike every other layer, which reaches its opacity
+//    through applyBlend(). That is what LayerOpacityNode is for.
+//
+//    Visibility quirk, mirrored on purpose: the base-layer search skips
+//    the `visible` check, but the compositing loop below it does not. So
+//    a hidden base layer still seeds the canvas, and — being skipped by
+//    the loop — keeps its raw image with no opacity applied. Both halves
+//    of that are encoded below; changing either alone breaks parity.
+//
+// 2. No base layer (baseIdx < 0)
+//      canvas = Mat(canvasSize(), CV_8UC3, Scalar(255, 255, 255))
+//    A white canvas that every visible layer then blends onto. The DAG
+//    needs something to hang the first layer off, which is what
+//    SolidCanvasNode provides.
+CompositorNode::NodeId makeRoot(layers::LayerStack& stack,
+                                int baseIdx,
+                                LayerStackAdapter::Result& r)
+{
+    if (baseIdx < 0) {
+        r.canvasSize = stack.canvasSize();
+        auto canvas = std::make_unique<SolidCanvasNode>(
+            r.canvasSize, cv::Scalar(255, 255, 255),
+            QStringLiteral("Canvas:white"));
+        const CompositorNode::NodeId id = canvas->id();
+        r.graph.addNode(canvas.get());
+        r.canvases.push_back(std::move(canvas));
+        return id;
+    }
+
+    layers::LayerPtr base = stack.at(baseIdx);
+    r.canvasSize = base->image.size();
+
+    auto bitmap = std::make_unique<LayerBitmapNode>(
+        base.get(), QString::fromLatin1("Base:%1").arg(base->name));
+    CompositorNode::NodeId id = bitmap->id();
+    r.graph.addNode(bitmap.get());
+    r.bitmaps.push_back(std::move(bitmap));
+
+    // Hidden base: the legacy loop skips it, so no opacity is applied
+    // and the raw image stands. See rule 1 above.
+    if (!base->visible || base->opacity >= 1.0f) return id;
+
+    auto fade = std::make_unique<LayerOpacityNode>(
+        id, base->opacity,
+        QString::fromLatin1("BaseOpacity:%1").arg(base->name));
+    const CompositorNode::NodeId fadeId = fade->id();
+    r.graph.addNode(fade.get());
+    r.graph.addEdge(id, fadeId);
+    r.opacities.push_back(std::move(fade));
+    return fadeId;
+}
+
+}   // namespace
+
 // Forward declaration for the recursive helper below.
 static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
                                          int begin, int end,
                                          CompositorNode::NodeId base,
-                                         LayerStackAdapter::Result& r,
-                                         int forcedVisibleIdx = -1);
+                                         LayerStackAdapter::Result& r);
 
 namespace {
 
@@ -97,10 +161,12 @@ CompositorNode::NodeId appendColorLayer(const layers::LayerStack& stack,
         colorIn = maskId;
     }
 
-    if (base == 0) {
-        // First visible layer: it becomes the running base.
-        return colorIn;
-    }
+    // Every layer reaches this function with a real base: build() makes
+    // the graph root explicit, and the group branch inherits the
+    // incoming canvas. So there is no "first layer becomes the canvas"
+    // case here — that convention is what previously swallowed a layer's
+    // opacity, and it is gone.
+    Q_ASSERT(base != 0);
 
     auto blend = std::make_unique<LayerBlendNode>(
         base, colorIn, layer->blend, layer->opacity,
@@ -117,23 +183,24 @@ CompositorNode::NodeId appendColorLayer(const layers::LayerStack& stack,
 
 // Recursively build layers [begin, end) starting from `base`.
 // Handles LayerKind::Group by recursing into groupChildrenOf().
-// `forcedVisibleIdx` mirrors an asymmetry in the legacy LayerStack::render():
-// the base-layer search loop only checks `kind == Bitmap && !image.empty()`,
-// NOT `visible`. An invisible base layer still seeds the canvas, while the
-// compositing loop that follows DOES skip invisible layers. Passing the base
-// index here reproduces that behaviour exactly, so a stack whose only bitmap
-// layer is hidden still renders that layer's image rather than a blank canvas.
+// Recursively build layers [begin, end) starting from `base`.
+// Handles LayerKind::Group by recursing into groupChildrenOf().
+//
+// `base` is always a real node id: build() constructs an explicit root
+// (the base layer, or a SolidCanvasNode when there is no bitmap base)
+// before calling in here. That is deliberate — an earlier version used
+// base == 0 to mean "this layer is the canvas", which silently dropped
+// that layer's opacity and diverged from legacy whenever a stack had no
+// bitmap base layer.
 static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
                                          int begin, int end,
                                          CompositorNode::NodeId base,
-                                         LayerStackAdapter::Result& r,
-                                         int forcedVisibleIdx)
+                                         LayerStackAdapter::Result& r)
 {
     CompositorNode::NodeId prev = base;
     for (int i = begin; i < end; ++i) {
         layers::LayerPtr layer = stack.at(i);
-        if (!layer) continue;
-        if (i != forcedVisibleIdx && !layer->visible) continue;
+        if (!layer || !layer->visible) continue;
 
         switch (layer->kind) {
         case layers::Layer::Bitmap:
@@ -254,9 +321,9 @@ LayerStackAdapter::Result LayerStackAdapter::build(layers::LayerStack& stack)
     Result r;
     const int n = stack.count();
 
-    // P8.1.1 Phase B: legacy render() picks the FIRST Bitmap layer
-    // with a non-empty image as the canvas seed, then composites from
-    // that index onward. Mirror that so the DAG matches pixel-for-pixel.
+    // Legacy render() seeds the canvas with the FIRST Bitmap layer that
+    // has a non-empty image, then walks forward from there. That search
+    // deliberately does not check `visible` — see makeRoot() below.
     int baseIdx = -1;
     for (int i = 0; i < n; ++i) {
         const auto& l = stack.at(i);
@@ -266,18 +333,12 @@ LayerStackAdapter::Result LayerStackAdapter::build(layers::LayerStack& stack)
         }
     }
 
-    if (baseIdx < 0) {
-        // No bitmap base. Legacy render() creates a white canvas of
-        // canvasSize() and composites everything over it. We can't
-        // allocate that without a grid, so we start from the first
-        // visible layer (best effort).
-        r.canvasSize = stack.canvasSize();
-        r.outputNode = buildRange(stack, 0, n, 0, r);
-        return r;
-    }
+    const CompositorNode::NodeId root = makeRoot(stack, baseIdx, r);
 
-    r.canvasSize = stack.at(baseIdx)->image.size();
-    r.outputNode = buildRange(stack, baseIdx, n, 0, r, baseIdx);
+    // Layers before the base index are never reached by the legacy loop
+    // (`for (i = max(0, baseIdx); ...)`), so they are excluded here too.
+    const int begin = (baseIdx >= 0) ? baseIdx + 1 : 0;
+    r.outputNode = buildRange(stack, begin, n, root, r);
     return r;
 }
 

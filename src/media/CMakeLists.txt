@@ -335,6 +335,15 @@ add_library(vistella_media STATIC
     compositor/nodes/LayerRasterNode.cpp
     compositor/nodes/LayerAdjustmentNode.h
     compositor/nodes/LayerAdjustmentNode.cpp
+    # P8.1.1.y (2026-10-22): explicit graph root.
+    #   LayerOpacityNode  base layer composited over black at its own
+    #     opacity (legacy does NOT route the base through applyBlend)
+    #   SolidCanvasNode   white canvasSize() fallback for stacks with no
+    #     bitmap base layer
+    compositor/nodes/LayerOpacityNode.h
+    compositor/nodes/LayerOpacityNode.cpp
+    compositor/nodes/SolidCanvasNode.h
+    compositor/nodes/SolidCanvasNode.cpp
     compositor/nodes/LayerStackAdapter.h
     compositor/nodes/LayerStackAdapter.cpp
 

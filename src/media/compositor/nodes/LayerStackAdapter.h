@@ -31,6 +31,15 @@
 //       canvas, not a source node — cv::LUT is a per-pixel table
 //       lookup, so it is exactly tile-safe.
 //
+//   P8.1.1.y: the graph always has an explicit root, so there is no
+//   "first visible layer becomes the canvas" convention:
+//     - base bitmap layer present -> its LayerBitmapNode, wrapped in a
+//       LayerOpacityNode when it is visible and translucent (legacy
+//       composites the base over a black backdrop at its own opacity
+//       instead of routing it through applyBlend);
+//     - otherwise -> a SolidCanvasNode standing for legacy's white
+//       canvasSize() fallback.
+//
 //   Returns a Result that owns every node it created so the caller
 //   keeps them alive for the lifetime of the graph.
 
@@ -45,6 +54,8 @@
 #include "GroupNode.h"
 #include "LayerRasterNode.h"
 #include "LayerAdjustmentNode.h"
+#include "LayerOpacityNode.h"
+#include "SolidCanvasNode.h"
 
 #include <QList>
 #include <QString>
@@ -87,6 +98,12 @@ public:
         // Adjustment filter. Same lifetime rule as above.
         std::vector<std::unique_ptr<LayerRasterNode>>    rasters;
         std::vector<std::unique_ptr<LayerAdjustmentNode>> adjustments;
+
+        // P8.1.1.y: graph root pieces. `opacities` carries the base
+        // layer's own opacity; `canvases` is the white fallback used
+        // when the stack has no bitmap base layer.
+        std::vector<std::unique_ptr<LayerOpacityNode>> opacities;
+        std::vector<std::unique_ptr<SolidCanvasNode>>  canvases;
 
         // Mask source nodes (adapter-private CompositorNode subclass
         // that yields a Layer's layerMask as a single-channel tile).

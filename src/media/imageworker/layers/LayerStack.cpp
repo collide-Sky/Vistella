@@ -1427,9 +1427,10 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
 
 cv::Mat LayerStack::render() const
 {
-    // P8.1.2 (2026-10-20): opt-in compositor path. Off by default
-    // until Vector / Text / SmartObject / Adjustment have their own
-    // CompositorNode subclasses (P8.1.1.x).
+    // P8.1.2 (2026-10-20): compositor-backed render path.
+    //   Default on since P8.2 (2026-10-22), once every LayerKind had a
+    //   node type. setCompositorEnabled(false) falls back to the legacy
+    //   per-layer loop below.
     if (m_compositorEnabled) return renderViaCompositor();
     if (m_layers.isEmpty()) return cv::Mat();
 
@@ -1642,13 +1643,9 @@ cv::Mat LayerStack::renderViaCompositor() const
 
     compositor::LayerStackAdapter::Result built =
         compositor::LayerStackAdapter::build(const_cast<LayerStack&>(*this));
-    if (built.outputNode == 0) {
-        // Nothing renderable (all layers invisible / non-bitmap and
-        // no group). Legacy render() would return a white canvas of
-        // canvasSize() here; mirror that so callers see the same
-        // "empty document" surface.
-        return cv::Mat(built.canvasSize, CV_8UC3, cv::Scalar(255, 255, 255));
-    }
+    // outputNode is never 0: the adapter always builds an explicit root
+    // (the base bitmap, or a SolidCanvasNode for the no-base case), so
+    // there is no "nothing renderable" branch to fall back on here.
 
     // Canvas geometry comes from the adapter, which already had to
     // resolve the compositing root — see LayerStackAdapter::Result.

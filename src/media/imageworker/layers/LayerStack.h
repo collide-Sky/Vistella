@@ -272,15 +272,21 @@ public:
 
     // ---- P8.1.2 (2026-10-20): compositor-backed render ----
     //   renderViaCompositor() builds a P8.1 CompositorGraph from this
-    //   stack (LayerBitmapNode + LayerBlendNode + LayerMaskNode +
-    //   GroupNode) and renders it through RenderGraph + TileCache.
+    //   stack (LayerBitmapNode + LayerRasterNode + LayerBlendNode +
+    //   LayerMaskNode + LayerAdjustmentNode + GroupNode) and renders it
+    //   through RenderGraph + TileCache.
     //
     //   render() consults the compositorEnabled flag and dispatches
-    //   here when it is on. Default OFF, because Vector / Text /
-    //   SmartObject / Adjustment layers still have no node type
-    //   (P8.1.1.x). Those layers contribute nothing to the DAG, so
-    //   enabling the flag before they land would silently drop them
-    //   from the render.
+    //   here when it is on.
+    //
+    //   Default ON as of P8.2 (2026-10-22): every LayerKind has a node
+    //   (Text / Vector / SmartObject via LayerRasterNode, Adjustment via
+    //   LayerAdjustmentNode), so the graph can render a whole stack.
+    //   The switch is still there for A/B comparison and as the way out
+    //   if a parity gap shows up in the field.
+    //
+    //   tst_P8_1_1 pins both defaults: the flag state, and that the two
+    //   paths agree pixel-for-pixel on the matrices listed there.
     cv::Mat renderViaCompositor() const;
     bool    compositorEnabled() const;
     void    setCompositorEnabled(bool on);
@@ -311,10 +317,9 @@ signals:
 private:
     QList<LayerPtr> m_layers;
 
-    // P8.1.2 (2026-10-20): opt-in switch for renderViaCompositor().
-    // Default false; see the renderViaCompositor() declaration above
-    // for why it cannot be the default yet.
-    bool m_compositorEnabled = false;
+    // P8.1.2 (2026-10-20): switch for renderViaCompositor(). Default
+    // true since P8.2; see the renderViaCompositor() declaration above.
+    bool m_compositorEnabled = true;
     int  m_selection = -1;
     // Phase 3: 画布尺寸 (无 base layer 时 rasterize text/vector 用)
     cv::Size m_canvasSize = cv::Size(800, 600);
