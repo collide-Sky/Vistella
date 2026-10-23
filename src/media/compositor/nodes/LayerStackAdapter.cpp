@@ -6,31 +6,98 @@
 #include "../../imageworker/layers/Layer.h"
 #include "../../imageworker/layers/BlendMode.h"
 
+#include <opencv2/imgproc.hpp>   // cv::resize (mask normalization)
+
+#include <algorithm>             // std::min
+
 namespace compositor {
 
 namespace {
 
-// Adapter-private mask source: a CompositorNode that returns a
+// Adapter-private mask source: a CompositorNode that yields a
 // single-channel cv::Mat from a Layer's layerMask. Lives in the
 // adapter's Result so its lifetime matches the graph.
+//
+// Two steps, in this order:
+//
+// 1. Normalize the mask to canvas geometry. The legacy applyMask() resizes
+//    a mask whose size differs from the layer it masks, so a 16x16 stroke
+//    mask over a 32x32 layer is scaled UP before multiplying. Slicing the
+//    raw mask instead would leave everything outside the mask's own
+//    footprint at zero, which reads as "fully masked out" rather than
+//    "not covered by the mask".
+//
+// 2. Slice by tile, exactly like LayerBitmapNode does for a colour layer.
+//    Returning the whole mask used to work only when the canvas fit in one
+//    tile: the consumer found a size mismatch against the tile and resized
+//    the full mask down to it, so every tile received a downscaled copy of
+//    the entire mask instead of its own region. That divergence appeared
+//    as soon as a canvas spanned more than one tile.
+//
+// The normalized mask is memoized, so an undersized brush mask is rescaled
+// once per render rather than once per tile.
 class MaskBitmapNode : public CompositorNode {
 public:
     explicit MaskBitmapNode(const layers::Layer* layer, QString name)
         : m_layer(layer), m_name(std::move(name)) {}
     QList<NodeId> inputNodes() const override { return {}; }
-    cv::Mat compute(int /*tx*/, int /*ty*/,
-                    const TileGrid& /*grid*/,
-                    RenderContext& /*ctx*/) override {
-        if (!m_layer || m_layer->layerMask.empty()) return cv::Mat();
-        return m_layer->layerMask.clone();
-    }
+    cv::Mat compute(int tx, int ty,
+                    const TileGrid& grid,
+                    RenderContext& /*ctx*/) override;
     QString name() const override { return m_name; }
 private:
+    const cv::Mat& normalizedMask(const cv::Size& canvas);
+
     const layers::Layer* m_layer;
     QString              m_name;
+    cv::Mat              m_normalized;
+    cv::Size             m_normalizedFor;
 };
 
 }   // namespace
+
+const cv::Mat& MaskBitmapNode::normalizedMask(const cv::Size& canvas)
+{
+    if (m_normalizedFor == canvas && !m_normalized.empty()) return m_normalized;
+
+    const cv::Mat& full = m_layer->layerMask;
+    if (full.size() == canvas) {
+        m_normalized = full;
+    } else {
+        cv::Mat resized;
+        cv::resize(full, resized, canvas, 0, 0, cv::INTER_LINEAR);
+        m_normalized = resized;
+    }
+    m_normalizedFor = canvas;
+    return m_normalized;
+}
+
+cv::Mat MaskBitmapNode::compute(int tileX, int tileY,
+                                const TileGrid& grid,
+                                RenderContext& /*ctx*/)
+{
+    if (!m_layer || m_layer->layerMask.empty()) return cv::Mat();
+
+    const cv::Rect r = grid.tileRect(tileX, tileY);
+    if (r.width <= 0 || r.height <= 0) return cv::Mat();
+
+    const cv::Mat& full = normalizedMask(
+        cv::Size(grid.imageWidth(), grid.imageHeight()));
+
+    // The mask now matches the canvas, so tiles outside it can only come
+    // from a grid larger than the mask; zero (= masked out) is the safe
+    // answer there, matching LayerBitmapNode's undersized-layer handling.
+    cv::Mat tile(r.height, r.width, full.type(), cv::Scalar(0));
+    if (r.x >= full.cols || r.y >= full.rows) return tile;
+
+    const int copyW = std::min(r.width, full.cols - r.x);
+    const int copyH = std::min(r.height, full.rows - r.y);
+    if (copyW <= 0 || copyH <= 0) return tile;
+
+    full(cv::Rect(r.x, r.y, copyW, copyH))
+        .copyTo(tile(cv::Rect(0, 0, copyW, copyH)));
+    return tile;
+}
 
 namespace {
 

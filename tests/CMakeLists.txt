@@ -242,3 +242,15 @@ add_vistella_test(tst_P8_2_1)
 #   masks. Vector/Text/Smart/Adjustment kinds + more blend modes
 #   deferred to P8.1.1.x.
 add_vistella_test(tst_P8_1_1)
+# P8.2 (2026-10-22): full-size render-parity verification between the
+#   legacy LayerStack::render() loop and the P8.1 CompositorGraph.
+#   tst_P8_1_1 pins each rule against hand-built cases; this one answers
+#   "does the whole path still agree on something photo-like?" at 2048x1536
+#   across every blend mode, tile geometry and nesting depth.
+#   Set VISTELLA_PARITY_DIRS to a ';' separated folder list to additionally
+#   sweep real image files; mismatches are written out as PNG triplets.
+add_vistella_test(tst_P8_RenderParity)
+# Renders at 2048x1536 across 12 blend modes x several geometries, twice
+# per case (both paths), so it runs ~50s in a Debug build. The shared 30s
+# ctest timeout would report that as a failure.
+set_tests_properties(tst_P8_RenderParity PROPERTIES TIMEOUT 300)

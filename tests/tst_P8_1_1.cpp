@@ -181,6 +181,7 @@ private slots:
     void parity_nestedGroup_preservesInnerContent();
     void nestedGroup_childrenSurviveRoundTrip();
     void duplicateGroup_keepsChildren();
+    void parity_maskAcrossMultipleTiles();
 };
 
 void tst_P8_1_1::initTestCase() {}
@@ -1574,6 +1575,60 @@ void tst_P8_1_1::duplicateGroup_keepsChildren()
     const cv::Mat copy = stack.renderOne(dup);
     QCOMPARE(copy.size(), original.size());
     QCOMPARE(maxDelta(original, copy), 0);
+}
+
+void tst_P8_1_1::parity_maskAcrossMultipleTiles()
+{
+    // Regression guard for a bug that only exists on multi-tile canvases.
+    //
+    // The adapter's mask source node used to return the ENTIRE mask for
+    // every tile instead of the tile's own region. The consumer then found
+    // a size mismatch against the tile and resized the full mask down to
+    // it, so each tile got a downscaled copy of the whole mask. On a
+    // single-tile canvas the sizes matched and the resize never ran, which
+    // is why every mask test here passed until tst_P8_RenderParity ran the
+    // same stack at 2048x1536.
+    //
+    // 800x600 spans 4x3 tiles at the 256px default, so the two paths
+    // disagree loudly if the mask is not sliced.
+    const int W = 800, H = 600;
+    // Fills `stack` rather than returning one — LayerStack is a QObject.
+    auto build = [](LayerStack& stack, int seed) {
+        stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(W, H, seed)));
+        Layer masked = makeBitmapLayer(QString("masked"), noisyTile(W, H, seed + 90));
+        // Asymmetric gradient: a uniformly scaled-down mask cannot
+        // reproduce it, so the test fails rather than drifting quietly.
+        masked.layerMask = cv::Mat(H, W, CV_8UC1);
+        for (int y = 0; y < H; ++y) {
+            for (int x = 0; x < W; ++x) {
+                masked.layerMask.at<uchar>(y, x) =
+                    static_cast<uchar>((x * 255) / (W - 1));
+            }
+        }
+        masked.maskEnabled = true;
+        masked.opacity = 0.7f;
+        masked.blend = Layer::SoftLight;
+        stack.addLayer(masked);
+    };
+
+    LayerStack a;
+    build(a, 30);
+    QCOMPARE(a.render().size(), cv::Size(W, H));
+    const int d = maxDelta(a.render(), a.renderViaCompositor());
+    QVERIFY2(d >= 0 && d <= 2,
+             qPrintable(QStringLiteral("multi-tile mask diverged by %1").arg(d)));
+
+    // Also exercise the geometry the photo harness hit directly: a canvas
+    // with partial edge tiles in both axes.
+    LayerStack b;
+    build(b, 31);
+    LayerStackAdapter::Result built = LayerStackAdapter::build(b);
+    QVERIFY(built.outputNode != 0);
+    TileGrid grid(W, H);
+    RenderGraph rg(&built.graph, built.outputNode, &grid);
+    b.setCompositorEnabled(false);
+    const cv::Mat legacy = b.render();
+    QCOMPARE(maxDelta(legacy, rg.execute()), 0);
 }
 
 QTEST_MAIN(tst_P8_1_1)
