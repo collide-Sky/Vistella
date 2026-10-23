@@ -95,6 +95,67 @@ CompositorNode::NodeId makeRoot(layers::LayerStack& stack,
     return fadeId;
 }
 
+// Build one group's contribution: composite its children onto the
+// incoming canvas, then apply the group's opacity with Normal blend.
+//
+// Declared before appendColorLayer, which appendGroupLayer also calls.
+CompositorNode::NodeId appendColorLayer(const layers::LayerStack& stack,
+                                       layers::LayerPtr layer,
+                                       int index,
+                                       CompositorNode::NodeId base,
+                                       LayerStackAdapter::Result& r);
+
+// Build one group's contribution: composite its children onto the
+// incoming canvas, then apply the group's opacity with Normal blend.
+//
+// Mirrors LayerStack::compositeChildrenInto() on the legacy side, and
+// recurses so a group nested inside a group composites its own subtree
+// first and then its own opacity. Children are not in m_layers, so this
+// cannot go through buildRange(); it walks groupChildrenOf() directly.
+//
+// Child exclusions match the legacy group branch: a SmartFilter belongs
+// to its parent SmartObject's chain (and a group child has no chain
+// index anyway), and an Adjustment has no standalone raster — neither can
+// contribute inside a group. The group's own blendMode is intentionally
+// ignored, as PS does.
+CompositorNode::NodeId appendGroupLayer(layers::LayerStack& stack,
+                                       const layers::LayerPtr& layer,
+                                       CompositorNode::NodeId base,
+                                       LayerStackAdapter::Result& r) {
+    const auto& children = stack.groupChildrenOf(layer);
+    if (children.empty()) return base;
+
+    CompositorNode::NodeId inner = base;
+    for (const auto& child : children) {
+        if (!child || !child->visible) continue;
+
+        if (child->kind == layers::Layer::Group) {
+            // Nested group: recurse. Group opacity is applied at each
+            // level, matching the legacy recursion.
+            inner = appendGroupLayer(stack, child, inner, r);
+            continue;
+        }
+        if (child->kind == layers::Layer::SmartFilter) continue;
+        if (child->kind == layers::Layer::Adjustment) continue;
+
+        // index -1: group children are not in m_layers, so they carry no
+        // SmartFilter chain (matching the legacy group branch).
+        inner = appendColorLayer(stack, child, -1, inner, r);
+    }
+
+    if (inner == base) return base;   // no visible color children
+
+    auto group = std::make_unique<GroupNode>(
+        base, inner, layer->opacity,
+        QString::fromLatin1("Group:%1").arg(layer->name));
+    const CompositorNode::NodeId gid = group->id();
+    r.graph.addNode(group.get());
+    r.graph.addEdge(base, gid);
+    if (inner != base) r.graph.addEdge(inner, gid);
+    r.groups.push_back(std::move(group));
+    return gid;
+}
+
 }   // namespace
 
 // Forward declaration for the recursive helper below.
@@ -211,81 +272,7 @@ static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
             break;
 
         case layers::Layer::Group: {
-            const auto& children = stack.groupChildrenOf(stack.idOf(i));
-            if (children.empty()) break;
-
-            // Composite the children onto a copy of the incoming
-            // canvas (matching the legacy render(): groupMat starts
-            // as canvas.clone()).
-            //
-            // Children are NOT in m_layers, so we can't recurse via
-            // buildRange(). Instead we build them as a chain off a
-            // synthetic "base" that is the incoming canvas, then wrap
-            // in a GroupNode for the group's opacity.
-            //
-            // PS semantics: children blend onto the canvas with their
-            // own blend modes, THEN the group's opacity is applied.
-            CompositorNode::NodeId inner = prev;
-            if (inner == 0) {
-                // Root group with no incoming canvas: start from a
-                // black canvas so children have something to blend
-                // over. The adapter can't allocate one without a
-                // grid, so we use the first child's node directly
-                // and let the GroupNode handle the rest.
-                inner = 0;
-            }
-            for (const auto& child : children) {
-                if (!child || !child->visible) continue;
-                if (child->kind == layers::Layer::Group) {
-                    // Nested group: skipped, which is what the
-                    // legacy group branch does too. rasterize() has no
-                    // case for Layer::Group (it falls through to the
-                    // empty-Mat default), so a nested group
-                    // contributes nothing there either. Changing this
-                    // needs legacy and compositor to change together.
-                    continue;
-                }
-                if (child->kind == layers::Layer::SmartFilter) continue;
-                if (child->kind == layers::Layer::Adjustment) {
-                    // Legacy's group branch (render()) applies only
-                    // rasterize + mask + blend per child. Adjustment has
-                    // no standalone raster, and SmartFilter belongs to
-                    // its parent SmartObject's chain — neither can
-                    // contribute here, so skipping both mirrors what
-                    // the legacy group branch already does.
-                    continue;
-                }
-                // index -1: group children are not in m_layers, so they
-                // carry no SmartFilter chain (matching the legacy
-                // group branch, which never applies one).
-                inner = appendColorLayer(stack, child, -1, inner, r);
-            }
-
-            if (inner == 0) break;   // no visible color children
-
-            if (prev == 0) {
-                // Root group: the composite IS the output, but we
-                // still wrap it so the group's opacity applies.
-                auto group = std::make_unique<GroupNode>(
-                    0, inner, layer->opacity,
-                    QString::fromLatin1("Group:%1").arg(layer->name));
-                const CompositorNode::NodeId gid = group->id();
-                r.graph.addNode(group.get());
-                r.graph.addEdge(inner, gid);
-                r.groups.push_back(std::move(group));
-                prev = gid;
-                break;
-            }
-
-            auto group = std::make_unique<GroupNode>(
-                prev, inner, layer->opacity,
-                QString::fromLatin1("Group:%1").arg(layer->name));
-            const CompositorNode::NodeId gid = group->id();
-            r.graph.addNode(group.get());
-            r.graph.addEdge(prev, gid);
-            r.graph.addEdge(inner, gid);
-            r.groups.push_back(std::move(group));
-            prev = gid;
+            prev = appendGroupLayer(stack, layer, prev, r);
             break;
         }
 

@@ -177,7 +177,18 @@ void LayerStack::disconnectLayer(LayerPtr l)
 
 int LayerStack::addLayer(const Layer &layer)
 {
-    m_layers.append(std::make_shared<Layer>(layer));
+    return appendLayerPtr(std::make_shared<Layer>(layer));
+}
+
+// P8.1.z (2026-10-22): append an already-allocated layer, keeping ITS
+// address. addLayer(const Layer&) necessarily allocates a fresh LayerPtr,
+// which would break m_groups lookups keyed on that address — so anything
+// that has to preserve a Group's identity (duplicateLayer) goes through
+// here instead.
+int LayerStack::appendLayerPtr(LayerPtr layer)
+{
+    if (!layer) return -1;
+    m_layers.append(std::move(layer));
     const int newIndex = m_layers.size() - 1;
     reassignZOrder();
     emit layerAdded(newIndex);
@@ -259,6 +270,43 @@ int LayerStack::addAdjustmentLayer(const QString &name, const QString &adjustmen
     return addLayer(l);
 }
 
+// P8.1.z (2026-10-22): clone a layer AND carry its group children across
+//   to the clone's address.
+//
+//   m_groups is keyed by LayerId, and LayerId is the LayerPtr's address.
+//   A plain Layer copy allocates a new address, so a cloned Group ends up
+//   with no m_groups entry and renders as an empty group — everything
+//   inside it silently disappears. Re-keying the children under the clone
+//   is what makes nesting a group (mergeIntoGroup) and duplicating one
+//   (duplicateLayer) behave.
+//
+//   Children are moved, not deep-copied: they already live at their own
+//   addresses, and their own nested-group entries stay valid because the
+//   child LayerPtrs themselves are unchanged. That matches the existing
+//   design, where a group's children are shared handles rather than a
+//   private deep tree.
+LayerPtr LayerStack::cloneLayerWithGroupChildren(const LayerPtr& src)
+{
+    if (!src) return LayerPtr();
+    auto clone = std::make_shared<Layer>(*src);
+    if (clone->kind == Layer::Group) {
+        auto it = m_groups.find(reinterpret_cast<LayerId>(src.get()));
+        if (it != m_groups.end() && !it.value().empty()) {
+            m_groups.insert(reinterpret_cast<LayerId>(clone.get()), it.value());
+        }
+    }
+    return clone;
+}
+
+// P8.1.z (2026-10-22): drop a group layer's children entry when the layer
+//   itself goes away. Without this, removeLayer() left the vector of
+//   child LayerPtrs alive in m_groups forever.
+void LayerStack::releaseGroupChildren(const LayerPtr& group)
+{
+    if (!group) return;
+    m_groups.remove(reinterpret_cast<LayerId>(group.get()));
+}
+
 // P1.5.2 (2026-09-21): Group adjacent layers into a Group container.
 //   1. Validate: >= 2 indices, sorted ascending, contiguous.
 //   2. Capture each layer's full copy (LayerPtr deep clone via std::make_shared<Layer>).
@@ -279,11 +327,14 @@ int LayerStack::mergeIntoGroup(const QList<int>& indices)
     for (int i = 1; i < sorted.size(); ++i) {
         if (sorted[i] != sorted[i - 1] + 1) return -1;
     }
-    // Capture clones BEFORE removing originals (so indices stay valid)
+    // Capture clones BEFORE removing originals (so indices stay valid).
+    // P8.1.z: cloneLayerWithGroupChildren, so grouping a group keeps the
+    // inner group's children instead of orphaning them under the old
+    // LayerId.
     std::vector<LayerPtr> clones;
     clones.reserve(sorted.size());
     for (int idx : sorted) {
-        clones.push_back(std::make_shared<Layer>(*m_layers[idx]));
+        clones.push_back(cloneLayerWithGroupChildren(m_layers[idx]));
     }
     // Remove originals in reverse order (high -> low) to keep indices stable
     for (int i = sorted.size() - 1; i >= 0; --i) {
@@ -354,6 +405,15 @@ const std::vector<LayerPtr>& LayerStack::groupChildrenOf(LayerId groupId) const
     return it.value();
 }
 
+const std::vector<LayerPtr>& LayerStack::groupChildrenOf(const LayerPtr& group) const
+{
+    if (!group) {
+        static const std::vector<LayerPtr> kEmpty;
+        return kEmpty;
+    }
+    return groupChildrenOf(reinterpret_cast<LayerId>(group.get()));
+}
+
 // P0 leftover 3 (2026-09-21): inverse of flattenGroup, used by LayerCommand
 //   to undo a flatten. Builds a fresh Group layer, inserts it at atIndex,
 //   and registers the cloned children under the new Group's LayerId.
@@ -384,7 +444,15 @@ bool LayerStack::removeLayer(int index)
     //   removal should be paired with rasterizeSmartObject()/a cascade helper
     //   to also drop orphaned SmartFilter children. Doing chain cleanup
     //   here would double-mutate and leave stale indices in m_smartFilterChain.
+    // P8.1.z (2026-10-22): capture the LayerPtr BEFORE removal. Reading
+    //   m_layers[index] after removeAt() is out of range whenever index
+    //   was the last element — which is exactly what happens when
+    //   mergeIntoGroup() removes its originals from the top down.
+    LayerPtr removed = m_layers.at(index);
     m_layers.removeAt(index);
+    // A removed Group's children entry used to stay in m_groups forever,
+    // keeping its child LayerPtrs alive.
+    releaseGroupChildren(removed);
     reassignZOrder();
     // 选中更新
     if (m_selection >= m_layers.size()) {
@@ -401,6 +469,14 @@ bool LayerStack::duplicateLayer(int index)
     if (auto l = at(index)) {
         Layer copy = *l;   // 拷贝构造 (cv::Mat clone, QString 值语义)
         copy.name = l->name + QStringLiteral(" copy");
+        // P8.1.z (2026-10-22): a duplicated Group must keep its children.
+        // appendLayerPtr (not addLayer) keeps the clone's address, which
+        // is the address its m_groups entry was re-keyed to.
+        if (l->kind == Layer::Group) {
+            auto clone = cloneLayerWithGroupChildren(l);
+            clone->name = copy.name;
+            return appendLayerPtr(std::move(clone)) >= 0;
+        }
         return addLayer(copy) >= 0;
     }
     return false;
@@ -1425,6 +1501,53 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
     }
 }
 
+// P8.1.z (2026-10-22): composite a group's children onto `target`, in
+//   order, PS-style: each child blends with its own blendMode, and a
+//   nested Group composites like any other layer but contributes its own
+//   subtree first and then applies its opacity.
+//
+//   Extracted out of render() so nesting works by construction. The old
+//   inline loop called rasterize(child) and skipped anything that came
+//   back empty — which is every nested Group, since rasterize() has no
+//   case for Layer::Group. That silently dropped the entire inner subtree
+//   from the render while leaving it intact in the model.
+//
+//   Note the group children path deliberately does NOT apply a
+//   SmartFilter chain (neither did the original loop, and the chain is
+//   keyed on a m_layers index a group child does not have).
+void LayerStack::compositeChildrenInto(const std::vector<LayerPtr> &children,
+                                       cv::Mat &target) const
+{
+    for (const auto &child : children) {
+        if (!child || !child->visible) continue;
+
+        if (child->kind == Layer::SmartFilter) continue;
+
+        if (child->kind == Layer::Group) {
+            const auto &grandChildren = groupChildrenOf(child);
+            if (grandChildren.empty()) continue;
+            cv::Mat groupMat = target.clone();
+            compositeChildrenInto(grandChildren, groupMat);
+            if (child->opacity < 1.0f) {
+                cv::Mat tmp;
+                cv::addWeighted(target, 1.0f - child->opacity,
+                                groupMat, child->opacity, 0, tmp);
+                target = tmp;
+            } else {
+                target = groupMat;
+            }
+            continue;
+        }
+
+        cv::Mat cMat = rasterize(child);
+        if (cMat.empty()) continue;
+        if (child->maskEnabled && !child->layerMask.empty()) {
+            cMat = applyMask(cMat, child->layerMask);
+        }
+        target = applyBlend(child->blend, target, cMat, child->opacity);
+    }
+}
+
 cv::Mat LayerStack::render() const
 {
     // P8.1.2 (2026-10-20): compositor-backed render path.
@@ -1468,15 +1591,7 @@ cv::Mat LayerStack::render() const
             const auto &children = groupChildrenOf(idOf(i));
             if (children.empty()) continue;
             cv::Mat groupMat = canvas.clone();
-            for (const auto &child : children) {
-                if (!child || !child->visible) continue;
-                cv::Mat cMat = rasterize(child);
-                if (cMat.empty()) continue;
-                if (child->maskEnabled && !child->layerMask.empty()) {
-                    cMat = applyMask(cMat, child->layerMask);
-                }
-                groupMat = applyBlend(child->blend, groupMat, cMat, child->opacity);
-            }
+            compositeChildrenInto(children, groupMat);
             if (l->opacity < 1.0f) {
                 cv::Mat tmp;
                 cv::addWeighted(canvas, 1.0f - l->opacity,

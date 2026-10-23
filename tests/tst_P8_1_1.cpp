@@ -178,6 +178,9 @@ private slots:
     void parity_noBitmapBase_startsFromWhiteCanvas();
     void opacityNode_halvesTowardBlack();
     void solidCanvasNode_fillsEveryTile();
+    void parity_nestedGroup_preservesInnerContent();
+    void nestedGroup_childrenSurviveRoundTrip();
+    void duplicateGroup_keepsChildren();
 };
 
 void tst_P8_1_1::initTestCase() {}
@@ -1455,6 +1458,122 @@ void tst_P8_1_1::solidCanvasNode_fillsEveryTile()
             QCOMPARE(out.at<cv::Vec3b>(y, x), cv::Vec3b(255, 255, 255));
         }
     }
+}
+
+void tst_P8_1_1::parity_nestedGroup_preservesInnerContent()
+{
+    // Regression guard for data loss: m_groups is keyed by LayerId, which
+    // IS the LayerPtr address, so mergeIntoGroup()'s deep copy left a
+    // cloned Group with no children entry under its new address —
+    // everything inside it vanished from the render.
+    //
+    // Solid colours so the expected result is readable. Note this does
+    // NOT compare against a flat equivalent: mergeIntoGroup appends the
+    // new group at the top of the stack, so grouping layers that had
+    // layers above them reorders the result. That placement is existing
+    // P1.5.2 behaviour and orthogonal to nesting.
+    //
+    // Order produced here:
+    //   [base=black, a=red, b=green, c=blue]
+    //   merge {1,2}          -> [base, c, inner(a, b)]      inner is on top
+    //   merge {1,2} again    -> [base, outer(c, inner)]
+    //   render               -> black, then outer: c=blue over black,
+    //                            then inner: a=red, b=green over blue.
+    //   final pixel          -> green
+    const cv::Scalar kBlack(0, 0, 0), kRed(0, 0, 255),
+                     kGreen(0, 255, 0), kBlue(255, 0, 0);
+
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"),
+                                   solidTile(kW, kH, kBlack)));
+    stack.addLayer(makeBitmapLayer(QString("a"), solidTile(kW, kH, kRed)));
+    stack.addLayer(makeBitmapLayer(QString("b"), solidTile(kW, kH, kGreen)));
+    stack.addLayer(makeBitmapLayer(QString("c"), solidTile(kW, kH, kBlue)));
+
+    const int inner = stack.mergeIntoGroup({1, 2});
+    QVERIFY(inner >= 0);
+    const int outer = stack.mergeIntoGroup({inner - 1, inner});
+    QVERIFY(outer >= 0);
+
+    const cv::Vec3b expected(kGreen[0], kGreen[1], kGreen[2]);
+    QCOMPARE(stack.render().at<cv::Vec3b>(kH / 2, kW / 2), expected);
+
+    // Both render paths, and the result still has to be green — if either
+    // dropped the inner group this would come back blue or black.
+    const cv::Mat legacy = stack.render();
+    const cv::Mat direct = stack.renderViaCompositor();
+    QCOMPARE(maxDelta(legacy, direct), 0);
+    QCOMPARE(direct.at<cv::Vec3b>(kH / 2, kW / 2), expected);
+}
+
+void tst_P8_1_1::nestedGroup_childrenSurviveRoundTrip()
+{
+    // Same data-loss bug, structural half: after nesting, every inner
+    // layer must still be reachable through groupChildrenOf(), and
+    // flattening the outer group must restore them to m_layers.
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 74)));
+    stack.addLayer(makeBitmapLayer(QString("a"), noisyTile(kW, kH, 75)));
+    stack.addLayer(makeBitmapLayer(QString("b"), noisyTile(kW, kH, 76)));
+    const int inner = stack.mergeIntoGroup({1, 2});
+    QVERIFY(inner >= 0);
+
+    Layer solo = makeBitmapLayer(QString("c"), noisyTile(kW, kH, 77));
+    stack.addLayer(solo);
+    const int outer = stack.mergeIntoGroup({inner, stack.count() - 1});
+    QVERIFY(outer >= 0);
+
+    const auto& outerChildren = stack.groupChildrenOf(stack.idOf(outer));
+    QCOMPARE(int(outerChildren.size()), 2);
+
+    // Exactly one of them is itself a group, and it must still own its two
+    // children.
+    int groupChildCount = -1;
+    for (const auto& child : outerChildren) {
+        if (child && child->kind == Layer::Group) {
+            groupChildCount = int(stack.groupChildrenOf(child).size());
+        }
+    }
+    QCOMPARE(groupChildCount, 2);
+
+    // Flattening the outer group puts the inner group back in m_layers
+    // with its children intact.
+    QCOMPARE(stack.flattenGroup(outer), 2);
+    bool sawInnerGroup = false;
+    for (int i = 0; i < stack.count(); ++i) {
+        auto l = stack.at(i);
+        if (l && l->kind == Layer::Group) {
+            sawInnerGroup = true;
+            QCOMPARE(int(stack.groupChildrenOf(l).size()), 2);
+        }
+    }
+    QVERIFY(sawInnerGroup);
+}
+
+void tst_P8_1_1::duplicateGroup_keepsChildren()
+{
+    // duplicateLayer() clones the Layer into a NEW address. Same orphaning
+    // hazard as mergeIntoGroup, so the copy used to render as an empty
+    // group — a duplicate that silently showed nothing.
+    LayerStack stack;
+    stack.addLayer(makeBitmapLayer(QString("base"),
+        solidTile(kW, kH, cv::Scalar(10, 10, 10))));
+    stack.addLayer(makeBitmapLayer(QString("a"),
+        solidTile(kW, kH, cv::Scalar(20, 30, 40))));
+    stack.addLayer(makeBitmapLayer(QString("b"),
+        solidTile(kW, kH, cv::Scalar(50, 60, 70))));
+    const int g = stack.mergeIntoGroup({1, 2});
+    QVERIFY(g >= 0);
+
+    QVERIFY(stack.duplicateLayer(g));
+    const int dup = stack.count() - 1;
+    QCOMPARE(int(stack.groupChildrenOf(stack.idOf(dup)).size()), 2);
+
+    // The duplicate renders exactly like the original group.
+    const cv::Mat original = stack.renderOne(g);
+    const cv::Mat copy = stack.renderOne(dup);
+    QCOMPARE(copy.size(), original.size());
+    QCOMPARE(maxDelta(original, copy), 0);
 }
 
 QTEST_MAIN(tst_P8_1_1)

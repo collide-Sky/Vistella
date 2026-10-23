@@ -91,6 +91,11 @@ public:
     //   so render() can look up Group children without re-keying after every
     //   m_layers mutation (moveUp / removeLayer / duplicateLayer / flattenGroup).
     const std::vector<LayerPtr>& groupChildrenOf(LayerId groupId) const;
+    //   P8.1.z (2026-10-22): same lookup from a LayerPtr. Needed to walk
+    //   INTO a nested group — a group child is not in m_layers, so there
+    //   is no index to call idOf() with, and the caller has no business
+    //   reinterpreting a pointer as a LayerId itself.
+    const std::vector<LayerPtr>& groupChildrenOf(const LayerPtr& group) const;
 
     // P0 leftover 3 (2026-09-21): inverse of flattenGroup. Used by
     //   LayerCommand::makeFlattenGroup's undo path to restore a Group
@@ -338,6 +343,26 @@ private:
     //   of cloned child layers. Layer struct itself does NOT hold children
     //   (would break Layer's copy semantics; see Layer.h comment).
     QHash<LayerId, std::vector<LayerPtr>> m_groups;
+
+    // P8.1.z (2026-10-22): m_groups is keyed by LayerId, which IS the
+    // LayerPtr's address. So any operation that produces a NEW LayerPtr
+    // for a Group orphans that group's children: the entry still exists
+    // under the old address and the clone looks childless. Three
+    // operations hit this — mergeIntoGroup() (nesting a group), and
+    // duplicateLayer() — plus removeLayer(), which used to leak the
+    // entry outright. These two helpers are the single place where a
+    // layer's group children are carried across an address change or
+    // released with their owner.
+    LayerPtr cloneLayerWithGroupChildren(const LayerPtr& src);
+    void    releaseGroupChildren(const LayerPtr& group);
+    int     appendLayerPtr(LayerPtr layer);
+
+    // P8.1.z (2026-10-22): composite a group's children onto `target` in
+    //   order, recursing into nested Groups. Shared by the top-level
+    //   render() loop and by nested groups themselves, so nesting works
+    //   by construction instead of only at the first level.
+    void compositeChildrenInto(const std::vector<LayerPtr> &children,
+                               cv::Mat &target) const;
 
     void reassignZOrder();
     void disconnectLayer(LayerPtr l);
