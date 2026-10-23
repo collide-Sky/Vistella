@@ -229,3 +229,28 @@ add_vistella_test(tst_P8_3)
 #   execute(engine) pixel-equals sequential, TileCache thread-safety
 #   (4 threads x 1000 ops).
 add_vistella_test(tst_P8_4)
+# P8.3.x (2026-10-19): Settings dialog GPU page (3 radio + Apply + Probe).
+add_vistella_test(tst_P8_3_1)
+# P8.2.x (2026-10-19): real Qt OpenGL pass-through shader pipeline
+#   in GpuBackend (QOpenGLContext + texture upload + FBO readback +
+#   thread-safe mutex serialization).
+add_vistella_test(tst_P8_2_1)
+# P8.1.1 (2026-10-19): LayerStack -> CompositorGraph adapter
+#   (LayerBlendNode + LayerMaskNode + LayerStackAdapter). MVP scope:
+#   Bitmap layers only, Normal/Multiply/Screen/Darken/Lighten/
+#   Difference blend modes, visible/invisible filtering, layer
+#   masks. Vector/Text/Smart/Adjustment kinds + more blend modes
+#   deferred to P8.1.1.x.
+add_vistella_test(tst_P8_1_1)
+# P8.2 (2026-10-22): full-size render-parity verification between the
+#   legacy LayerStack::render() loop and the P8.1 CompositorGraph.
+#   tst_P8_1_1 pins each rule against hand-built cases; this one answers
+#   "does the whole path still agree on something photo-like?" at 2048x1536
+#   across every blend mode, tile geometry and nesting depth.
+#   Set VISTELLA_PARITY_DIRS to a ';' separated folder list to additionally
+#   sweep real image files; mismatches are written out as PNG triplets.
+add_vistella_test(tst_P8_RenderParity)
+# Renders at 2048x1536 across 12 blend modes x several geometries, twice
+# per case (both paths), so it runs ~50s in a Debug build. The shared 30s
+# ctest timeout would report that as a failure.
+set_tests_properties(tst_P8_RenderParity PROPERTIES TIMEOUT 300)

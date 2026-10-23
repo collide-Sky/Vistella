@@ -7,6 +7,11 @@
 #include "engine_context.h"   // P8.4: vistella::tp::EngineContext
 #include "executor.hpp"        // P8.4: vistella::tp::IExecutor + Priority
 
+#include "../gpu/BackendRegistry.h"   // P8.4.x: per-tile backend dispatch
+#include "../gpu/RenderBackend.h"
+#include "../brushes/BrushKind.h"
+#include "../tools/ToolContext.h"      // P8.4.x: BrushSharedState
+
 #include <atomic>
 #include <opencv2/core.hpp>
 #include <QHash>
@@ -218,6 +223,28 @@ cv::Mat RenderGraph::requestNodeTile(CompositorNode::NodeId n,
     // Just call node->compute(); it has full access to ctx.cache and can
     // call ctx.requestNodeTile() on its upstream nodes if needed.
     cv::Mat tile = node->compute(tileX, tileY, *m_grid, ctx);
+
+    // P8.4.x (2026-10-19): per-tile backend dispatch. When a registry
+    // is set, run the freshly-computed tile through the picked backend
+    // before caching. The cache key stays the same so repeat renders
+    // still hit (no double-dispatch).
+    //
+    // NOTE: thread-safety. Both CpuBackend (clone) and GpuBackend
+    // (P8.2.x pass-through) are expected to be safe to call from
+    // multiple threads concurrently. The BackendRegistry itself does
+    // not mutate state on pick(); it reads mode + override.
+    if (!tile.empty() && m_backend) {
+        gpu::RenderBackend* be = m_backend->pick(
+            brushes::BrushKind::HardRound,   // compositor MVP: 1 kind
+            m_sharedState);
+        if (be) {
+            // No persistent context for MVP; an empty RenderBackendContext
+            // is fine. Backends that need caps will override.
+            gpu::RenderBackendContext emptyCtx;
+            tile = be->processTile(k, tile, emptyCtx);
+        }
+    }
+
     if (!tile.empty()) {
         ctx.cache->put(k, tile);
     }

@@ -91,6 +91,11 @@ public:
     //   so render() can look up Group children without re-keying after every
     //   m_layers mutation (moveUp / removeLayer / duplicateLayer / flattenGroup).
     const std::vector<LayerPtr>& groupChildrenOf(LayerId groupId) const;
+    //   P8.1.z (2026-10-22): same lookup from a LayerPtr. Needed to walk
+    //   INTO a nested group — a group child is not in m_layers, so there
+    //   is no index to call idOf() with, and the caller has no business
+    //   reinterpreting a pointer as a LayerId itself.
+    const std::vector<LayerPtr>& groupChildrenOf(const LayerPtr& group) const;
 
     // P0 leftover 3 (2026-09-21): inverse of flattenGroup. Used by
     //   LayerCommand::makeFlattenGroup's undo path to restore a Group
@@ -177,6 +182,31 @@ public:
     //   Used by UI to obtain the input image for a new SmartFilter.
     cv::Mat rasterizeForRender(int idx) const;
 
+    // ---- P8.1.1.x (2026-10-20): compositor source access ----
+    //   rasterizeLayer: public form of the private rasterize(), taking a
+    //   LayerPtr rather than an index.
+    //
+    //   A LayerPtr (not an int) because group children are not in
+    //   m_layers — they live in m_groups and are only reachable through
+    //   groupChildrenOf(). Compositor source nodes must rasterize both
+    //   kinds of layer, so they need a handle that works for either.
+    //
+    //   Adjustment deliberately returns an empty Mat: it is a filter
+    //   over the accumulated canvas, not a standalone image — the
+    //   compositor models it as LayerAdjustmentNode instead.
+    //
+    //   Exposed so compositor nodes reuse this single rasterization
+    //   implementation instead of re-deriving it. Diverging copies are
+    //   how the legacy path and the DAG path would silently drift apart.
+    cv::Mat rasterizeLayer(const LayerPtr &l) const;
+
+    //   applySmartFilterChain: walk smartFiltersFor(smartIdx) in order and
+    //   apply each enabled filter to `src`, returning the result.
+    //   Mirrors the chain block inside render(). Exposed for the same
+    //   single-source-of-truth reason; the per-filter implementation stays
+    //   file-local since it is stateless.
+    cv::Mat applySmartFilterChain(const cv::Mat &src, int smartIdx) const;
+
     // Phase 5 (2026-09-04): 全局 cache 清理
     //   遍历 cache dir, 删掉不被任何 layer 引用的文件
     //   返删除的文件数
@@ -245,6 +275,27 @@ public:
     using RenderCallback = std::function<void(cv::Mat)>;
     void renderAsync(vistella::tp::EngineContext *engine, RenderCallback callback) const;
 
+    // ---- P8.1.2 (2026-10-20): compositor-backed render ----
+    //   renderViaCompositor() builds a P8.1 CompositorGraph from this
+    //   stack (LayerBitmapNode + LayerRasterNode + LayerBlendNode +
+    //   LayerMaskNode + LayerAdjustmentNode + GroupNode) and renders it
+    //   through RenderGraph + TileCache.
+    //
+    //   render() consults the compositorEnabled flag and dispatches
+    //   here when it is on.
+    //
+    //   Default ON as of P8.2 (2026-10-22): every LayerKind has a node
+    //   (Text / Vector / SmartObject via LayerRasterNode, Adjustment via
+    //   LayerAdjustmentNode), so the graph can render a whole stack.
+    //   The switch is still there for A/B comparison and as the way out
+    //   if a parity gap shows up in the field.
+    //
+    //   tst_P8_1_1 pins both defaults: the flag state, and that the two
+    //   paths agree pixel-for-pixel on the matrices listed there.
+    cv::Mat renderViaCompositor() const;
+    bool    compositorEnabled() const;
+    void    setCompositorEnabled(bool on);
+
     // Phase 3 (2026-09-04): 画布尺寸
     //   渲染非 Bitmap (text/vector/smart) 时需要知道输出尺寸
     //   默认 = base layer image 尺寸, 或 800x600 fallback
@@ -270,6 +321,10 @@ signals:
 
 private:
     QList<LayerPtr> m_layers;
+
+    // P8.1.2 (2026-10-20): switch for renderViaCompositor(). Default
+    // true since P8.2; see the renderViaCompositor() declaration above.
+    bool m_compositorEnabled = true;
     int  m_selection = -1;
     // Phase 3: 画布尺寸 (无 base layer 时 rasterize text/vector 用)
     cv::Size m_canvasSize = cv::Size(800, 600);
@@ -288,6 +343,26 @@ private:
     //   of cloned child layers. Layer struct itself does NOT hold children
     //   (would break Layer's copy semantics; see Layer.h comment).
     QHash<LayerId, std::vector<LayerPtr>> m_groups;
+
+    // P8.1.z (2026-10-22): m_groups is keyed by LayerId, which IS the
+    // LayerPtr's address. So any operation that produces a NEW LayerPtr
+    // for a Group orphans that group's children: the entry still exists
+    // under the old address and the clone looks childless. Three
+    // operations hit this — mergeIntoGroup() (nesting a group), and
+    // duplicateLayer() — plus removeLayer(), which used to leak the
+    // entry outright. These two helpers are the single place where a
+    // layer's group children are carried across an address change or
+    // released with their owner.
+    LayerPtr cloneLayerWithGroupChildren(const LayerPtr& src);
+    void    releaseGroupChildren(const LayerPtr& group);
+    int     appendLayerPtr(LayerPtr layer);
+
+    // P8.1.z (2026-10-22): composite a group's children onto `target` in
+    //   order, recursing into nested Groups. Shared by the top-level
+    //   render() loop and by nested groups themselves, so nesting works
+    //   by construction instead of only at the first level.
+    void compositeChildrenInto(const std::vector<LayerPtr> &children,
+                               cv::Mat &target) const;
 
     void reassignZOrder();
     void disconnectLayer(LayerPtr l);

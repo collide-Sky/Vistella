@@ -314,6 +314,39 @@ add_library(vistella_media STATIC
     compositor/nodes/LayerBitmapNode.h
     compositor/nodes/LayerBitmapNode.cpp
 
+    # P8.1.1 (2026-10-19): LayerStack -> CompositorGraph adapter
+    #   + LayerBlendNode (delegates to layers::applyBlend, all 15 modes).
+    #   + LayerMaskNode (per-pixel multiplicative attenuation).
+    #   + GroupNode (Phase B: group opacity over composited children).
+    #   + LayerStackAdapter (builds a DAG from a layers::LayerStack,
+    #     Phase B adds recursive LayerKind::Group support).
+    compositor/nodes/LayerBlendNode.h
+    compositor/nodes/LayerBlendNode.cpp
+    compositor/nodes/LayerMaskNode.h
+    compositor/nodes/LayerMaskNode.cpp
+    compositor/nodes/GroupNode.h
+    compositor/nodes/GroupNode.cpp
+    # P8.1.1.x (2026-10-20): remaining LayerKind coverage.
+    #   LayerRasterNode     Text / Vector / SmartObject sources
+    #     (delegates rasterization to LayerStack::rasterizeLayer, and
+    #      applies a SmartObject's SmartFilter chain to the full image)
+    #   LayerAdjustmentNode LUT filter over the accumulated canvas
+    compositor/nodes/LayerRasterNode.h
+    compositor/nodes/LayerRasterNode.cpp
+    compositor/nodes/LayerAdjustmentNode.h
+    compositor/nodes/LayerAdjustmentNode.cpp
+    # P8.1.1.y (2026-10-22): explicit graph root.
+    #   LayerOpacityNode  base layer composited over black at its own
+    #     opacity (legacy does NOT route the base through applyBlend)
+    #   SolidCanvasNode   white canvasSize() fallback for stacks with no
+    #     bitmap base layer
+    compositor/nodes/LayerOpacityNode.h
+    compositor/nodes/LayerOpacityNode.cpp
+    compositor/nodes/SolidCanvasNode.h
+    compositor/nodes/SolidCanvasNode.cpp
+    compositor/nodes/LayerStackAdapter.h
+    compositor/nodes/LayerStackAdapter.cpp
+
     # P8.2 (2026-10-16): GPU/CPU backend abstraction.
     #   Per-tile RenderBackend interface + CpuBackend (pass-through) +
     #   GpuBackend (stub; pass-through; real shader path in P8.2.x) +
@@ -337,6 +370,11 @@ target_link_libraries(vistella_media
     PUBLIC
         Qt6::Core
         Qt6::Widgets
+        # P8.2.x (2026-10-19): GpuBackend real shader pipeline
+        #   QOpenGLContext + QOpenGLFunctions + QOpenGLShaderProgram +
+        #   QOpenGLTexture + QOpenGLFramebufferObject + QOffscreenSurface
+        Qt6::OpenGL
+        Qt6::Gui
         # F-P.1 logger 统一: mediators/tools #include "logger.h" 走 PUBLIC include path
         vistella_logger
         # P0-8.3 (2026-09-15): LCMS2 for ICC profile (EmbedProfileToPng/Jpeg/Tiff)

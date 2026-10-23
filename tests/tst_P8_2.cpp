@@ -137,7 +137,7 @@ void tst_P8_2::cpuBackend_processTile_preservesTypeAndSize()
 void tst_P8_2::gpuBackend_stubName()
 {
     GpuBackend b;   // default ctor: no provider
-    QCOMPARE(b.name(), QStringLiteral("qt-opengl-stub"));
+    QCOMPARE(b.name(), QStringLiteral("qt-opengl"));
 }
 
 void tst_P8_2::gpuBackend_isAvailableFollowsCapabilities()
@@ -221,7 +221,7 @@ void tst_P8_2::registry_basicKindWithStateNeedsGpuPicksGpuWhenAvailable()
     ss.smoothing = 99.0;   // per-state GPU needed
     RenderBackend* b = r.pick(BrushKind::Pencil, ss);
     QVERIFY(b == r.gpuBackend());
-    QVERIFY(b->name() == QStringLiteral("qt-opengl-stub"));
+    QVERIFY(b->name() == QStringLiteral("qt-opengl"));
 }
 
 void tst_P8_2::registry_wetKindAlwaysPicksGpuWhenAvailable()
@@ -288,7 +288,7 @@ void tst_P8_2::registry_describeDecision_containsCategoryAndKind()
     QVERIFY(desc.contains("Wet"));
     QVERIFY(desc.contains("Watercolor"));
     QVERIFY(desc.contains("->"));
-    QVERIFY(desc.contains("qt-opengl-stub"));
+    QVERIFY(desc.contains("qt-opengl"));
 }
 
 void tst_P8_2::registry_cpuAndGpuAccessorsReturnNonNull()

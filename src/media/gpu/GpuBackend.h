@@ -1,46 +1,92 @@
 // SPDX-License-Identifier: MIT
 //
-// GpuBackend - P8.2 (2026-10-16) GPU backend STUB
-//   This is intentionally a stub. It declares the interface +
-//   reports availability based on a capability flag (real OpenGL
-//   probe comes in P8.2.x). processTile() returns the input
-//   unchanged, so it behaves identically to CpuBackend — but the
-//   registry can route to it for Wet brushes and the status bar can
-//   report "GPU: <name>".
+// GpuBackend - P8.2.x (2026-10-19) real Qt OpenGL shader pipeline.
 //
-//   The real shader pipeline (upload tile to texture, run shader,
-//   read back to cv::Mat) arrives in P8.2.x. The interface is
-//   stable: per-tile, no global state in the per-tile call.
+//   Pass-through fragment shader MVP. The backend owns a single
+//   QOpenGLContext + QOffscreenSurface + a QOpenGLShaderProgram that
+//   just samples the input texture and writes the same color out.
+//   processTile() uploads the cv::Mat to a texture, renders to an
+//   FBO, reads back the result.
 //
-//   P8.2 commit. P8.2.x incrementally fills in:
-//     - QOpenGLContext probe
-//     - Texture upload (cv::Mat -> QOpenGLTexture)
-//     - QOpenGLShaderProgram (pass-through, blend, blur, ...)
-//     - FBO readback (QOpenGLFramebufferObject -> cv::Mat)
+//   Thread-safety: QOpenGLContext can only be current on one thread
+//   at a time, so all GL work runs under m_lock. Multiple workers
+//   calling processTile() concurrently serialize through this lock.
+//   Context + shader + FBO are kept alive across calls (init once,
+//   reuse forever).
+//
+//   Pixel format pipeline:
+//     cv::Mat (CV_8UC3 BGR) -> QImage (Format_BGR888) -> GL_BGR upload
+//     GL pass-through shader
+//     glReadPixels into QImage (Format_BGR888) -> cv::Mat (BGR)
+//
+//   For formats that don't map cleanly to GL_BGR (e.g. CV_8UC4
+//   BGRA), the backend will fall back to input.clone() to avoid
+//   silent corruption. Future P8.2.x shader work (blend, blur)
+//   will route through this same path.
+//
+//   Capability probe: isAvailable() lazy-initializes the GL context
+//   once on first call and caches the result. The capabilityProvider
+//   callback (P8.2 stub API) is honored as an override for tests.
 
 #pragma once
 
 #include "RenderBackend.h"
 
+#include <QMutex>
+#include <QStringList>
+
+class QOpenGLContext;
+class QOpenGLFunctions;
+class QOpenGLFramebufferObject;
+class QOpenGLShaderProgram;
+class QOffscreenSurface;
+
 namespace gpu {
 
 class GpuBackend : public RenderBackend {
 public:
-    // capabilityProvider returns true when GPU is usable right now.
-    // For tests, the test sets a flag and the provider reads it.
-    explicit GpuBackend(bool capabilityProvider() = nullptr);
+    explicit GpuBackend(bool (*capabilityProvider)() = nullptr);
+    ~GpuBackend() override;
 
-    QString name() const override { return QStringLiteral("qt-opengl-stub"); }
+    QString name() const override { return QStringLiteral("qt-opengl"); }
     bool    isAvailable() const override;
 
-    cv::Mat processTile(const compositor::TileKey& /*key*/,
+    cv::Mat processTile(const compositor::TileKey& key,
                         const cv::Mat& input,
-                        RenderBackendContext& /*ctx*/) override;
+                        RenderBackendContext& ctx) override;
 
     QStringList capabilities() const override;
 
 private:
+    // Lazy GL init. Returns true on success. Idempotent.
+    bool ensureGL() const;
+
+    // Release all GL resources. Called from dtor.
+    void releaseGL();
+
+    // External capability flag (test override). If non-null, takes
+    // precedence over the real probe.
     bool (*m_capabilityProvider)() = nullptr;
+
+    // Cached availability result. -1 = not probed, 0 = no, 1 = yes.
+    mutable int  m_probed       = -1;
+
+    // GL state (all owned via raw pointers; Qt objects, no parent
+    // because they may be created on a different thread than the
+    // dtor's thread).
+    mutable QOpenGLContext*          m_context  = nullptr;
+    mutable QOffscreenSurface*       m_surface  = nullptr;
+    mutable QOpenGLFunctions*        m_functions = nullptr;
+    mutable QOpenGLShaderProgram*    m_program  = nullptr;
+
+    // Per-tile FBO. Created on first processTile to match input size;
+    // resized if the next tile is a different size.
+    mutable QOpenGLFramebufferObject* m_fbo      = nullptr;
+    mutable int                      m_fboW     = 0;
+    mutable int                      m_fboH     = 0;
+
+    // Serializes all GL access across threads.
+    mutable QMutex  m_lock;
 };
 
 } // namespace gpu

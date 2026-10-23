@@ -10,6 +10,11 @@
 //   P8.4: add CompositeStrategy (Sequential / Parallel) + execute(engine)
 //   overload that fans tiles across vistella::tp::EngineContext::background().
 //   TileCache is mutex-protected so concurrent tryGet/put are race-free.
+//
+//   P8.4.x: per-tile backend dispatch. If setBackend(reg) is called, every
+//   computed tile is post-processed through reg->pick(...)->processTile().
+//   The dispatched result is what gets cached. Default backend = nullptr
+//   (no dispatch; matches P8.4 behavior).
 
 #pragma once
 
@@ -20,6 +25,12 @@
 #include "TileGrid.h"
 
 #include <opencv2/core.hpp>
+
+// P8.4.x: include the backend + brush state headers directly. Per project
+// rule "禁止类前向声明" (cross-project workflow rule), we do not use
+// forward declarations for classes that are stored as members.
+#include "../gpu/BackendRegistry.h"   // P8.4.x: per-tile backend dispatch
+#include "../tools/ToolContext.h"      // P8.4.x: BrushSharedState (held by value)
 
 // Forward-declare vistella::tp::EngineContext in the global namespace
 // so the compositor namespace below doesn't re-wrap it. P8.4 uses
@@ -75,6 +86,20 @@ public:
     void setCompositeStrategy(CompositeStrategy s) { m_strategy = s; }
     CompositeStrategy compositeStrategy() const { return m_strategy; }
 
+    // P8.4.x (2026-10-19): per-tile backend dispatch. When a registry
+    // is set, every freshly-computed tile is post-processed through
+    //   registry->pick(m_sharedState.kind, m_sharedState)->processTile(...)
+    // and the result is what gets cached. Default: nullptr = no
+    // dispatch (matches P8.4 behavior).
+    //
+    // The shared state is also passed to the registry. If you don't call
+    // setSharedState(), a default-constructed state is used (which under
+    // Auto mode routes Basic kinds to CPU).
+    void setBackend(gpu::BackendRegistry* reg) { m_backend = reg; }
+    gpu::BackendRegistry* backend() const { return m_backend; }
+    void setSharedState(const tools::BrushSharedState& ss) { m_sharedState = ss; }
+    const tools::BrushSharedState& sharedState() const { return m_sharedState; }
+
     // Render the full canvas. Returns a cv::Mat of size grid->imageWidth()
     // x grid->imageHeight() (CV_8UC3 BGR by default). The
     // engine-bearing overload honors the CompositeStrategy:
@@ -100,6 +125,8 @@ private:
     TileGrid*              m_grid   = nullptr;
     TileCache              m_cache;
     CompositeStrategy      m_strategy = CompositeStrategy::Sequential;
+    gpu::BackendRegistry*  m_backend = nullptr;
+    tools::BrushSharedState m_sharedState;   // default-constructed = CPU under Auto
 
     int m_lastHits   = 0;
     int m_lastMisses = 0;

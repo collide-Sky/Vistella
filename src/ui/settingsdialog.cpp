@@ -1,6 +1,7 @@
 #include "settingsdialog.h"
 #include "ui_settingsdialog.h"
 
+#include "settingsgpupanel.h"   // P8.3.x: GPU / 渲染后端 page
 #include "../core/LanguageManager.h"
 #include "recentmanager.h"
 #include "Logger.h"
@@ -39,6 +40,9 @@ SettingsDialog::SettingsDialog(QWidget *parent)
 
     // 日志页: 初始化当前值 + 绑定信号
     setupLogPage();
+
+    // P8.3.x (2026-10-19): GPU 页 - 嵌到 nav + stack
+    setupGpuPage();
 }
 
 SettingsDialog::~SettingsDialog()
@@ -190,4 +194,25 @@ void SettingsDialog::onLogListClicked()
         msg += QString::fromStdString(f) + "\n";
     }
     QMessageBox::information(this, tr("今日日志"), msg);
+}
+
+// =============================================================================
+//  P8.3.x (2026-10-19): GPU 设置页
+//   把 SettingsGpuPanel 嵌到 nav + stack, 用户切 GPU 模式后不需要重启
+// =============================================================================
+void SettingsDialog::setupGpuPage()
+{
+    // 1) 加 nav 条目
+    ui->nav->addItem(QStringLiteral("GPU 设置"));
+
+    // 2) 嵌 panel widget 到 stack
+    m_gpuPanel = new SettingsGpuPanel(this);
+    ui->stack->addWidget(m_gpuPanel);
+
+    // 3) 选 nav 时切 stack
+    const int gpuIdx = ui->nav->count() - 1;
+    connect(ui->nav, &QListWidget::currentRowChanged, this,
+            [this, gpuIdx](int row) {
+                if (row == gpuIdx) ui->stack->setCurrentIndex(gpuIdx);
+            });
 }

@@ -6,6 +6,11 @@
 #include "LayerStack.h"
 #include "BlendMode.h"
 
+// P8.1.2 (2026-10-20): compositor-backed render path.
+#include "../../compositor/TileGrid.h"
+#include "../../compositor/RenderGraph.h"
+#include "../../compositor/nodes/LayerStackAdapter.h"
+
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
@@ -172,7 +177,18 @@ void LayerStack::disconnectLayer(LayerPtr l)
 
 int LayerStack::addLayer(const Layer &layer)
 {
-    m_layers.append(std::make_shared<Layer>(layer));
+    return appendLayerPtr(std::make_shared<Layer>(layer));
+}
+
+// P8.1.z (2026-10-22): append an already-allocated layer, keeping ITS
+// address. addLayer(const Layer&) necessarily allocates a fresh LayerPtr,
+// which would break m_groups lookups keyed on that address — so anything
+// that has to preserve a Group's identity (duplicateLayer) goes through
+// here instead.
+int LayerStack::appendLayerPtr(LayerPtr layer)
+{
+    if (!layer) return -1;
+    m_layers.append(std::move(layer));
     const int newIndex = m_layers.size() - 1;
     reassignZOrder();
     emit layerAdded(newIndex);
@@ -254,6 +270,43 @@ int LayerStack::addAdjustmentLayer(const QString &name, const QString &adjustmen
     return addLayer(l);
 }
 
+// P8.1.z (2026-10-22): clone a layer AND carry its group children across
+//   to the clone's address.
+//
+//   m_groups is keyed by LayerId, and LayerId is the LayerPtr's address.
+//   A plain Layer copy allocates a new address, so a cloned Group ends up
+//   with no m_groups entry and renders as an empty group — everything
+//   inside it silently disappears. Re-keying the children under the clone
+//   is what makes nesting a group (mergeIntoGroup) and duplicating one
+//   (duplicateLayer) behave.
+//
+//   Children are moved, not deep-copied: they already live at their own
+//   addresses, and their own nested-group entries stay valid because the
+//   child LayerPtrs themselves are unchanged. That matches the existing
+//   design, where a group's children are shared handles rather than a
+//   private deep tree.
+LayerPtr LayerStack::cloneLayerWithGroupChildren(const LayerPtr& src)
+{
+    if (!src) return LayerPtr();
+    auto clone = std::make_shared<Layer>(*src);
+    if (clone->kind == Layer::Group) {
+        auto it = m_groups.find(reinterpret_cast<LayerId>(src.get()));
+        if (it != m_groups.end() && !it.value().empty()) {
+            m_groups.insert(reinterpret_cast<LayerId>(clone.get()), it.value());
+        }
+    }
+    return clone;
+}
+
+// P8.1.z (2026-10-22): drop a group layer's children entry when the layer
+//   itself goes away. Without this, removeLayer() left the vector of
+//   child LayerPtrs alive in m_groups forever.
+void LayerStack::releaseGroupChildren(const LayerPtr& group)
+{
+    if (!group) return;
+    m_groups.remove(reinterpret_cast<LayerId>(group.get()));
+}
+
 // P1.5.2 (2026-09-21): Group adjacent layers into a Group container.
 //   1. Validate: >= 2 indices, sorted ascending, contiguous.
 //   2. Capture each layer's full copy (LayerPtr deep clone via std::make_shared<Layer>).
@@ -274,11 +327,14 @@ int LayerStack::mergeIntoGroup(const QList<int>& indices)
     for (int i = 1; i < sorted.size(); ++i) {
         if (sorted[i] != sorted[i - 1] + 1) return -1;
     }
-    // Capture clones BEFORE removing originals (so indices stay valid)
+    // Capture clones BEFORE removing originals (so indices stay valid).
+    // P8.1.z: cloneLayerWithGroupChildren, so grouping a group keeps the
+    // inner group's children instead of orphaning them under the old
+    // LayerId.
     std::vector<LayerPtr> clones;
     clones.reserve(sorted.size());
     for (int idx : sorted) {
-        clones.push_back(std::make_shared<Layer>(*m_layers[idx]));
+        clones.push_back(cloneLayerWithGroupChildren(m_layers[idx]));
     }
     // Remove originals in reverse order (high -> low) to keep indices stable
     for (int i = sorted.size() - 1; i >= 0; --i) {
@@ -349,6 +405,15 @@ const std::vector<LayerPtr>& LayerStack::groupChildrenOf(LayerId groupId) const
     return it.value();
 }
 
+const std::vector<LayerPtr>& LayerStack::groupChildrenOf(const LayerPtr& group) const
+{
+    if (!group) {
+        static const std::vector<LayerPtr> kEmpty;
+        return kEmpty;
+    }
+    return groupChildrenOf(reinterpret_cast<LayerId>(group.get()));
+}
+
 // P0 leftover 3 (2026-09-21): inverse of flattenGroup, used by LayerCommand
 //   to undo a flatten. Builds a fresh Group layer, inserts it at atIndex,
 //   and registers the cloned children under the new Group's LayerId.
@@ -379,7 +444,15 @@ bool LayerStack::removeLayer(int index)
     //   removal should be paired with rasterizeSmartObject()/a cascade helper
     //   to also drop orphaned SmartFilter children. Doing chain cleanup
     //   here would double-mutate and leave stale indices in m_smartFilterChain.
+    // P8.1.z (2026-10-22): capture the LayerPtr BEFORE removal. Reading
+    //   m_layers[index] after removeAt() is out of range whenever index
+    //   was the last element — which is exactly what happens when
+    //   mergeIntoGroup() removes its originals from the top down.
+    LayerPtr removed = m_layers.at(index);
     m_layers.removeAt(index);
+    // A removed Group's children entry used to stay in m_groups forever,
+    // keeping its child LayerPtrs alive.
+    releaseGroupChildren(removed);
     reassignZOrder();
     // 选中更新
     if (m_selection >= m_layers.size()) {
@@ -396,6 +469,14 @@ bool LayerStack::duplicateLayer(int index)
     if (auto l = at(index)) {
         Layer copy = *l;   // 拷贝构造 (cv::Mat clone, QString 值语义)
         copy.name = l->name + QStringLiteral(" copy");
+        // P8.1.z (2026-10-22): a duplicated Group must keep its children.
+        // appendLayerPtr (not addLayer) keeps the clone's address, which
+        // is the address its m_groups entry was re-keyed to.
+        if (l->kind == Layer::Group) {
+            auto clone = cloneLayerWithGroupChildren(l);
+            clone->name = copy.name;
+            return appendLayerPtr(std::move(clone)) >= 0;
+        }
         return addLayer(copy) >= 0;
     }
     return false;
@@ -1072,6 +1153,39 @@ cv::Mat LayerStack::rasterizeForRender(int idx) const
     return rasterize(l);
 }
 
+// P8.1.1.x (2026-10-20): public rasterize() for the compositor's
+//   source nodes. Takes a LayerPtr rather than an index because group
+//   children are only reachable through groupChildrenOf().
+cv::Mat LayerStack::rasterizeLayer(const LayerPtr &l) const
+{
+    if (!l) return cv::Mat();
+    return rasterize(l);
+}
+
+// P8.1.1.x (2026-10-20): SmartFilter chain application, factored out of
+//   render() so both render paths use one implementation.
+//
+//   The chain runs on the FULL rasterized image rather than per tile,
+//   and that is deliberate: several filters here (GaussianBlur) sample
+//   neighbouring pixels, so filtering a tile in isolation would darken
+//   every tile seam. Correct tile-boundary handling would need a halo
+//   of ceil(kernel/2) pixels per side, re-fetched from upstream and
+//   discarded after the filter. Doing that per filter node is only worth
+//   it once the DAG can express it; see LayerRasterNode.
+cv::Mat LayerStack::applySmartFilterChain(const cv::Mat &src, int smartIdx) const
+{
+    if (src.empty()) return cv::Mat();
+    const auto &chain = smartFiltersFor(smartIdx);
+    cv::Mat out = src;
+    for (int fIdx : chain) {
+        auto fL = at(fIdx);
+        if (!fL || !fL->visible || fL->opacity <= 0.0f) continue;
+        cv::Mat filtered = applySmartFilter(fL->filterType, fL->filterStrength, out);
+        if (!filtered.empty()) out = filtered;
+    }
+    return out;
+}
+
 // P1.4.4 (2026-09-17): Re-insert a SmartFilter (used by undo).
 //   The layer is appended at end of m_layers and the new index is inserted
 //   into the parent chain at `atSlot` (clamped to [0..chain.size()]). Returns
@@ -1387,8 +1501,60 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
     }
 }
 
+// P8.1.z (2026-10-22): composite a group's children onto `target`, in
+//   order, PS-style: each child blends with its own blendMode, and a
+//   nested Group composites like any other layer but contributes its own
+//   subtree first and then applies its opacity.
+//
+//   Extracted out of render() so nesting works by construction. The old
+//   inline loop called rasterize(child) and skipped anything that came
+//   back empty — which is every nested Group, since rasterize() has no
+//   case for Layer::Group. That silently dropped the entire inner subtree
+//   from the render while leaving it intact in the model.
+//
+//   Note the group children path deliberately does NOT apply a
+//   SmartFilter chain (neither did the original loop, and the chain is
+//   keyed on a m_layers index a group child does not have).
+void LayerStack::compositeChildrenInto(const std::vector<LayerPtr> &children,
+                                       cv::Mat &target) const
+{
+    for (const auto &child : children) {
+        if (!child || !child->visible) continue;
+
+        if (child->kind == Layer::SmartFilter) continue;
+
+        if (child->kind == Layer::Group) {
+            const auto &grandChildren = groupChildrenOf(child);
+            if (grandChildren.empty()) continue;
+            cv::Mat groupMat = target.clone();
+            compositeChildrenInto(grandChildren, groupMat);
+            if (child->opacity < 1.0f) {
+                cv::Mat tmp;
+                cv::addWeighted(target, 1.0f - child->opacity,
+                                groupMat, child->opacity, 0, tmp);
+                target = tmp;
+            } else {
+                target = groupMat;
+            }
+            continue;
+        }
+
+        cv::Mat cMat = rasterize(child);
+        if (cMat.empty()) continue;
+        if (child->maskEnabled && !child->layerMask.empty()) {
+            cMat = applyMask(cMat, child->layerMask);
+        }
+        target = applyBlend(child->blend, target, cMat, child->opacity);
+    }
+}
+
 cv::Mat LayerStack::render() const
 {
+    // P8.1.2 (2026-10-20): compositor-backed render path.
+    //   Default on since P8.2 (2026-10-22), once every LayerKind had a
+    //   node type. setCompositorEnabled(false) falls back to the legacy
+    //   per-layer loop below.
+    if (m_compositorEnabled) return renderViaCompositor();
     if (m_layers.isEmpty()) return cv::Mat();
 
     // Step 1: 找 base layer (kind=Bitmap 且 image 非空) 作 canvas
@@ -1425,15 +1591,7 @@ cv::Mat LayerStack::render() const
             const auto &children = groupChildrenOf(idOf(i));
             if (children.empty()) continue;
             cv::Mat groupMat = canvas.clone();
-            for (const auto &child : children) {
-                if (!child || !child->visible) continue;
-                cv::Mat cMat = rasterize(child);
-                if (cMat.empty()) continue;
-                if (child->maskEnabled && !child->layerMask.empty()) {
-                    cMat = applyMask(cMat, child->layerMask);
-                }
-                groupMat = applyBlend(child->blend, groupMat, cMat, child->opacity);
-            }
+            compositeChildrenInto(children, groupMat);
             if (l->opacity < 1.0f) {
                 cv::Mat tmp;
                 cv::addWeighted(canvas, 1.0f - l->opacity,
@@ -1476,19 +1634,12 @@ cv::Mat LayerStack::render() const
         cv::Mat layerMat = rasterize(l);
         if (layerMat.empty()) continue;
         // P1.4.4 (2026-09-17): SmartObject chain application.
-        //   Walk m_smartFilterChain[i] in order and re-apply each enabled
-        //   filter fresh (so reorder / strength changes take effect without
-        //   re-running append).
+        //   Walk the chain in order and re-apply each enabled filter
+        //   fresh (so reorder / strength changes take effect without
+        //   re-running append). Shared with the compositor path via
+        //   applySmartFilterChain() — P8.1.1.x.
         if (l->kind == Layer::SmartObject) {
-            const auto &chain = smartFiltersFor(i);
-            for (int fIdx : chain) {
-                auto fL = at(fIdx);
-                if (!fL || !fL->visible || fL->opacity <= 0.0f) continue;
-                cv::Mat filtered = applySmartFilter(fL->filterType,
-                                                    fL->filterStrength,
-                                                    layerMat);
-                if (!filtered.empty()) layerMat = filtered;
-            }
+            layerMat = applySmartFilterChain(layerMat, i);
         }
         // Phase 4 (2026-09-04): 应用蒙版 (mask 调制 layer alpha)
         if (l->maskEnabled && !l->layerMask.empty()) {
@@ -1585,6 +1736,42 @@ QStringList LayerStack::layerNames() const
 //   4. callback 捕获 cv::Mat 用 std::move — render() 返的 Mat move 进去避免额外 copy
 //   5. QCoreApplication::instance() 必须存在 (背景: 单元测试用 QTEST_MAIN 默认构造)
 //      兜底: instance() == nullptr → 同步兜底 (跟 engine==nullptr 路径一致)
+// =====================================================================
+//  P8.1.2 (2026-10-20): compositor-backed render
+// =====================================================================
+//
+// Renders the stack through the P8.1 CompositorGraph instead of the
+// legacy per-layer loop above. The DAG is rebuilt on every call
+// (LayerStack is mutable: add/remove/reorder/blend edits all happen
+// between renders), which is acceptable because the expensive part
+// is the per-pixel blend work and the tile cache lives on the
+// RenderGraph, not on the DAG.
+//
+// Feature flag: set via setCompositorEnabled(). Default is OFF so
+// the legacy path stays the default until the remaining layer kinds
+// (Vector / Text / SmartObject / Adjustment) have their nodes. Tests
+// in tst_P8_1_1 exercise this path directly.
+
+cv::Mat LayerStack::renderViaCompositor() const
+{
+    if (m_layers.isEmpty()) return cv::Mat();
+
+    compositor::LayerStackAdapter::Result built =
+        compositor::LayerStackAdapter::build(const_cast<LayerStack&>(*this));
+    // outputNode is never 0: the adapter always builds an explicit root
+    // (the base bitmap, or a SolidCanvasNode for the no-base case), so
+    // there is no "nothing renderable" branch to fall back on here.
+
+    // Canvas geometry comes from the adapter, which already had to
+    // resolve the compositing root — see LayerStackAdapter::Result.
+    compositor::TileGrid grid(built.canvasSize.width, built.canvasSize.height);
+    compositor::RenderGraph rg(&built.graph, built.outputNode, &grid);
+    return rg.execute();
+}
+
+bool LayerStack::compositorEnabled() const { return m_compositorEnabled; }
+void LayerStack::setCompositorEnabled(bool on) { m_compositorEnabled = on; }
+
 void LayerStack::renderAsync(vistella::tp::EngineContext *engine,
                               RenderCallback callback) const
 {
