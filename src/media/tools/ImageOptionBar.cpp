@@ -32,7 +32,9 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QSignalBlocker>
+#include <QVBoxLayout>
 
 namespace tools {
 
@@ -42,6 +44,20 @@ ImageOptionBar::ImageOptionBar(QWidget* parent) : QWidget(parent)
     ui->setupUi(this);
     // F-E stage: default page = None (0)
     ui->stackedWidget->setCurrentIndex(static_cast<int>(mediators::ToolId::None));
+
+    // P8.3.2 (2026-10-26): the "no tool selected" page gets a short hint.
+    //   The options column is ~300px wide; an empty box of that size reads
+    //   as a broken panel rather than as "nothing is selected yet".
+    if (QWidget* nonePage = ui->stackedWidget->widget(
+            static_cast<int>(mediators::ToolId::None))) {
+        auto* noneLayout = new QVBoxLayout(nonePage);
+        noneLayout->setContentsMargins(12, 12, 12, 12);
+        auto* hint = new QLabel(tr("未选择工具\n请在左侧工具栏中选取工具"), nonePage);
+        hint->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+        hint->setStyleSheet(QStringLiteral("color: gray;"));
+        noneLayout->addWidget(hint);
+        noneLayout->addStretch(1);
+    }
 }
 
 ImageOptionBar::~ImageOptionBar()
@@ -97,6 +113,45 @@ void ImageOptionBar::detach()
     m_mosaic = nullptr;
     m_textCtrl = nullptr;
     m_brushOpt = nullptr;
+}
+
+void ImageOptionBar::installBrushOptionsPage(BrushOptionsPanel* panel)
+{
+    if (!panel) return;
+    const int idx = static_cast<int>(mediators::ToolId::Brush);
+    if (idx < 0 || idx >= ui->stackedWidget->count()) {
+        LOG_WARN("[OptionBar] installBrushOptionsPage: no slot for ToolId::Brush "
+                 "(idx={}), page count={}", idx, ui->stackedWidget->count());
+        return;
+    }
+
+    const int cur = ui->stackedWidget->currentIndex();
+
+    QWidget* old = ui->stackedWidget->widget(idx);
+    if (old == panel) {
+        m_brushOpt = panel;
+        return;
+    }
+    if (old) {
+        // The .ui ships an empty placeholder page for the Brush slot. Swap
+        // it out, but keep the page count (and therefore the ToolId -> page
+        // index mapping) exactly as it was.
+        ui->stackedWidget->removeWidget(old);
+        old->hide();
+        old->deleteLater();
+    }
+
+    // From here on the panel is laid out by the stacked widget instead of
+    // floating over the main window.
+    panel->setParent(ui->stackedWidget);
+    panel->setObjectName(QStringLiteral("page7"));
+    ui->stackedWidget->insertWidget(idx, panel);
+    m_brushOpt = panel;
+
+    if (cur >= 0 && cur < ui->stackedWidget->count())
+        ui->stackedWidget->setCurrentIndex(cur);
+
+    LOG_INFO("[OptionBar] installed BrushOptionsPanel as page {}", idx);
 }
 
 void ImageOptionBar::ensureMosaicPage()
@@ -190,13 +245,11 @@ void ImageOptionBar::onToolChanged(mediators::ToolId id)
     //   导致撮合丢失). 重新接 presetChanged / pickerRequested 到当前 Brush 工具.
     if (m_ctx) {
         if (idx == static_cast<int>(mediators::ToolId::Brush) && m_brushOpt) {
-            QWidget* old = ui->stackedWidget->widget(idx);
-            if (old != m_brushOpt) {
-                if (old) ui->stackedWidget->removeWidget(old);
-                m_brushOpt->setParent(ui->stackedWidget);
-                m_brushOpt->setObjectName(QStringLiteral("page7"));
-                ui->stackedWidget->insertWidget(idx, m_brushOpt);
-            }
+            // The brush panel is installed up front (installBrushOptionsPage),
+            // so it already owns the Brush slot. This call is idempotent and
+            // only repairs the slot if something else took it over.
+            if (ui->stackedWidget->widget(idx) != m_brushOpt)
+                installBrushOptionsPage(m_brushOpt);
             // 重接 presetChanged / pickerRequested (Brush 实例每次切工具重建).
             // 捕获 m_ctx raw pointer — imagewindow 生命周期内稳定. m_brushOpt 作为
             //   receiver context, panel 销毁时 Qt 自动 disconnect.

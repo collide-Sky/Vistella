@@ -1,5 +1,15 @@
 // VPages.cpp
 //   P7.6.x v3 commit 3 (2026-10-14) + commit 4 (2026-10-15): +VHistoryPage
+//   P8.3.2 (2026-10-26): every page publishes its title as the widget's
+//     window title.
+//
+//     VDraggableTabWidget::addPage() takes the tab label from
+//     QWidget::windowTitle(), and the event filter keeps the two in sync.
+//     The nine adapters below never set a window title, so all three panel
+//     groups rendered three empty tabs and the user could not tell which
+//     group was the colour group, the property group or the layer group.
+//     setWindowTitle(pageTitle()) in every constructor fixes that at the
+//     source: the page knows its own identity, so it publishes it.
 #include "VPages.h"
 
 #include <QUndoStack>
@@ -25,42 +35,53 @@ VColorPage::VColorPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new docks::ColorTab(this)))
 {
+    setWindowTitle(pageTitle());
 }
 
 VSwatchPage::VSwatchPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new docks::SwatchTab(this)))
 {
+    setWindowTitle(pageTitle());
 }
 
 VGradientPage::VGradientPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new docks::GradientTab(this)))
 {
+    setWindowTitle(pageTitle());
 }
 
 VPatternPage::VPatternPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new docks::PatternTab(this)))
 {
+    setWindowTitle(pageTitle());
 }
 
 VLayerPage::VLayerPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new docks::LayersDock(this)))
 {
+    setWindowTitle(pageTitle());
+    // P8.3.2 (2026-10-26): the panel group provides the page switcher, so
+    //   the inner tab bar of the LayersDock would be a duplicate row of
+    //   tabs (and its channel/path page was only ever a placeholder).
+    m_inner->setEmbeddedInPanelGroup(true);
 }
 
 VAdjustmentPage::VAdjustmentPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new AdjustmentPanel(this)))
 {
+    setWindowTitle(pageTitle());
 }
 
 VPropertyPage::VPropertyPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new docks::PropertiesDock(this)))
 {
+    setWindowTitle(pageTitle());
 }
 
 void VPropertyPage::invalidateCache()
@@ -78,6 +99,7 @@ VChannelPathPage::VChannelPathPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new docks::ChannelPathPanel(this)))
 {
+    setWindowTitle(pageTitle());
 }
 
 void VChannelPathPage::invalidateCache()
@@ -90,6 +112,7 @@ VHistoryPage::VHistoryPage(QWidget* parent)
     : VTabPageBase(parent)
     , m_inner(embed(this, new docks::HistoryDock(this)))
 {
+    setWindowTitle(pageTitle());
 }
 
 void VHistoryPage::setUndoStack(QUndoStack* stack)

@@ -112,6 +112,8 @@ signals:
 protected:
     void wheelEvent(QWheelEvent* e) override;
     void mousePressEvent(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
+    void mouseReleaseEvent(QMouseEvent* e) override;
     void mouseDoubleClickEvent(QMouseEvent* e) override;
     void keyPressEvent(QKeyEvent* e) override;
     void keyReleaseEvent(QKeyEvent* e) override;
@@ -119,6 +121,28 @@ protected:
     void drawForeground(QPainter* p, const QRectF& rect) override;
 
 private:
+    // P8.3.1 (2026-10-26): true once QGraphicsView has actually stored a
+    //   mouse event of its own.
+    //
+    //   QGraphicsView keeps "the last mouse event" in a QEventStorage, and
+    //   only fills it when a press or a move reaches the base class
+    //   (QGraphicsViewPrivate::storeMouseEvent). But
+    //   QGraphicsView::mouseReleaseEvent reads that storage UNCONDITIONALLY,
+    //   to clear the viewport cursor — and QGraphicsViewPrivate::
+    //   _q_unsetViewportCursor() dereferences it without checking that it
+    //   was ever engaged. A release with no matching press therefore trips
+    //   Qt 6.11's `ASSERT: "m_engaged"` in gui/kernel/qevent_p.h.
+    //
+    //   Such a release is not exotic: press the mouse on the home page's
+    //   recent-files list, the workspace opens under the cursor, and the
+    //   release lands on a canvas that never saw a press.
+    //
+    //   The flag is set from the same place the base class stores the
+    //   event, so it tracks the storage exactly rather than guessing. The
+    //   one case where the base returns before storing is a null scene,
+    //   which is why the assignment is guarded on scene().
+    bool m_viewStoredMouseEvent = false;
+
     // Re-apply m_zoom to the QGraphicsView transform (resetTransform + scale).
     // Called by setZoom / onZoomIn/Out/ResetZoom / wheelEvent after m_zoom changes.
     void applyTransform();

@@ -18,6 +18,10 @@ namespace docks {
 
 namespace {
 
+// P8.3.2 (2026-10-26): the smallest height a panel group may take. Below
+//   this the tab bar is all that is left and the group is useless.
+constexpr int kMinGroupHeight = 80;
+
 // VColorPage wraps docks::ColorTab internally. Callers that need the
 // underlying ColorTab can use VColorPage::inner() to wire signals.
 vistella::ui::VColorPage* makeColorPage(QWidget* parent)
@@ -42,13 +46,48 @@ RightPanelDock::RightPanelDock(QWidget* parent) : QWidget(parent)
     buildSubDockProperty();
     buildSubDockLayer();
 
-    // Equal-height initial split: 1/3 each.
-    QList<int> sizes;
-    sizes << 200 << 200 << 200;
-    m_splitter->setSizes(sizes);
+    // P8.3.2 (2026-10-26): the colour group and the property group size to
+    //   their content; only the layer group absorbs the leftover height.
+    //
+    //   The old code asked for a fixed 1/3 split (200/200/200). Qt's
+    //   QSplitter turns that into three equally tall groups - with no
+    //   stretch factor set, every widget is "expansive" and the leftover
+    //   space is shared out proportionally. The colour group therefore
+    //   carried hundreds of pixels of empty space and the property text
+    //   floated in the middle of a blank panel.
+    m_splitter->setStretchFactor(0, 0);
+    m_splitter->setStretchFactor(1, 0);
+    m_splitter->setStretchFactor(2, 1);
+    applyContentSizedSplit();
 
     LOG_INFO("[RightPanelDock] v3 commit 4 created: 3 sub-docks "
              "(color-group/property-group/layer-group)");
+}
+
+void RightPanelDock::applyContentSizedSplit()
+{
+    if (!m_splitter || !m_subDockColor || !m_subDockProperty || !m_subDockLayer)
+        return;
+
+    // A group is never smaller than its header plus a usable strip of
+    // content, otherwise the tab bar would be the only thing left.
+    const int hColor    = qMax(kMinGroupHeight, m_subDockColor->sizeHint().height());
+    const int hProperty = qMax(kMinGroupHeight, m_subDockProperty->sizeHint().height());
+
+    // The layer group takes whatever is left: it is the one panel whose
+    // content (the layer list) is meant to grow with the window.
+    m_splitter->setSizes({ hColor, hProperty, 0 });
+}
+
+void RightPanelDock::showEvent(QShowEvent* e)
+{
+    QWidget::showEvent(e);
+    // The first show is the first moment the dock knows its real height,
+    // which is when the content-sized split becomes meaningful.
+    if (!m_splitApplied) {
+        m_splitApplied = true;
+        applyContentSizedSplit();
+    }
 }
 
 RightPanelDock::~RightPanelDock() = default;
@@ -188,6 +227,20 @@ void RightPanelDock::invalidateAllPageCaches()
 QSize RightPanelDock::sizeHint() const
 {
     return QSize(340, 800);
+}
+
+QSize RightPanelDock::minimumSizeHint() const
+{
+    // P8.3.2 (2026-10-26): 右侧面板是 dock, 它不能决定主窗口的高度.
+    //
+    //   Qt 会把 dock 的 minimumSizeHint 累加进 QMainWindow 的布局最小值:
+    //   三个组的最小高度加起来 (颜色 ~110 + 属性 ~390 + 图层 ~240) 超过
+    //   窗口高度时, 窗口就被强行撑大 —— 打开曲线调整页时窗口长到 1186px,
+    //   直接超出 1080 的屏幕.
+    //
+    //   正确做法是 dock 给一个"有界下限": 窗口给多少高度, 三个组就怎么分,
+    //   需要更多空间的用户自己拖分隔条 (splitter 的拖动不受这个下限限制).
+    return QSize(280, 240);
 }
 
 // ---------------------------------------------------------------------------

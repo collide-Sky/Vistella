@@ -126,7 +126,33 @@ void ImageCanvas::wheelEvent(QWheelEvent* e) {
 
 void ImageCanvas::mousePressEvent(QMouseEvent* e) {
     QGraphicsView::mousePressEvent(e);
+    // The base class stores the event here (QGraphicsViewPrivate::
+    // storeMouseEvent) — unless it returned early because there is no
+    // scene. See m_viewStoredMouseEvent in the header for why this has
+    // to be tracked.
+    m_viewStoredMouseEvent = (scene() != nullptr);
     emit sceneClicked(mapToScene(e->pos()), e->button(), e->modifiers());
+}
+
+void ImageCanvas::mouseMoveEvent(QMouseEvent* e) {
+    QGraphicsView::mouseMoveEvent(e);
+    // Same as the press: the base stores the event on the way through.
+    if (scene() != nullptr) m_viewStoredMouseEvent = true;
+}
+
+void ImageCanvas::mouseReleaseEvent(QMouseEvent* e) {
+    if (!m_viewStoredMouseEvent) {
+        // Stray release: no press ever reached the view, so the base
+        // class would read a QEventStorage that was never engaged —
+        // Qt 6.11 asserts "m_engaged" and pops a debug error. Such a
+        // release carries no meaning for the view either (there is no
+        // drag, no click), so dropping it is the right thing, not just
+        // the safe thing.
+        e->accept();
+        return;
+    }
+    m_viewStoredMouseEvent = false;
+    QGraphicsView::mouseReleaseEvent(e);
 }
 
 void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* e) {

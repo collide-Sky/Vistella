@@ -6,37 +6,61 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
-    <height>40</height>
+    <width>320</width>
+    <height>360</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>0</width>
+    <width>300</width>
     <height>36</height>
    </size>
   </property>
-  <widget class="QStackedWidget" name="stackedWidget">
-   <widget class="QWidget" name="page0"/>
-   <widget class="QWidget" name="page1"/>
-   <widget class="QWidget" name="page2"/>
-   <widget class="QWidget" name="page3"/>
-   <widget class="QWidget" name="page4"/>
-   <widget class="QWidget" name="page5"/>
-   <widget class="QWidget" name="page6"/>
-   <widget class="QWidget" name="page7"/>
-   <widget class="QWidget" name="page8"/>
-   <widget class="QWidget" name="page9"/>
-   <widget class="QWidget" name="page10"/>
-   <widget class="QWidget" name="page11"/>
-   <widget class="QWidget" name="page12"/>
-   <widget class="QWidget" name="page13"/>
-   <widget class="QWidget" name="page14"/>
-   <widget class="QWidget" name="page15"/>
-   <!-- Q4.2.1 (2026-09-23): MaskBrush page (P1.3.4 像素蒙版画笔, idx=16)
-        跟 Transform 一样走动态 addPage 路径, MaskOptionsPanel 替换 -->
-   <widget class="QWidget" name="page16"/>
-  </widget>
+  <!-- P8.3.1 (2026-10-26): the stacked widget had no layout, so it kept
+       whatever geometry the .ui gave it and never followed the bar's
+       size. The options form inside then overflowed its host. Wrapping it
+       in a layout makes it fill the bar, and the bar's own minimum width
+       (300) keeps the dock from squeezing the form into clipped labels. -->
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QStackedWidget" name="stackedWidget">
+     <widget class="QWidget" name="page0"/>
+     <widget class="QWidget" name="page1"/>
+     <widget class="QWidget" name="page2"/>
+     <widget class="QWidget" name="page3"/>
+     <widget class="QWidget" name="page4"/>
+     <widget class="QWidget" name="page5"/>
+     <widget class="QWidget" name="page6"/>
+     <widget class="QWidget" name="page7"/>
+     <widget class="QWidget" name="page8"/>
+     <widget class="QWidget" name="page9"/>
+     <widget class="QWidget" name="page10"/>
+     <widget class="QWidget" name="page11"/>
+     <widget class="QWidget" name="page12"/>
+     <widget class="QWidget" name="page13"/>
+     <widget class="QWidget" name="page14"/>
+     <widget class="QWidget" name="page15"/>
+     <!-- Q4.2.1 (2026-09-23): MaskBrush page (P1.3.4 像素蒙版画笔, idx=16)
+          跟 Transform 一样走动态 addPage 路径, MaskOptionsPanel 替换 -->
+     <widget class="QWidget" name="page16"/>
+    </widget>
+   </item>
+  </layout>
  </widget>
  <resources/>
  <connections/>

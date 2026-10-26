@@ -1,17 +1,26 @@
 // SPDX-License-Identifier: MIT
 //
-// LeftSidePanel - P7.6.x v2 (2026-10-14)
+// LeftSidePanel - P7.6.x v2 (2026-10-14), P8.3.2 (2026-10-26)
 //
 // PS-style left side panel: single container widget hosting LeftToolBar +
-// ModeSelectorBar + ImageOptionBar + AppBar in a QVBoxLayout.
+// ImageOptionBar + ModeSelectorBar + AppBar.
 //
-//   rootLayout (QVBoxLayout, spacing=0, no margin)
-//     [LeftToolBar (P7.1 PS-style, ~56 wide, fixed width by minimumSize)
-//      horizontal sep line (1px) for visual break
-//      ImageOptionBar (expanding - dominant content)
-//      horizontal sep line
-//      ModeSelectorBar (fixed height 36)
-//      AppBar (fixed height 32)]
+// P8.3.2 layout (horizontal, PS shape):
+//
+//   outerLayout (QHBoxLayout, spacing=0, no margin)
+//     [LeftToolBar (56 wide, fixed)
+//      vertical sep line (1px)
+//      rightColumn (QVBoxLayout)
+//        ImageOptionBar (expanding - the tool options form)
+//        ModeSelectorBar (fixed height 36)
+//        AppBar (fixed height 32)]
+//
+//   The v2 layout stacked the same four widgets in a QVBoxLayout, so the
+//   56px-wide tool column sat ON TOP of a ~320px-wide options form while
+//   the host dock was sized for the tool column alone. The options form
+//   overflowed the dock and painted over the title bar and the canvas.
+//   PS puts the tool column on the LEFT and the options panel to its
+//   RIGHT, which is what the horizontal layout gives.
 //
 // Why one container instead of 4 separate docks:
 //   QMainWindow's addDockWidget + splitDockWidget chain produces inconsistent
@@ -22,7 +31,7 @@
 //   what the user reported: "左侧图标显示不完整" (left icons not fully shown).
 //
 //   Putting everything in one widget + one dock container makes the layout
-//   deterministic: QVBoxLayout allocates space top-to-bottom, each widget
+//   deterministic: the layout allocates space left-to-right, each widget
 //   gets its sizeHint, no QMainWindow dock-tabifying quirks.
 //
 // Trade-offs:
@@ -36,15 +45,14 @@
 
 #include <QObject>
 #include <QWidget>
+#include <QVBoxLayout>
 
-class QVBoxLayout;
+#include "LeftToolBar.h"
+#include "ModeSelectorBar.h"
+#include "ImageOptionBar.h"
+#include "AppBar.h"
 
 namespace tools {
-
-class LeftToolBar;
-class ModeSelectorBar;
-class ImageOptionBar;
-class AppBar;
 
 class LeftSidePanel : public QWidget
 {

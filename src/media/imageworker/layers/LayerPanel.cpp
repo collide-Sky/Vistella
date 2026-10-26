@@ -233,7 +233,13 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
     rootLayout->addLayout(propLayout);
 
     // 阶段 1 W4.3 (2026-09-04): 显式最小高度, 避免浮出 dock 后被压扁 (QToolButton 等被截)
-    setMinimumHeight(400);
+    // P8.3.2 (2026-10-26): 400 -> 240.
+    //   这个最小高度是"下限", 而它会一路传导: 右侧面板 (dock) 的最小高度
+    //   -> 主窗口的最小高度 -> 窗口被撑到超出屏幕。曲线编辑页打开时右侧
+    //   需要 ~390px, 加上这里的 400, 主窗口直接长到 1186px (屏幕只有 1080)。
+    //   240 仍然够放下两条工具栏 + 属性控件, 图层列表本身是可滚动的,
+    //   高度不够时由 splitter 让位给别的组, 用户可以自己拖分隔条。
+    setMinimumHeight(240);
 
     // P1.4.3 (2026-09-17): 移除 QDockWidget::setWidget(content), 因为已改 base class
     //   content 已通过 outerLayout->addWidget(content) 装入本 widget 的 layout

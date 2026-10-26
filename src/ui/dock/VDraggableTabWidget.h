@@ -60,6 +60,20 @@ public:
     explicit VDraggableTabWidget(QWidget* parent = nullptr);
     ~VDraggableTabWidget();
 
+    // P8.3.2 (2026-10-26): the group's preferred size follows the CURRENT
+    //   page, not the tallest of all pages.
+    //
+    //   QStackedWidget::sizeHint() returns the maximum over every page, so a
+    //   group whose tallest tab is a big list was as tall as that list even
+    //   while showing a small form. The right panel therefore had hundreds of
+    //   empty pixels between a group header and its content, and the
+    //   property text floated in the middle of a blank void.
+    //
+    //   minimumSizeHint() follows the current page as well, so the splitter
+    //   can give the space back when the user switches to a smaller tab.
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+
     // Page list API. Page identity is by QWidget* (the page must have
     // setObjectName() for mime data round-trip; we use it for diagnostics).
     // Page title is read from QWidget::windowTitle; set that on the page

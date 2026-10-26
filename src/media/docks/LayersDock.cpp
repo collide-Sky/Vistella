@@ -6,6 +6,7 @@
 #include "logger.h"
 
 #include <QLabel>
+#include <QTabBar>
 #include <QVBoxLayout>
 #include <QTabWidget>
 
@@ -38,6 +39,27 @@ LayersDock::LayersDock(QWidget* parent) : QWidget(parent)
     channelLayout->addWidget(m_channelPlaceholder);
     channelLayout->addStretch(1);
     m_tabs->addTab(channelTab, QStringLiteral("Channels/Paths"));
+}
+
+void LayersDock::setEmbeddedInPanelGroup(bool embedded)
+{
+    m_embedded = embedded;
+    if (!m_tabs) return;
+
+    // The outer panel group is the single page switcher now, so the inner
+    // tab bar would only duplicate it.
+    m_tabs->tabBar()->setVisible(!embedded);
+
+    if (embedded && m_tabs->count() > 1) {
+        // The channel/path page moved to its own panel-group page
+        // (VChannelPathPage) back in F-G.3. What stayed behind is a
+        // placeholder label - dead UI that the user could click into.
+        QWidget* dead = m_tabs->widget(1);
+        m_tabs->removeTab(1);
+        if (dead) dead->deleteLater();
+        LOG_INFO("[LayersDock] embedded in panel group: inner tab bar hidden, "
+                 "dead channel/path page dropped");
+    }
 }
 
 void LayersDock::setContentWidget(int tabIndex, QWidget* w)

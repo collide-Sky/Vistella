@@ -372,10 +372,25 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_io = std::make_unique<ImageIOController>(this);
     m_io->setHost(this);
 
+    // F-G.3 Fix (2026-09-10): PS 风格右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
+    //   撤销原 3 个分离 dock (RightPanelStack + adjDock + infoDock) + addDockWidget 抢画布位置
+    // Stage C (2026-09-15): 走 Qt 原生 addDockWidget + resizeDocks (替代 setGeometry 浮动)
+    //   之前: RightPanelDock 直接 setGeometry 浮动在右上角, 跟 centralWidget 抢画布位置,
+    //         resize 不联动 (imagewindow 缩小后 dock 还停在原位置)
+    //   现在: 包到 QDockWidget 走 RightDockWidgetArea, Qt 自动管理 dock 与 canvas 边界,
+    //         resizeDocks 设初始宽度 340, imagewindow resize 时 dock 跟着缩
+    //   P7.6.x: raw pointer — Qt takes ownership via setWidget() later.
+    m_rightDock = new docks::RightPanelDock(this);
+
     // P0-3.2 (2026-09-08): PS 风格色彩调整 UI (5 tab Curves/Levels/HSL/B&W/ChannelMixer)
-    //   P7.6.x: raw pointer — parent = this initially, then reparented to
-    //   m_rightDock's tabWidget via setAdjustmentPanel().
-    m_adjustmentPanel = new AdjustmentPanel(this);
+    //   P8.3.2 (2026-10-26): 直接用右侧面板自带的那个 AdjustmentPanel (属性组的
+    //   "Adjustments" 页), 不再单独 new 一个.
+    //   之前 ImageWindow 自己 new 了一个 AdjustmentPanel(parent = this), 而
+    //   setAdjustmentPanel() 早已是 deprecated 空壳 —— 那个面板从没进过任何
+    //   layout, 于是它按默认几何画在画布左上角 (那条突兀的 "曲线" 标签就是它),
+    //   同时右侧面板里用户真正看到的 Adjustments 页没有 host, 按了没反应.
+    //   一个面板一个归属: 右侧面板的属性组.
+    m_adjustmentPanel = m_rightDock->adjustmentPage()->inner();
     m_adjustmentPanel->setHost(this);
 
     // P0 leftover 5 (2026-09-21): Per-window DialogMediator. Hosts the
@@ -395,19 +410,6 @@ ImageWindow::ImageWindow(QWidget *parent)
             }
         });
     });
-
-    // F-G.3 Fix (2026-09-10): PS 风格右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
-    //   撤销原 3 个分离 dock (RightPanelStack + adjDock + infoDock) + addDockWidget 抢画布位置
-    // Stage C (2026-09-15): 走 Qt 原生 addDockWidget + resizeDocks (替代 setGeometry 浮动)
-    //   之前: RightPanelDock 直接 setGeometry 浮动在右上角, 跟 centralWidget 抢画布位置,
-    //         resize 不联动 (imagewindow 缩小后 dock 还停在原位置)
-    //   现在: 包到 QDockWidget 走 RightDockWidgetArea, Qt 自动管理 dock 与 canvas 边界,
-    //         resizeDocks 设初始宽度 340, imagewindow resize 时 dock 跟着缩
-    //   P7.6.x: raw pointer — Qt takes ownership via setWidget() later.
-    m_rightDock = new docks::RightPanelDock(this);
-    // F-G.3: hand m_adjustmentPanel to m_rightDock (Qt reparent to its tabWidget)
-    //   P7.6.x v3 commit 4 (2026-10-15): deprecated; VAdjustmentPage is built-in.
-    m_rightDock->setAdjustmentPanel(m_adjustmentPanel);
 
     // P6 (2026-10-09): wire RightPanelDock connectors that were dangling before.
     //   Color fg/bg -> current Brush paint color; ChannelPathPanel selection
@@ -453,6 +455,11 @@ ImageWindow::ImageWindow(QWidget *parent)
 
     addDockWidget(Qt::RightDockWidgetArea, m_rightDockContainer);
     resizeDocks({m_rightDockContainer}, {340}, Qt::Horizontal);
+    // P8.3.2 (2026-10-26): resizeDocks() only sets the initial width. Without
+    //   a range the user could drag the panel to any width, including widths
+    //   that squeeze the layer list and the colour swatches into nothing.
+    m_rightDockContainer->setMinimumWidth(280);
+    m_rightDockContainer->setMaximumWidth(560);
 
     // P1.3.4 (2026-09-17): ToolMediator per-ImageWindow (parent = this)
     //   Owns Mediator, hands raw pointer to ToolContext; both LeftToolBar and

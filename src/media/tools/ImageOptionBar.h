@@ -67,6 +67,18 @@ public:
                 BrushOptionsPanel* brushOpt = nullptr);
     void detach();
 
+    // P8.3.2 (2026-10-26): install the persistent BrushOptionsPanel as the
+    //   Brush page (index = ToolId::Brush) of the stacked widget.
+    //
+    //   Why this is not done lazily on the first Brush selection: the panel
+    //   used to be created as a child of MainWindow and only re-parented
+    //   into this stacked widget when the Brush tool became active. A
+    //   parented but unmanaged widget paints itself at its default geometry
+    //   (0,0 of the main window) - that is why the home page showed a
+    //   stray, half-transparent brush options panel over its top-left
+    //   corner. Installing it up front gives it a real home in the layout.
+    void installBrushOptionsPage(BrushOptionsPanel* panel);
+
     // P5.1: actual idx of the dynamic Mosaic / Text page once added
     //   (>= 0 means added). -1 means not yet added.
     int mosaicPageIdx() const { return m_mosaicPageIdx; }

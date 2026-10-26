@@ -22,7 +22,8 @@
 // 设计:
 //   - 1 个 QSplitter (vertical) 装 3 个 VDraggableTabWidget
 //   - 每个 VDraggableTabWidget 装一组 V*Page
-//   - 3 个 sub-dock 默认等高 (1/3 + 1/3 + 1/3)
+//   - P8.3.2 (2026-10-26): 颜色组 / 属性组 按内容高度, 图层组吃掉剩余高度
+//     (原来是 1/3 + 1/3 + 1/3 等分, 颜色组空一大片, 属性文字浮在空白中间)
 //   - compositeStrategy 字段 (P0 placeholder, P8.4 多线程合成接)
 //
 // Backward compatibility:
@@ -34,6 +35,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QShowEvent>
 
 #include "../../ui/dock/VDraggableTabWidget.h"
 #include "../../ui/dock/VPages.h"
@@ -138,6 +140,23 @@ public:
     // 浮动位置 (imagewindow 右上角, 跟 m_rightPanel 同样模式)
     QSize sizeHint() const;
 
+    // P8.3.2 (2026-10-26): 有界的最小尺寸 —— dock 不能决定主窗口的高度.
+    QSize minimumSizeHint() const override;
+
+    // P8.3.2 (2026-10-26): give the colour group and the property group
+    //   exactly the height their content needs and let the layer group
+    //   absorb the rest.
+    //
+    //   The old code asked for a fixed 1/3 split (200/200/200). Qt turns
+    //   that into three equally tall groups, so the colour group carried
+    //   hundreds of pixels of empty space and the property text floated in
+    //   the middle of a blank panel. Re-applied once the dock knows its
+    //   real height, and whenever the user asks for it.
+    void applyContentSizedSplit();
+
+protected:
+    void showEvent(QShowEvent* e) override;
+
 private slots:
     // Stage D (2026-09-15): 订阅 WorkspaceMediator 信号.
     void onWorkspaceChanged(mediators::WorkspaceId id);
@@ -169,6 +188,10 @@ private:
     vistella::ui::VHistoryPage*        m_historyPage  = nullptr;
 
     mediators::WorkspaceMediator* m_wsMed = nullptr;
+
+    // P8.3.2: the content-sized split is applied once, after the dock has
+    //   been shown and knows its real height.
+    bool m_splitApplied = false;
 };
 
 } // namespace docks

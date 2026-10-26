@@ -4,6 +4,22 @@ project(Vistella LANGUAGES CXX)
 # 源代码全部 UTF-8 (中文直接写在 tr() / QStringLiteral 里)
 if(MSVC)
     add_compile_options(/utf-8)
+
+    # P8.3.2 (2026-10-26): 关闭 MSVC 增量链接.
+    #
+    #   本项目里 /INCREMENTAL 会产出损坏的 PE: 导入表整个消失 (dumpbin
+    #   /dependents 列出 0 个依赖), 程序一启动就 0xC0000005。触发条件是
+    #   .ilk 增量链接状态文件的大小:
+    #       Vistella.exe      107MB -> 坏
+    #       tst_LayerStack     95MB -> 坏
+    #       tst_RightPanelDock 67MB -> 好
+    #   也就是说目标越大越容易踩到, 而踩到的时候构建是"成功"的, 只有
+    #   跑起来才炸 —— 排查成本极高.
+    #
+    #   关掉增量链接后每次做完整链接: 慢几秒, 但产物一定可运行.
+    #   (LINK_FLAGS 排在 CMAKE_CXX_FLAGS_DEBUG 的 /INCREMENTAL 之后,
+    #    链接器以最后一个开关为准.)
+    add_link_options(/INCREMENTAL:NO)
 endif()
 
 # ---- 第三方库（按需开关） ----

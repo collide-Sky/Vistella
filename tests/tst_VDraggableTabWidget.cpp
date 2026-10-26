@@ -26,6 +26,7 @@
 #include <QLabel>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <QVBoxLayout>
 
 #include "../src/ui/dock/VDraggableTabWidget.h"
 #include "../src/ui/dock/VDragManager.h"
@@ -45,6 +46,23 @@ QWidget* makePage(const QString& name)
     auto* w = new QWidget();
     w->setObjectName(name);
     w->setWindowTitle(name);
+    return w;
+}
+
+// Helper: build a page whose preferred height is known.
+//
+// A plain widget without a layout has no meaningful sizeHint(), and
+// setFixedHeight() only moves minimumSize/maximumSize - it does NOT touch
+// sizeHint(). So the page needs a real layout with a fixed-height child
+// for the preferred height to be observable.
+QWidget* makeSizedPage(const QString& name, int contentHeight)
+{
+    auto* w = makePage(name);
+    auto* layout = new QVBoxLayout(w);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto* filler = new QWidget(w);
+    filler->setFixedHeight(contentHeight);
+    layout->addWidget(filler);
     return w;
 }
 
@@ -84,6 +102,9 @@ private slots:
 
     // VDragManager: drag handshake bookkeeping.
     void dragManager_beginEndClearsActiveSource();
+
+    // P8.3.2 (2026-10-26): preferred size follows the current page.
+    void sizeHint_followsCurrentPage();
 
 private:
     QMainWindow* m_host = nullptr;
@@ -390,6 +411,38 @@ void tst_VDraggableTabWidget::dragManager_beginEndClearsActiveSource()
     QCOMPARE(mgr.activeDragSource(), nullptr);
     QCOMPARE(mgr.activeDragPage(),   nullptr);
     QCOMPARE(endedSpy.count(), 1);
+
+    delete tw;
+}
+
+// ---------------------------------------------------------------------------
+// P8.3.2 (2026-10-26): preferred size follows the current page
+// ---------------------------------------------------------------------------
+void tst_VDraggableTabWidget::sizeHint_followsCurrentPage()
+{
+    auto* tw = new VDraggableTabWidget(m_host);
+
+    // A small page and a tall page.
+    auto* small = makeSizedPage(QStringLiteral("small"), 40);
+    auto* tall  = makeSizedPage(QStringLiteral("tall"), 400);
+
+    tw->addPage(small);
+    tw->addPage(tall);
+
+    // The current page is the small one -> the group wants to be small.
+    const QSize hintSmall = tw->sizeHint();
+
+    tw->setCurrentIndex(1);
+    const QSize hintTall = tw->sizeHint();
+
+    // QStackedWidget::sizeHint() returns the max over every page, which
+    // would make the group as tall as its tallest tab no matter what is
+    // on screen. The group's own preferred size must follow the current
+    // page instead.
+    QVERIFY2(hintTall.height() > hintSmall.height(),
+             "sizeHint must follow the current page, not the tallest page");
+    QVERIFY2(hintSmall.height() < 200,
+             "the group must not be as tall as its tallest tab");
 
     delete tw;
 }

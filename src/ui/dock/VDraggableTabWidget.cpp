@@ -98,6 +98,37 @@ void VDraggableTabWidget::buildUi()
 }
 
 // ---------------------------------------------------------------------------
+// Preferred size
+// ---------------------------------------------------------------------------
+
+QSize VDraggableTabWidget::sizeHint() const
+{
+    // Tab bar + the page that is currently shown.
+    QSize s;
+    if (m_tabBar) s = m_tabBar->sizeHint();
+    if (m_stack) {
+        if (QWidget* page = m_stack->currentWidget())
+            s = s.expandedTo(page->sizeHint());
+    }
+    return s;
+}
+
+QSize VDraggableTabWidget::minimumSizeHint() const
+{
+    QSize s;
+    if (m_tabBar) s = m_tabBar->sizeHint();
+    if (m_stack) {
+        if (QWidget* page = m_stack->currentWidget())
+            s = s.expandedTo(page->minimumSizeHint());
+    }
+    // The tab bar is the only way to reach the other pages of this group,
+    // so it must never be squeezed out of existence.
+    s.setHeight(qMax(s.height(), 24));
+    s.setWidth(qMax(s.width(), 60));
+    return s;
+}
+
+// ---------------------------------------------------------------------------
 // Page list
 // ---------------------------------------------------------------------------
 void VDraggableTabWidget::addPage(QWidget* page)

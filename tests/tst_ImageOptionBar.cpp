@@ -29,6 +29,7 @@
 #include "../src/media/imagewindow.h"
 #include "../src/media/tools/ImageOptionBar.h"
 #include "../src/media/tools/ToolContext.h"
+#include "../src/media/tools/BrushOptionsPanel.h"
 #include "../src/media/mediators/ToolMediator.h"
 #include "../src/media/imagewindow/MosaicTool.h"
 
@@ -57,6 +58,11 @@ private slots:
     void attach_textTool_routesToTextPage();
     void attach_mosaicModeToggle_switchesBetweenBrushAndMosaic();
     void attach_noMosaicNoText_gracefulNoPage();
+
+    // P8.3.2 (2026-10-26) 扩展
+    void installBrushOptionsPage_putsPanelInBrushSlot();
+    void installBrushOptionsPage_keepsPageCount();
+    void installBrushOptionsPage_isIdempotent();
 };
 
 void tst_ImageOptionBar::initTestCase()
@@ -272,6 +278,58 @@ void tst_ImageOptionBar::attach_noMosaicNoText_gracefulNoPage()
     QCOMPARE(stack->currentIndex(), static_cast<int>(ToolId::None));
 
     bar.detach();
+}
+
+// ---------------------------------------------------------------------------
+// P8.3.2 (2026-10-26): the persistent brush panel must have a real home
+// ---------------------------------------------------------------------------
+
+void tst_ImageOptionBar::installBrushOptionsPage_putsPanelInBrushSlot()
+{
+    ImageOptionBar bar;
+    QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
+    QVERIFY(stack != nullptr);
+
+    auto* panel = new BrushOptionsPanel();
+    bar.installBrushOptionsPage(panel);
+
+    const int brushIdx = static_cast<int>(ToolId::Brush);
+    QCOMPARE(stack->widget(brushIdx), static_cast<QWidget*>(panel));
+    // Owned by the stacked widget now, so it can no longer paint itself
+    // over the main window as a stray, unmanaged child.
+    QCOMPARE(panel->parentWidget(), static_cast<QWidget*>(stack));
+}
+
+void tst_ImageOptionBar::installBrushOptionsPage_keepsPageCount()
+{
+    ImageOptionBar bar;
+    QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
+    QVERIFY(stack != nullptr);
+    const int before = stack->count();
+
+    auto* panel = new BrushOptionsPanel();
+    bar.installBrushOptionsPage(panel);
+
+    // The placeholder is replaced, not appended: the ToolId -> page index
+    // mapping must not shift.
+    QCOMPARE(stack->count(), before);
+    QCOMPARE(stack->widget(static_cast<int>(ToolId::MaskBrush))->objectName(),
+             QStringLiteral("page16"));
+}
+
+void tst_ImageOptionBar::installBrushOptionsPage_isIdempotent()
+{
+    ImageOptionBar bar;
+    QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
+    QVERIFY(stack != nullptr);
+    const int before = stack->count();
+
+    auto* panel = new BrushOptionsPanel();
+    bar.installBrushOptionsPage(panel);
+    bar.installBrushOptionsPage(panel);
+
+    QCOMPARE(stack->count(), before);
+    QCOMPARE(stack->widget(static_cast<int>(ToolId::Brush)), static_cast<QWidget*>(panel));
 }
 
 QTEST_MAIN(tst_ImageOptionBar)

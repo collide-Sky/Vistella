@@ -143,8 +143,14 @@ MainWindow::MainWindow(QWidget *parent)
     //   LeftSidePanel 是单 QWidget 容器, 装 LeftToolBar + ImageOptionBar + ModeSelectorBar +
     //   AppBar 在 QVBoxLayout 里. m_leftDockContainer 是这个容器的 QDockWidget 包装.
     //   RightPanelDock 还在 ImageWindow 内 (下一 commit 处理).
-    m_brushOpt = new tools::BrushOptionsPanel(this);    // 共享笔刷设置 (idx=7 page)
     m_leftSidePanel = new tools::LeftSidePanel(this);
+    // P8.3.2 (2026-10-26): 共享笔刷面板直接装进 ImageOptionBar 的 Brush 页 (idx=7).
+    //   之前它是 MainWindow 的子控件, 只有在画笔工具被选中时才被 reparent 进
+    //   stackedWidget. 在那之前它是一个"有父但无 layout"的控件, 会按默认几何
+    //   (主窗口 0,0) 自己画出来 —— 主页左上角那个鬼影面板就是它.
+    //   现在它一出生就有真正的归属, 不再到处乱画.
+    m_brushOpt = new tools::BrushOptionsPanel(this);
+    m_leftSidePanel->imageOptionBar()->installBrushOptionsPage(m_brushOpt);
     m_leftDockContainer = new QDockWidget(this);
     m_leftDockContainer->setObjectName(QStringLiteral("leftDockContainer"));
     m_leftDockContainer->setFeatures(QDockWidget::NoDockWidgetFeatures);
@@ -153,7 +159,16 @@ MainWindow::MainWindow(QWidget *parent)
     m_leftDockContainer->setTitleBarWidget(leftEmptyTitle);
     m_leftDockContainer->setWidget(m_leftSidePanel);
     addDockWidget(Qt::LeftDockWidgetArea, m_leftDockContainer);
-    resizeDocks({m_leftDockContainer}, {56}, Qt::Horizontal);
+    // P8.3.1 (2026-10-26): the dock holds the tool column (56) AND the
+    //   options form (300) side by side. The old value of 56 was sized
+    //   for the tool column alone, so the options form overflowed the
+    //   dock and painted over the title bar and the canvas.
+    resizeDocks({m_leftDockContainer}, {356}, Qt::Horizontal);
+    // P8.3.1 (2026-10-26): the left panel belongs to the workspace, not to
+    //   the home page. It used to be added unconditionally in the ctor, so
+    //   it covered the home page's left edge. Hidden here, shown by
+    //   switchToWorkspace().
+    m_leftDockContainer->setVisible(false);
 
     // AppBar 信号 (quickMask / screenMode / capture) 转发给当前 active ImageWindow.
     //   AppBar 信号是 int (enum 值), ImageWindow::onScreenModeSelected / onCaptureRequested
@@ -1765,6 +1780,10 @@ void MainWindow::switchToHomePage()
     // 切回 HomePage (不关闭当前 doc tabs, 用户可再切回工作空间)
     if (ui && ui->mainStack) {
         ui->mainStack->setCurrentIndex(0);
+        // P8.3.1 (2026-10-26): the left tool column + options panel belong
+        //   to the workspace. On the home page they covered the left edge
+        //   of the start screen for no reason.
+        if (m_leftDockContainer) m_leftDockContainer->setVisible(false);
         LOG_INFO("[MainWindow] switchToHomePage: tabWidget has {} tabs preserved",
                  ui->tabWidget ? ui->tabWidget->count() : 0);
     }
@@ -1776,6 +1795,9 @@ void MainWindow::switchToWorkspace()
     if (ui && ui->mainStack) {
         ui->mainStack->setCurrentIndex(1);
     }
+    // P8.3.1 (2026-10-26): show the left panel together with the
+    //   workspace it belongs to.
+    if (m_leftDockContainer) m_leftDockContainer->setVisible(true);
 }
 
 void MainWindow::onTabChanged(int index)

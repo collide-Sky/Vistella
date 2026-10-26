@@ -5,6 +5,10 @@
 //     (dirty-rect repaint accumulator)
 //   - MainWindow status bar GPU/CPU button text reflects V*Page stats.
 //
+// P8.3.2 (2026-10-26) added:
+//   - a mouse release without a matching press must not make Qt assert
+//     ("m_engaged" in qevent_p.h) inside QGraphicsView.
+//
 // We do NOT drive a full MainWindow here (that would require a windowed
 // integration test). Instead, we verify the stat-counting lambda
 // semantics via a direct RightPanelDock + GPU text-formatting unit.
@@ -17,6 +21,7 @@
 #include <QToolButton>
 #include <QStatusBar>
 #include <QMainWindow>
+#include <QMouseEvent>
 
 #include "../src/media/imagewindow/ImageCanvas.h"
 #include "../src/media/docks/RightPanelDock.h"
@@ -81,6 +86,9 @@ private slots:
     void invalidateAll_skipsAccumulation();
     void flushDirtyRect_resetsAccumulator();
 
+    // P8.3.2 (2026-10-26): stray mouse release must not assert.
+    void strayMouseRelease_doesNotAssert();
+
     // RenderPath stats.
     void renderStats_matchP7_11Spec();
     void statusBarTextFormat_isCorrect();
@@ -126,6 +134,44 @@ void tst_P7_11::flushDirtyRect_resetsAccumulator()
     // After flush, accumulator is reset (the test exposes a hook to
     // drive the flush without a real paint event).
     QVERIFY(canvas.testAccDirtyRect_isNull());
+}
+
+// ---------------------------------------------------------------------------
+// P8.3.2 (2026-10-26): a release without a matching press
+// ---------------------------------------------------------------------------
+void tst_P7_11::strayMouseRelease_doesNotAssert()
+{
+    // ImageCanvas uses QGraphicsView::ScrollHandDrag. In that mode
+    // QGraphicsView::mouseReleaseEvent() reads the stored mouse event
+    // BEFORE it stores the release:
+    //
+    //   if (dragMode == ScrollHandDrag && event->button() == LeftButton)
+    //       ... !d->lastMouseEvent->isAccepted() ...
+    //   d->storeMouseEvent(event);      // only now the event is stored
+    //
+    // So a left-button release that never had a press makes Qt read an
+    // unengaged QEventStorage and abort with
+    //   ASSERT: "m_engaged" in .../gui/kernel/qevent_p.h
+    //
+    // That is exactly what happened when a file was opened from the home
+    // page: the press landed on the file list, the new canvas appeared
+    // under the cursor and the release landed on the fresh canvas.
+    ImageCanvas canvas;
+    canvas.resize(400, 300);
+    canvas.show();
+    QTest::qWait(0);
+
+    QMouseEvent release(QEvent::MouseButtonRelease,
+                        QPointF(10.0, 10.0),   // local pos
+                        QPointF(10.0, 10.0),   // global pos
+                        Qt::LeftButton,
+                        Qt::NoButton,
+                        Qt::NoModifier);
+
+    QApplication::sendEvent(canvas.viewport(), &release);
+
+    // Reaching this line at all means the assert did not fire.
+    QVERIFY(true);
 }
 
 // ---------------------------------------------------------------------------

@@ -19,6 +19,7 @@
 #include <QTest>
 #include <QApplication>
 #include <QSignalSpy>
+#include <QTabBar>
 #include <QWidget>
 #include <QUndoStack>
 #include <QUndoCommand>
@@ -84,6 +85,12 @@ private slots:
     void layerPage_pageTag();
     void channelPathPage_pageTag();
     void historyPage_pageTag();
+
+    // P8.3.2 (2026-10-26): panel group layout.
+    void tabTitles_arePublished();
+    void layerGroup_hidesInnerTabBar();
+    void stretchGivesRemainderToLayerGroup();
+    void contentSizedSplit_layerGroupGetsTheRest();
 
 private:
     docks::RightPanelDock* m_dock = nullptr;
@@ -281,6 +288,80 @@ void tst_RightPanelDock::channelPathPage_pageTag()
 void tst_RightPanelDock::historyPage_pageTag()
 {
     QCOMPARE(m_dock->historyPage()->pageTag(), QStringLiteral("history"));
+}
+
+// ---------------------------------------------------------------------------
+// P8.3.2 (2026-10-26): panel group layout
+// ---------------------------------------------------------------------------
+
+void tst_RightPanelDock::tabTitles_arePublished()
+{
+    // VDraggableTabWidget::addPage() takes the tab label from
+    // QWidget::windowTitle(). A page that never publishes its title shows
+    // up as an empty tab, and the user cannot tell the three panel groups
+    // apart.
+    VDraggableTabWidget* groups[] = {
+        m_dock->subDockColor(),
+        m_dock->subDockProperty(),
+        m_dock->subDockLayer(),
+    };
+    for (VDraggableTabWidget* group : groups) {
+        QVERIFY(group != nullptr);
+        QTabBar* bar = group->tabBar();
+        QVERIFY(bar != nullptr);
+        QCOMPARE(bar->count(), group->pageCount());
+        for (int i = 0; i < bar->count(); ++i) {
+            const QString text = bar->tabText(i);
+            QVERIFY2(!text.isEmpty(), "panel group tab has no title");
+            QWidget* page = group->pageAt(i);
+            QVERIFY(page != nullptr);
+            QCOMPARE(text, page->windowTitle());
+        }
+    }
+}
+
+void tst_RightPanelDock::layerGroup_hidesInnerTabBar()
+{
+    auto* inner = m_dock->layerPage()->inner();
+    QVERIFY(inner != nullptr);
+    QVERIFY(inner->isEmbeddedInPanelGroup());
+
+    // The outer group is the page switcher now, so the inner bar would be a
+    // duplicate row of tabs, and the channel/path page it used to hold was
+    // only ever a placeholder.
+    QCOMPARE(inner->tabs()->count(), 1);
+    QVERIFY(!inner->tabs()->tabBar()->isVisibleTo(inner));
+}
+
+void tst_RightPanelDock::stretchGivesRemainderToLayerGroup()
+{
+    // Without a stretch factor Qt treats every splitter child as
+    // expansive and splits the height evenly - that is what left the
+    // colour group with a huge empty area.
+    QCOMPARE(m_dock->subDockColor()->sizePolicy().verticalStretch(), 0);
+    QCOMPARE(m_dock->subDockProperty()->sizePolicy().verticalStretch(), 0);
+    QCOMPARE(m_dock->subDockLayer()->sizePolicy().verticalStretch(), 1);
+}
+
+void tst_RightPanelDock::contentSizedSplit_layerGroupGetsTheRest()
+{
+    m_dock->resize(340, 900);
+    m_dock->show();
+    QTest::qWait(0);
+    m_dock->applyContentSizedSplit();
+    QTest::qWait(0);
+
+    const int hColor    = m_dock->subDockColor()->height();
+    const int hProperty = m_dock->subDockProperty()->height();
+    const int hLayer    = m_dock->subDockLayer()->height();
+
+    QVERIFY2(hLayer > hColor,
+             "the layer group must take the leftover height, not the colour group");
+    QVERIFY2(hLayer > hProperty,
+             "the layer group must take the leftover height, not the property group");
+    // The colour group sizes to its content, it is not a third of the panel.
+    QVERIFY2(hColor < m_dock->height() / 3,
+             "the colour group must size to its content");
 }
 
 QTEST_MAIN(tst_RightPanelDock)
