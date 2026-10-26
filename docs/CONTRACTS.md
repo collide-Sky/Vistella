@@ -224,6 +224,19 @@
 
 **规则 5.7（阶段验收测试）**　每个阶段至少新增 **1 个 `tst_Path_` 端到端测试**覆盖本阶段能力路径。纯单元测试不算。
 
+**规则 5.8（能力路径测试基座）**　`tst_Path_*` 统一使用 `tests/support/PathHarness.h`：
+- `makeTestImage()` / `writeTestImage()` —— 合成**确定性**测试图（四象限异色 + 边框），**不依赖仓库里的外部图片**。
+- `maxPixelDelta()` / `changedPixelCount()` —— **整图**像素比较。
+  **禁止只探单点像素**：纯色区内部对模糊不敏感，单点探测会把"编辑没发生"误判成"编辑生效"。
+- `sendUndo()` / `sendRedo()` —— 发送**真实 Ctrl+Z / Ctrl+Y 键事件**（走 `ImageWindow::keyPressEvent`），
+  **禁止**直接调 `undoPublic()` —— 那就退化成回声测试。
+- `QtMessageRecorder` —— 记录 Qt 警告/严重错误。**一条能力路径不得产生未登记的 Qt 警告**。
+
+**规则 5.9（已知缺陷必须钉在测试里，不许只写在报告里）**　已确认但尚未修复的缺陷，用 `QEXPECT_FAIL` 钉成 **XFAIL**：
+- 缺陷还在 → 测试结果为 XFAIL，`docs/DEBT.md` 有对应登记条目。
+- 缺陷修好 → 断言转为通过，`QEXPECT_FAIL` 失效 → **测试变红**，强制你把 `QEXPECT_FAIL` 删掉。
+禁止用"跳过测试"或"降低断言强度"来藏缺陷（契约规则 9.4）。
+
 ---
 
 ## 6. 代码规范

@@ -62,6 +62,7 @@
 | `A-LOGGERAPI` | `logger/Logger.h:172-177` + `:200-202` | 简化版 `trace`/`debug`/`warn`/`critical` 与 `setLevelQt`/`setLogDirQt`/`setModuleNameQt` 全部零调用者（日志宏走的是 `::vistella::log()`，两套 API 并存）；`info`/`error` 因与 `spdlog::info`/`spdlog::error` 同名而无法静态区分 | 无直接用户影响，但**运行时改日志级别/日志目录**没有任何入口 | 日志配置 | P8.9 | 设置页能实时改日志级别与目录，且旧 API 删除或接线 | open |
 | `A-BRUSHCURSOR` | `media/imagewindow/ImageCanvas.h:52-53` | `setBrushCursorRadius()` / `moveBrushCursor()` 零调用者 —— 实际光标由 `ImageWindow::m_brushCursor` 直接操作（`imagewindow.cpp:333/2676`），`ImageCanvas` 这两个方法是**重复 owner**（违反 `INV-STATE-1`） | 画笔光标半径写死在 `imagewindow.cpp`，用户无法配置 | 画笔光标 | P8.5 | 光标半径可配置，且只剩一个 owner | open |
 | `A-TEXTCOLOR` | `media/imagewindow/TextOverlayController.h:87` | `onColorSelected()` 零调用者 —— 文字取色实际由 `ImageWindow::onColorClicked` 走 `QColorDialog` 完成（`imagewindow.cpp:2381`），`TextOverlayController` 这条是**重复链路** | 文字面板改颜色与文字对象改颜色可能不同步 | 文字颜色 | P8.5 | 文字颜色只有一个 owner，面板与画布同步 | open |
+| `A-STACKWIDGET` | `ui/dock/VDraggableTabWidget.cpp:156-157` | `insertPage()` 里**先** `m_tabBar->insertTab()` **后** `m_stack->insertWidget()`。空 tab bar 插入首个 tab 时 Qt 会自动 `setCurrentIndex(0)` 并 emit `currentChanged` → 此时 page 还没进 `m_stack` → `m_stack->setCurrentWidget(page)` 必然报 "widget not contained in stack"。每个 tab widget 只在加第一个页面时触发一次 → 右侧面板 3 个 sub-dock 正好 3 条。**根因是这两行的顺序，交换即可** | 每次构造 ImageWindow 都刷 3 条 Qt 警告；首个 tab 的页面在栈为空时被跳过显示 | 右侧面板切页 | P8.5 | 构造 ImageWindow 零 Qt 警告（`tst_Path_OpenEditUndoRedoSave::constructing_window_emits_no_unknown_qt_warning` 转绿） | open |
 
 ### A.4　重复刷新逻辑（`CONTRACTS.md` 规则 3.5）
 

@@ -22,7 +22,7 @@ qt_standard_project_setup()
 
 # ---- 工具函数: 给每个 tst_X.cpp 配一个独立测试 target ----
 function(add_vistella_test NAME)
-    qt_add_executable(${NAME} ${NAME}.cpp)
+    qt_add_executable(${NAME} ${NAME}.cpp support/PathHarness.h)
     target_link_libraries(${NAME} PRIVATE
         Qt6::Test
         Qt6::Core
@@ -254,3 +254,11 @@ add_vistella_test(tst_P8_RenderParity)
 # per case (both paths), so it runs ~50s in a Debug build. The shared 30s
 # ctest timeout would report that as a failure.
 set_tests_properties(tst_P8_RenderParity PROPERTIES TIMEOUT 300)
+
+# ---- 能力路径测试 (tst_Path_*) ----
+#   按"用户能力路径"组织, 而不是按类 (docs/CONTRACTS.md 规则 5.3 / 5.7)。
+#   这些测试会真的构造 ImageWindow / MainWindow, 用 QTest 注入真实鼠标键盘事件,
+#   走完"入口 -> 操作 -> 数据变化 -> 撤销重做 -> 保存 -> 重开"整条链。
+#   公共设施在 support/PathHarness.h (合成测试图 / 像素探针 / 撤销重做按键 /
+#   Qt 消息记录器)。
+add_vistella_test(tst_Path_OpenEditUndoRedoSave)
