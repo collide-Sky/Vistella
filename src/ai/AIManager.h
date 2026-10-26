@@ -22,6 +22,7 @@
 #include <QHash>
 #include <QString>
 
+// TODO(P8.9): AIManager and HttpClient are stubs and Qt6::Network is not linked -- see docs/DEBT.md#A-AUTH
 class AIManager : public QObject
 {
     Q_OBJECT

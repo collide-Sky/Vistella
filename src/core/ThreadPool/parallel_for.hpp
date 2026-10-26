@@ -170,6 +170,7 @@ private:
 // parallel_for — synchronous (blocks until all chunks finish).
 // ============================================================================
 template <class Index, class Body>
+// TODO(P8.9): parallel_for / task_graph / RealtimeThread / SpscRing have no caller -- see docs/DEBT.md#A-THREADFACILITIES
 inline void parallel_for(IExecutor& pool, Index begin, Index end, Body&& body,
                           ParallelOptions opt = {},
                           std::size_t thread_hint = 0) {

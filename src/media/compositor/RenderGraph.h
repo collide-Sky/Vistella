@@ -95,6 +95,7 @@ public:
     // The shared state is also passed to the registry. If you don't call
     // setSharedState(), a default-constructed state is used (which under
     // Auto mode routes Basic kinds to CPU).
+    // TODO(P8.9): setBackend() has no caller, so the Auto/Force GPU selection never changes the render path -- see docs/DEBT.md#A-RENDERBACKEND
     void setBackend(gpu::BackendRegistry* reg) { m_backend = reg; }
     gpu::BackendRegistry* backend() const { return m_backend; }
     void setSharedState(const tools::BrushSharedState& ss) { m_sharedState = ss; }

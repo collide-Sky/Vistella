@@ -58,6 +58,7 @@ public:
 
     // Optional: tunable threshold (defaults to QApplication::startDragDistance() * 2).
     int  dragStartThreshold() const;
+    // TODO(P8.9): setDragStartThreshold() has no caller, so the drag threshold is not configurable -- see docs/DEBT.md#A-DRAGTHRESHOLD
     void setDragStartThreshold(int px);
 
     // Cross-widget drag handshake. The *source* VDraggableTabWidget calls

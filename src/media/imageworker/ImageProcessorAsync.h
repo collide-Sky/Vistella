@@ -55,6 +55,7 @@ namespace vistella::tp { class EngineContext; }
 
 #include <future>   // std::future / std::promise
 
+// TODO(P8.9): ImageProcessorAsync has no production caller, drops TaskContext and has no cancellation -- see docs/DEBT.md#A-IMAGEPROCASYNC
 class ImageProcessorAsync
 {
 public:

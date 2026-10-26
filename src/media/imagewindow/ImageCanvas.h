@@ -49,6 +49,7 @@ public:
 
     // Brush cursor circle (MosaicTool owns visibility, but the QGraphicsItem
     // lives on our scene).
+    // TODO(P8.5): these two are a second owner for the brush cursor; ImageWindow drives m_brushCursor directly -- see docs/DEBT.md#A-BRUSHCURSOR
     void setBrushCursorRadius(int r);
     void moveBrushCursor(const QPointF& scenePos, bool visible);
     void hideBrushCursor();

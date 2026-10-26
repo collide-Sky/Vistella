@@ -63,6 +63,7 @@ struct BrushPreset {
     static BrushPreset makeBuiltInEraser();
 };
 
+// TODO(P8.7): BrushPresetManager has no caller and the ABR parser rejects v9/v10, so the brush preset panel does not exist -- see docs/DEBT.md#A-BRUSHPRESET
 class BrushPresetManager : public QObject {
     Q_OBJECT
 public:

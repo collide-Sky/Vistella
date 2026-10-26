@@ -102,6 +102,7 @@ void LiquifyDialog::wireSignals() {
             this, &LiquifyDialog::onApplyFaceAwareRequested);
 }
 
+// TODO(P8.7): only 1 of the 6 liquify tools is reachable and the panel parameters are discarded -- see docs/DEBT.md#A-LIQUIFY
 void LiquifyDialog::onToolModeChanged(LiquifyToolMode mode) {
     Q_UNUSED(mode);
     // Tool mode currently only influences how the canvas / engine interpret

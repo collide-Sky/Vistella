@@ -184,6 +184,7 @@ void ImageOptionBar::ensureTextPage()
              m_textPageIdx);
 }
 
+// TODO(P8.5): the mosaic branch always wins, so the brush options page is unreachable -- see docs/DEBT.md#A-BRUSHOPTIONS
 void ImageOptionBar::onToolChanged(mediators::ToolId id)
 {
     const int idx = static_cast<int>(id);

@@ -127,6 +127,7 @@ public:
     //
     // Remove in a future commit once all callers have been migrated.
     // -----------------------------------------------------------------
+    // TODO(P8.5): this deprecated accessor returns nullptr, so the toolbar foreground/background chain never connects -- see docs/DEBT.md#A-COLORDOCK
     ColorDock*        colorDock()        const;
     PropertiesDock*   propertiesDock()   const;
     LayersDock*       layersDock()       const;

@@ -10,6 +10,7 @@
 
 namespace tools {
 
+// TODO(P8.5): MoveTool is an empty shell that never drags the layer, text or selection -- see docs/DEBT.md#A-MOVE
 void MoveTool::onEnter(ImageWindow* host)
 {
     if (host && host->statusBar()) {

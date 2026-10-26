@@ -142,6 +142,7 @@ void Brush::onMousePress(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& s
     m_lastStampDist  = 0.0;
     // First stamp placed immediately
     paintSingleStamp(host, scenePos, 1.0);
+    // TODO(P8.4): the brush calls renderToViewPublic directly, bypassing the single refresh entry point -- see docs/DEBT.md#A-REFRESHDUP2
     host->renderToViewPublic();
 }
 

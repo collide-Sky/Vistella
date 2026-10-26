@@ -63,6 +63,7 @@ public slots:
     void setSelectedPath(const QString& name);
 
 signals:
+    // TODO(P8.6): channelSelected and pathSelected have no connect, so the panel is inert -- see docs/DEBT.md#A-CHANNELPATH
     void channelSelected(const QString& name);
     void pathSelected(const QString& name);
     // P6 (2026-10-09): selection save/load + Quick Mask toggle signals.

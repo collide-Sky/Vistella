@@ -105,6 +105,8 @@ StyleCopReport.xml
 # The bare *.ps1 rule below still blocks root .ps1 (build_all.ps1 etc.)
 *.ps1
 *.py
+# 工程契约门禁脚本必须入库 (docs/CONTRACTS.md), 否则契约体系无法在 CI 中执行
+!tools/*.py
 *.bak
 
 # Chutzpah Test files

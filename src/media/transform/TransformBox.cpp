@@ -246,6 +246,7 @@ QPointF TransformBox::center() const
     return QPointF(m_rect.center().x(), m_rect.center().y());
 }
 
+// TODO(P8.4): toTransform() only encodes a translation, so scale/rotate/skew are silently dropped -- see docs/DEBT.md#A-TRANSFORMBOX
 QTransform TransformBox::toTransform() const
 {
     // P0-6.1 基础: Translate + Scale (m_rect 缩放, 以 m_rect 跟某个标准 rect 的比例为 scale)

@@ -109,6 +109,7 @@ bool MediaDispatcher::isExtensionKnown(const QString &path) const
     return m_extMap.contains(path.mid(dot).toLower());
 }
 
+// TODO(P8.6): MediaDispatcher::openFile() has no production caller, so non-image files fall through to cv::imread -- see docs/DEBT.md#A-MEDIADISPATCH
 IWorkspace *MediaDispatcher::openFile(const QString &path, QWidget *parent)
 {
     if (path.isEmpty()) {

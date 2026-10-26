@@ -38,6 +38,7 @@
 #include <functional>
 #include <memory>
 
+// TODO(P8.9): this file is in no build target and uses the wrong namespace, so the second thread-pool backend is fiction -- see docs/DEBT.md#A-QTBRIDGE
 namespace multidoc::tp {
 
 // ============================================================================

@@ -25,6 +25,7 @@
 #include <QByteArray>
 #include <QUrl>
 
+// TODO(P8.9): AuthClient returns mock success for any input, discards the password, and tokens are stored in clear text -- see docs/DEBT.md#A-AUTH
 class AuthClient : public QObject
 {
     Q_OBJECT

@@ -84,6 +84,7 @@ public:
     //   onColorSelected: 颜色选择 (来自 QColorDialog) -> 写 m_textColor, 应用到 m_current
     void    onFontChanged(const QString& family);
     void    onSizeChanged(int size);
+    // TODO(P8.5): this duplicates the ImageWindow colour path; only one owner may pick the text colour -- see docs/DEBT.md#A-TEXTCOLOR
     void    onColorSelected(const QColor& color);
 
     // Create a new text item at scenePos. Host wires its editingFinished +

@@ -47,6 +47,7 @@ namespace layers {
 
 class LayerStack;
 
+// TODO(P8.6): LayerPanel has no drag-drop mode or drop handler, so layers cannot be reordered or grouped -- see docs/DEBT.md#A-LAYERDRAG
 class LayerPanel : public QWidget
 {
     Q_OBJECT

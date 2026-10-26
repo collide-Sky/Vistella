@@ -19,6 +19,7 @@ namespace layers {
 //
 // where alpha(x, y) is computed from the pixel/vector mask, then multiplied
 // by density, optionally inverted, and finally gaussian-blurred by feather.
+// TODO(P8.4): LayerMaskRenderer is only called from tests, so the LayerMask model never affects rendering -- see docs/DEBT.md#A-LAYERMASK
 class LayerMaskRenderer {
 public:
     // Apply the mask in place. Returns true if the layer was modified.

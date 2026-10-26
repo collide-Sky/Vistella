@@ -42,6 +42,7 @@ public:
     virtual QString pageTitle() const = 0;
 
     // PS research 第十点 (P0 placeholder for P8.2 GPU backend).
+    // TODO(P8.4): preferredRenderPath() has no consumer, so the render path declared by each page is ignored -- see docs/DEBT.md#A-VTABAPI
     virtual RenderPath preferredRenderPath() const
     {
         return RenderPath::Auto;

@@ -194,6 +194,22 @@ add_subdirectory(src/app)
 #   阶段 1+ 加新 worker 时, 在 tests/ 加 tst_<NewWorker>.cpp
 add_subdirectory(tests)
 
+# ---- 工程契约检查 (docs/CONTRACTS.md) ----
+#   机器可执行的规范门禁, 实现 CONTRACTS.md 里标 [CI] 的规则:
+#     R1 零调用者即存在 / R2 注释禁词 / R3 跨阶段 TODO 登记 / R4 重复刷新逻辑
+#   增量门禁: 只对相对 HEAD 的**新增行**报 ERROR, 存量违规报 WARN。
+#   拿不到 git 改动范围时脚本以退出码 2 拒绝静默通过 (门禁失效 != 门禁通过)。
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME contract_check
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check_contracts.py
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set_tests_properties(contract_check PROPERTIES LABELS "contract")
+    message(STATUS "Contract check enabled: tools/check_contracts.py (${Python3_EXECUTABLE})")
+else()
+    message(STATUS "Python3 not found - contract_check test not registered")
+endif()
+
 # ---- 主可执行文件 ----
 qt_add_executable(Vistella
     WIN32 MACOSX_BUNDLE

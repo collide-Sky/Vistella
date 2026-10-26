@@ -6,6 +6,7 @@
 
 // 简单的会话恢复: 启动时把上次打开的文件列表恢复为 tab
 // 关闭时把当前所有打开的文件路径写进 QSettings
+// TODO(P8.6): no autosave exists and the session is written only on a clean exit -- see docs/DEBT.md#A-AUTOSAVE
 class SessionManager
 {
 public:

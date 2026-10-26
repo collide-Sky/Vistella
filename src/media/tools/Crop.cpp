@@ -61,6 +61,7 @@ QRect Crop::computeClampedRect(int x1, int y1, int x2, int y2) const
     return QRect(tl, br).normalized();
 }
 
+// TODO(P8.5): applyCrop() pushes a no-op redo command and never calls setCurrentImage, so the crop does nothing -- see docs/DEBT.md#A-CROP
 void Crop::applyCrop(ImageWindow* host)
 {
     if (!host || !m_hasCrop) return;

@@ -46,6 +46,7 @@ ImageIOController::~ImageIOController() = default;
 // 打开图像: QFileDialog 选路径 -> m_host->loadFile -> RecentManager 记一条
 //   主流做法: 用 cv::imread (IMREAD_UNCHANGED) 保留原 channels (灰度图保存后还能 reload)
 //   失败时弹 QMessageBox.warning 提示, 不入 recent
+// TODO(P8.6): ImageIOController::onOpen() has no caller, so RAW files never reach the Camera Raw dialog -- see docs/DEBT.md#A-CAMERARAW
 void ImageIOController::onOpen()
 {
     if (!m_host) return;
@@ -65,6 +66,7 @@ void ImageIOController::onOpen()
 
 // 保存: 已有路径直接覆盖, 没路径走 onSaveAs
 //   主流做法: 保存前先扁平化所有文字图层 (扁平化后字变成图片像素, 不可撤销/编辑)
+// TODO(P8.8): save writes the flattened composite, so layers, masks and text are lost on reopen -- see docs/DEBT.md#A-PROJECTFORMAT
 void ImageIOController::onSave()
 {
     if (!m_host) return;

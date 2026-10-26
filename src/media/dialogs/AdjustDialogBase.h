@@ -36,6 +36,7 @@ public:
 
 signals:
     // 实时预览 (子控件 valueChanged 调 emit preview(args))
+    // TODO(P8.5): the preview() signal has no connect, so the adjust dialogs apply only on OK -- see docs/DEBT.md#A-ADJUSTPREVIEW
     void preview(const QVariantMap& args);
     // OK / Apply 提交 (applyAdjust 完成, 参数已应用)
     void applied(const QVariantMap& args);

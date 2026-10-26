@@ -1888,6 +1888,7 @@ namespace {
     }
 }
 
+// TODO(P8.4): renderToView and invalidateCurrentCache are called 95 times in this file, so one missed pair is a silent stale frame -- see docs/DEBT.md#A-REFRESHDUP
 void ImageWindow::renderToView()
 {
     // 阶段 1 W4.3 Phase 1: m_current 来自 layerStack.render() 缓存

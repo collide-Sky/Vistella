@@ -35,6 +35,7 @@ public:
 signals:
     // Mirrors ImageWindow's existing signals so MainWindow wiring doesn't
     // need to change.
+    // TODO(P8.5): the three ImageIOController signals have no connect, so save failures stay silent -- see docs/DEBT.md#A-IMAGESAVESIGNAL
     void filePathChanged(const QString& path);
     void closeRequested();
     void dirtyChanged(bool dirty);

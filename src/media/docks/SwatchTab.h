@@ -24,6 +24,7 @@ class QModelIndex;
 
 namespace docks {
 
+// TODO(P8.7): the swatch, gradient and pattern lists are hard-coded sample data -- see docs/DEBT.md#A-SWATCH
 class SwatchTab : public QWidget
 {
     Q_OBJECT

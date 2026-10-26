@@ -169,6 +169,7 @@ inline void log(LogLevel level, const char* file, int line,
 }
 
 // 简化版 (不带 file/line)
+// TODO(P8.9): the simplified trace/debug/warn/critical helpers and the runtime setters have no caller -- see docs/DEBT.md#A-LOGGERAPI
 LOGGER_API void trace(const std::string& msg);
 LOGGER_API void debug(const std::string& msg);
 LOGGER_API void info(const std::string& msg);

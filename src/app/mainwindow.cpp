@@ -517,6 +517,7 @@ void MainWindow::buildActions()
             }
             // 关键: 关联 MainWindow 为 shortcutContext, 不 addAction 到任何菜单也能
             // 接收全局快捷键 (Qt widget + QAction + shortcutContext = MainWindow).
+            // TODO(P8.5): application-scope shortcuts outrank the focused widget, so single-letter keys type nothing in text tools -- see docs/DEBT.md#A-SHORTKEYS
             act->setShortcutContext(Qt::ApplicationShortcut);
             connect(act, &QAction::triggered, this, [this, id = e.id]() {
                 onSwitchTool(id);

@@ -212,6 +212,7 @@ private:
 //
 //   注意: 宏依赖当前函数 return 类型能接收 Result<...>, 跨函数透传很方便
 //
+// TODO(P8.9): Q_TRY does not compile under MSVC and Result/Async are unused -- see docs/DEBT.md#A-RESULTASYNC
 #define Q_TRY(expr) \
     do { \
         auto _r = (expr); \

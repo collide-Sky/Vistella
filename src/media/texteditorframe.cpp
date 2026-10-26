@@ -10,6 +10,7 @@
 // 注: TextEditorFrame 类直接定义在 imagewindow.h, 本文件只提供实现
 // =============================================================
 
+// TODO(P8.6): this whole file is in no CMake target, so TextEditorFrame is never compiled -- see docs/DEBT.md#A-TEXTEDITORFRAME
 #include "imagewindow.h"   // TextEditorFrame 类定义在这里
 
 #include <QPainter>

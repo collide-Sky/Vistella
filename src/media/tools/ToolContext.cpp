@@ -103,6 +103,7 @@ void ToolContext::onMouseRelease(QMouseEvent* e, const QPointF& scenePos)
     if (m_current) m_current->onMouseRelease(e, m_host.data(), scenePos);
 }
 
+// TODO(P8.5): the tool keyboard handlers have no caller, so polygon closure, pen commit and Esc cancel do not work -- see docs/DEBT.md#A-KEYBOARD
 void ToolContext::onKeyPress(QKeyEvent* e)
 {
     if (m_current) m_current->onKeyPress(e, m_host.data());

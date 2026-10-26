@@ -30,6 +30,7 @@ void ToolMediator::switchTool(ToolId id)
     emit toolSwitched(id);
 }
 
+// TODO(P8.5): the tool-config APIs have no caller, so per-tool settings reset on every tool switch -- see docs/DEBT.md#A-TOOLCONFIG
 void ToolMediator::applyToolConfig(ToolId id, const QVariantMap& cfg)
 {
     LOG_DEBUG("[ToolMed] applyToolConfig: id={} keys={}", static_cast<int>(id), cfg.size());

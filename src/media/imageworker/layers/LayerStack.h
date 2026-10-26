@@ -294,6 +294,7 @@ public:
     //   paths agree pixel-for-pixel on the matrices listed there.
     cv::Mat renderViaCompositor() const;
     bool    compositorEnabled() const;
+    // TODO(P8.4): setCompositorEnabled() has no production caller, so grayscale and RGBA documents render black with no fallback -- see docs/DEBT.md#A-SETCOMPOSITOR
     void    setCompositorEnabled(bool on);
 
     // Phase 3 (2026-09-04): 画布尺寸

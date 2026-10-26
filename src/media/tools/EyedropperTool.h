@@ -30,6 +30,7 @@ public:
     void onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos) override;
 
     // Sampled color (F-J DialogMediator will push to color panel)
+    // TODO(P8.5): sampledColor() has no consumer, so the eyedropper only writes the status bar text -- see docs/DEBT.md#A-EYEDROPPER
     QColor sampledColor() const { return m_sampled; }
 
     mediators::ToolId id()        const override { return mediators::ToolId::Eyedropper; }
