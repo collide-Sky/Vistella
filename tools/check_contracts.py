@@ -140,7 +140,38 @@ def git_added_lines(base: str = "HEAD") -> set[tuple[str, int]] | None:
                 count = int(m.group(2) or 1)
                 for i in range(count):
                     added.add((current, start + i))
+
+    # 未跟踪的新文件不在 `git diff` 里 —— 必须单独并进来,
+    # 否则"新建一个带违规注释的文件、还没 git add"就能绕过门禁。
+    added |= untracked_file_lines()
     return added
+
+
+def untracked_file_lines() -> set[tuple[str, int]]:
+    """未被 .gitignore 忽略的未跟踪文件, 其每一行都算"新增行"。"""
+    out: set[tuple[str, int]] = set()
+    try:
+        raw = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"],
+                             cwd=REPO, capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return out
+    if raw.returncode != 0 or not raw.stdout:
+        return out
+    for name in raw.stdout.splitlines():
+        name = name.strip()
+        if not name:
+            continue
+        p = REPO / name
+        if not p.is_file() or p.suffix not in SOURCE_SUFFIXES:
+            continue
+        try:
+            n = len(p.read_text(encoding="utf-8", errors="replace").splitlines())
+        except OSError:
+            continue
+        for i in range(1, n + 1):
+            out.add((name, i))
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -517,6 +548,7 @@ REFRESH_CALLS = [
 
 def rule_duplicate_refresh(report: Report, added: set[tuple[str, int]]) -> None:
     sites: dict[str, list[str]] = {name: [] for name in REFRESH_CALLS}
+    site_lines: dict[str, list[tuple[str, int]]] = {name: [] for name in REFRESH_CALLS}
     for path in source_files():
         text = read_text(path)
         if not text:
@@ -526,6 +558,7 @@ def rule_duplicate_refresh(report: Report, added: set[tuple[str, int]]) -> None:
             for name in REFRESH_CALLS:
                 if re.search(r"\b" + name + r"\s*\(", raw):
                     sites[name].append(f"{rel(path)}:{idx}")
+                    site_lines[name].append((rel(path), idx))
     for name, locs in sites.items():
         if len(locs) < 2:
             continue
@@ -534,9 +567,13 @@ def rule_duplicate_refresh(report: Report, added: set[tuple[str, int]]) -> None:
         for loc in locs:
             by_file.setdefault(loc.split(":")[0], []).append(loc)
         for fname, flocs in by_file.items():
-            if len(flocs) >= 3:
-                report.add("R4", "WARN", fname,
-                           f"'{name}' 在同一文件出现 {len(flocs)} 次, 应收敛到单一刷新入口: {', '.join(flocs[:6])}")
+            if len(flocs) < 3:
+                continue
+            # 增量语义: 本次**新增**的调用行落在已重复的文件里 -> 阻塞;
+            # 纯存量重复 -> WARN, 逐步收敛。
+            is_new = any((p, i) in added for (p, i) in site_lines[name] if p == fname)
+            report.add("R4", "ERROR" if is_new else "WARN", fname,
+                       f"'{name}' 在同一文件出现 {len(flocs)} 次, 应收敛到单一刷新入口: {', '.join(flocs[:6])}")
 
 
 # --------------------------------------------------------------------------- #
