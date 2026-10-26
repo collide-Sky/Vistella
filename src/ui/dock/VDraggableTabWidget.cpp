@@ -153,6 +153,7 @@ void VDraggableTabWidget::insertPage(int index, QWidget* page)
     // Wire the title so the tab bar reflects changes to the page.
     page->installEventFilter(this);
 
+    // TODO(P8.5): insertTab() runs before insertWidget(), so the first tab makes QStackedWidget warn "not contained in stack" -- see docs/DEBT.md#A-STACKWIDGET
     m_tabBar->insertTab(index, s.title);
     m_stack->insertWidget(index, page);
     if (m_pages.size() == 1) m_tabBar->setCurrentIndex(0);
