@@ -47,12 +47,18 @@ python tools/check_contracts.py --all --verbose
 # 严格: 存量也报 ERROR (清存量时用)
 python tools/check_contracts.py --strict
 
-# CI: 对比主分支
-python tools/check_contracts.py --base origin/main
+# CI: 对比目标分支 (本仓库默认分支是 dev, 没有 main)
+#   base 必须是**合并基点**: 即将合并进去的那个分支的最新提交
+python tools/check_contracts.py --base origin/dev
 ```
 
 已接入 CTest：`ctest -R contract_check`。
 退出码：`0` 通过 · `1` 有 ERROR · `2` 门禁失效（拿不到改动范围，**不算通过**）。
+
+> **base 选错的代价**：`origin/dev` 目前停在 `06b6f57`，还没包含上一个提交 `34030c1`。
+> 用它当 base 会把 `34030c1` 里 26 条日期戳注释报成"新增违规 → ERROR"（这是门禁在正确工作，
+> 但会挡住 CI）。把 `34030c1` 推上去之后，base 正确，这 26 条就退化为存量 WARN。
+> 清单见 `docs/DEBT.md` §E。
 
 ---
 

@@ -153,7 +153,33 @@
 
 ## §D　维护规则
 
-1. **新增占位必须同 PR 登记**：改了 `src/` 且引入任何「以后会做」的承诺 → 必须同时在本文件加行 + 源码写 `TODO(Px.y): ... — see docs/DEBT.md#<ID>`。
+1. **新增占位必须同 PR 登记**：改了 `src/` 且引入任何「以后会做」的承诺 → 必须同时在本文件加行 + 源码写 `TODO(Px.y): <还缺什么> -- see docs/DEBT.md#<ID>`（格式见规则 5）。
 2. **还债必须同 PR 删行**：实现某个条目 → 本文件状态改 `done` **且**源码里的 TODO 标记被删除，缺一不可（由 `tools/check_contracts.py` 双向检查）。
 3. **阶段边界检查**：进入 P<x.y> 时，先处理本文件中建议阶段 = P<x.y> 的全部 `open` 条目（`CONTRACTS.md` 规则 2.4）。
 4. **本文件不记 bug**：功能缺陷走审计报告与阶段能力清单，不进 DEBT。DEBT 只记「故意留着的」。
+5. **标记格式唯一**：`// TODO(P<x.y>): <还缺什么> -- see docs/DEBT.md#<ID>`。破折号必须是两个 ASCII `-`，分隔符必须是 ` -- `（前面一个空格、后面一个空格）。写成 `—` 或省略 `<还缺什么>` 都会被门禁拦下。
+
+---
+
+## §E　存量注释违规清理（R2 规则 2.6a）
+
+> `tools/check_contracts.py` 的 R2 规则禁止变更日志式注释。
+> 规则是**新增即 ERROR**，但本仓库在规则建立之前已经积累了大量违规，因此分档清理。
+
+| ID | 范围 | 数量 | 违规类型 | 建议阶段 | 验收方式 | 状态 |
+|---|---|---|---|---|---|---|
+| `A-COMMENTDATE` | `src/app/mainwindow.cpp` / `src/media/docks/LayersDock.h` / `RightPanelDock.{h,cpp}` / `src/media/imagewindow/ImageCanvas.h` / `imagewindow.cpp` / `layers/LayerPanel.cpp` / `tools/ImageOptionBar.{h,cpp}` / `tools/LeftSidePanel.{h,cpp}` / `src/ui/dock/VDraggableTabWidget.h` / `VPages.cpp` | **26** | 日期戳注释（`P8.3.2 (2026-10-26): ...`），来自提交 `34030c1` | P8.5 | `check_contracts.py --base origin/dev` 不再报 ERROR | open |
+| `A-COMMENTSTAGE` | `src/ai/AIManager.{h,cpp}` / `src/network/AuthClient.{h,cpp}` / `src/user/UserManager.{h,cpp}` 等 | 约 200 | `阶段 N:` 式注释（"阶段 0 占位" / "阶段 5+ 才做"） | P8.6 | 对应文件内 `阶段 \d+` 命中归零 | open |
+| `A-COMMENTREST` | 其余 `src/` | 约 1050 | 变更日志式 / 自称已完成 / 默认值声明 / 未登记占位承诺 | P8.9 | `check_contracts.py --strict` 通过 | open |
+
+> **注意**：只要 `34030c1` 还没推到 `origin/dev`，用 `--base origin/dev` 跑门禁就会把
+> `A-COMMENTDATE` 那 26 条报成 ERROR（base 里没有它们）。这是门禁在正确工作，不是误报。
+> 推上去之后它们退化为存量 WARN。
+
+---
+
+## §F　维护规则（补充）
+
+1. **R2 的自指豁免**：本文件与 `docs/CONTRACTS.md` 里的示例代码块**不参与** R2 扫描（R2 只扫 `src/`）。
+2. **豁免名单**：`tools/contract_allowlist.txt` 每行一个符号名 + `#` 原因。新增豁免必须写原因，否则视为无效。
+3. **门禁失效即失败**：拿不到 diff 范围时脚本以退出码 2 退出，**不允许**退化成"全部通过"。

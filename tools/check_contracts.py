@@ -463,8 +463,16 @@ def rule_todo_registry(report: Report) -> None:
         debt_ids.add(m.group(1))
 
     # 状态为 open 的条目 (表格最后一列 == open, 且首列是 ID)
+    #
+    # 只有**占位类**登记项才要求源码里有对应的 TODO 标记:
+    #   §A.1 / §A.2 / §A.4 的表头都含 "缺什么" 或 "问题" -> 占位类, 必须在源码落标记
+    #   §E 的存量注释清理表不含这两列 -> 它清理的是散落在几百个文件里的注释,
+    #     无法一一落标记, 因此**不**要求源码标记 (但 --stage 仍会按期催办)
+    PLACEHOLDER_HEADER_KEYS = ("缺什么", "问题")
     open_ids: set[str] = set()
-    for _header, rows in debt_tables(debt_text):
+    for header, rows in debt_tables(debt_text):
+        if not any(k in header for k in PLACEHOLDER_HEADER_KEYS):
+            continue
         for cells in rows:
             if len(cells) >= 2 and cells[-1] == "open" and cells[0].startswith("`"):
                 open_ids.add(cells[0].strip("`"))
@@ -542,7 +550,7 @@ def main() -> int:
     ap.add_argument("--strict", action="store_true",
                     help="全量扫描, 存量违规也报 ERROR (清存量时用)")
     ap.add_argument("--base", default="HEAD",
-                    help="增量基线 ref, 默认 HEAD; CI 里用 --base origin/main")
+                    help="增量基线 ref, 默认 HEAD; CI 里用合并基点, 例如 --base origin/dev")
     ap.add_argument("--verbose", action="store_true", help="逐条列出 WARN (默认只汇总计数)")
     ap.add_argument("--stage", default="", help="额外检查该阶段到期的 DEBT 条目, 例: P8.4")
     args = ap.parse_args()
