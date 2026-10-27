@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// IccPngEmbed - P0-8.3 (2026-09-15)
+// IccPngEmbed
 //
 // PNG iCCP chunk embedder (PS 同款 ICC profile 嵌入)
 //

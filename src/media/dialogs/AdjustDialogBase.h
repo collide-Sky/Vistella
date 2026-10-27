@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// AdjustDialogBase - F-K (2026-09-09)
+// AdjustDialogBase
 //
 // PS 风格色彩调整 dialog 基类. 子类 override:
 //   - setupUi(QVBoxLayout*): 装子类专属控件
@@ -46,7 +46,7 @@ protected:
     virtual void setupUi(QVBoxLayout* body) = 0;
     // 子类默认实现: 直接 emit preview(args), OK/Apply 触发后 emit applied
     virtual void applyAdjust();
-    // F-K (2026-09-09): derived ctor 调 base ctor 后调 init() 触发 setupUi
+    // derived ctor 调 base ctor 后调 init 触发 setupUi
     //   避免 base ctor 调 pure virtual 链接错
     void init();
 

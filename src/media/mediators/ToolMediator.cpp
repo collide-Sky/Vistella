@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ToolMediator 实现 - F-B1 (2026-09-08)
+// ToolMediator 实现
 //
 #include "ToolMediator.h"
 #include "logger.h"

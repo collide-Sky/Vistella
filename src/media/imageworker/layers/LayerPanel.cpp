@@ -1,6 +1,6 @@
 // =============================================================
 // LayerPanel 实现
-// 阶段 1 W4.3 Phase 1 (2026-09-04) — 详见 LayerPanel.h
+//  详见 LayerPanel.h
 // =============================================================
 
 #include "LayerPanel.h"
@@ -90,10 +90,10 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
     : QWidget(parent), m_stack(stack)
 {
     setObjectName(QStringLiteral("layerPanel"));
-    // 阶段 1 W4.3 Phase 2 (2026-09-04): 显式最小宽度 240 (P1.4.3 改 base class 后仍保留, LayersDock tab 容器传 layout 自适配)
+    //  显式最小宽度 240 (改 base class 后仍保留, LayersDock tab 容器传 layout 自适配)
     setMinimumWidth(240);
 
-    // P1.4.3 (2026-09-17): base class 从 QDockWidget 换成 QWidget, ctor 改用 layout
+    // base class 从 QDockWidget 换成 QWidget, ctor 改用 layout
     //   根因: QDockWidget 是顶层 dock widget, 不能直接嵌入 LayersDock tab (QTabWidget 页)
     //   改为 QWidget 后, LayersDock::setContentWidget(0, panel) 直接 reparent 到 tab
     //   外层 outerLayout 把 content 包成 this 的 layout, 适配任意 parent container 边距
@@ -185,7 +185,7 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
     opacityRow->addWidget(m_opacity);
     propLayout->addLayout(opacityRow);
 
-    // 阶段 1 W4.3 Phase 2 (2026-09-04): blend 改 QToolButton + QMenu 模式
+    //  blend 改 QToolButton + QMenu 模式
     //   根因: QComboBox 在浮出 QDockWidget 里有 Qt z-order bug — popup 漂到标题栏位置
     //   QMenu 是 modal popup, 永远在 widget 树最上面, 跟随 button 位置 (无 z-order 问题)
     auto *blendRow = new QHBoxLayout;
@@ -200,13 +200,13 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
     blendRow->addWidget(m_blendButton, /*stretch*/1);
     propLayout->addLayout(blendRow);
 
-    // 阶段 1 W4.3 Phase 3 (2026-09-04): per-kind 属性面板
+    //  per-kind 属性面板
     //   QStackedWidget 5 页: 0=empty / 1=Text / 2=Vector / 3=SmartObject / 4=Adjustment
     m_kindProps = new QStackedWidget(content);
     buildKindProps();
     propLayout->addWidget(m_kindProps);
 
-    // 阶段 1 W4.4 Phase 4 (2026-09-04): 蒙版控制 (跨 kind 共享, 放 propLayout 末尾)
+    //  蒙版控制 (跨 kind 共享, 放 propLayout 末尾)
     //   状态行 + add 按钮 + enable 切换 + clear 按钮
     auto *maskRow1 = new QHBoxLayout;
     auto *maskLbl = new QLabel(tr("蒙版"), content);
@@ -232,8 +232,8 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
 
     rootLayout->addLayout(propLayout);
 
-    // 阶段 1 W4.3 (2026-09-04): 显式最小高度, 避免浮出 dock 后被压扁 (QToolButton 等被截)
-    // P8.3.2 (2026-10-26): 400 -> 240.
+    //  显式最小高度, 避免浮出 dock 后被压扁 (QToolButton 等被截)
+    // 400 -> 240
     //   这个最小高度是"下限", 而它会一路传导: 右侧面板 (dock) 的最小高度
     //   -> 主窗口的最小高度 -> 窗口被撑到超出屏幕。曲线编辑页打开时右侧
     //   需要 ~390px, 加上这里的 400, 主窗口直接长到 1186px (屏幕只有 1080)。
@@ -241,7 +241,7 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
     //   高度不够时由 splitter 让位给别的组, 用户可以自己拖分隔条。
     setMinimumHeight(240);
 
-    // P1.4.3 (2026-09-17): 移除 QDockWidget::setWidget(content), 因为已改 base class
+    // 移除 QDockWidget::setWidget(content), 因为已改 base class
     //   content 已通过 outerLayout->addWidget(content) 装入本 widget 的 layout
 
     // ---- 绑定 LayerStack ----
@@ -257,7 +257,7 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
 
 LayerPanel::~LayerPanel() = default;
 
-// P2.5 (2026-09-22): public accessor for MainWindow layer menu actions
+// public accessor for MainWindow layer menu actions
 //   (Duplicate/Delete/MoveUp/MoveDown/Merge Down). Returns the top-level
 //   QTreeWidget current item's layer index, or -1 if:
 //     - no selection
@@ -302,7 +302,7 @@ void LayerPanel::setUndoStackIndex(int /*currentIndex*/, int /*savedIndex*/)
 
 QMenu *LayerPanel::createBlendMenu()
 {
-    // 阶段 1 W4.3 Phase 2 (2026-09-04): blend 下拉
+    //  blend 下拉
     //   11 种 PS 混合模式 (按 Photoshop Layers 面板顺序)
     //   用 QActionGroup exclusive 实现单选
     //   每个 action 存 data() = blend enum int, triggered -> onBlendChanged(idx)
@@ -348,7 +348,7 @@ QImage LayerPanel::makeThumbnail(const cv::Mat &img) const
 }
 
 // =====================================================================
-//  阶段 1 W4.3 Phase 3 (2026-09-04): per-kind 属性面板构造
+//   per-kind 属性面板构造
 // =====================================================================
 
 void LayerPanel::buildKindProps()
@@ -433,7 +433,7 @@ void LayerPanel::buildKindProps()
     soLayout->addWidget(soPathLbl);
     soLayout->addWidget(m_smartPathLabel);
     soLayout->addLayout(soBtnRow);
-    // 阶段 1 W4.4 Phase 5 (2026-09-04): 智能对象扩展按钮
+    //  智能对象扩展按钮
     //   edit source (打开源文件到默认 app) / refresh (重新加载) / toggle embed
     auto *soExtRow = new QHBoxLayout;
     m_smartEdit = new QPushButton(tr("编辑源"), soPage);
@@ -552,7 +552,7 @@ void LayerPanel::syncKindProps(int index)
     m_kindProps->setCurrentIndex(targetPage);
 }
 
-// 阶段 1 W4.4 Phase 4 (2026-09-04): 同步 mask 控件到当前 layer
+//  同步 mask 控件到当前 layer
 void LayerPanel::syncMaskProps(int index)
 {
     if (!m_maskStatus || !m_maskEnable || !m_maskAdd || !m_maskClear) return;
@@ -605,7 +605,7 @@ void LayerPanel::rebuildList()
     if (m_stack) {
         // Top-level items by zOrder desc (top-most layer on top, PS-style).
         //   Group items get their children attached below with indentation.
-        // P0 leftover 2 (2026-09-21): Group children rendered as QTreeWidgetItem
+        // Group children rendered as QTreeWidgetItem
         //   children of the Group's top-level item.
         for (int i = m_stack->count() - 1; i >= 0; --i) {
             auto l = m_stack->at(i);
@@ -752,9 +752,9 @@ void LayerPanel::onSelectionChanged(int index)
             }
         }
     }
-    // Phase 3 (2026-09-04): 同步 per-kind 属性面板
+    // 同步 per-kind 属性面板
     syncKindProps(index);
-    // Phase 4 (2026-09-04): 同步 mask 控件
+    // 同步 mask 控件
     syncMaskProps(index);
 }
 
@@ -789,7 +789,7 @@ void LayerPanel::onTreeCurrentItemChanged(QTreeWidgetItem *current,
 void LayerPanel::onAddClicked()
 {
     if (!m_stack) return;
-    // 阶段 1 W4.3 Phase 3 (2026-09-04): 5 种 LayerKind 弹出菜单
+    //  5 种 LayerKind 弹出菜单
     //   用户选哪个 kind, MainWindow 走对应初始化 (Dialog / 默认值)
     QMenu menu(this);
     menu.setTitle(tr("新建图层"));
@@ -924,7 +924,7 @@ void LayerPanel::onContextMenu(const QPoint &pos)
     QAction *actMerge = menu.addAction(tr("向下合并"));
     QAction *actDel = menu.addAction(tr("删除"));
     menu.addSeparator();
-    // P1.3.3 (2026-09-16): mask context entries.
+    // mask context entries
     QAction *actAddPixel = menu.addAction(tr("添加像素蒙版 (从选区)"));
     QAction *actAddVector = menu.addAction(tr("添加矢量蒙版"));
     QAction *actClearMask = menu.addAction(tr("清除蒙版"));
@@ -935,15 +935,15 @@ void LayerPanel::onContextMenu(const QPoint &pos)
                                             ? tr("取消反转蒙版")
                                             : tr("反转蒙版"));
 
-    // P1.4.2 (2026-09-17): 智能对象右键菜单项 (按 kind 显隐)
+    // 智能对象右键菜单项 (按 kind 显隐)
     //   Bitmap (且 image 非空): 1 项 - 转换为智能对象
     //   SmartObject: 3 项 - 编辑源 / 重新链接 / 栅格化
     QAction *actSmartConvert = nullptr;
     QAction *actSmartEditContents = nullptr;
     QAction *actSmartRelink = nullptr;
     QAction *actSmartRasterize = nullptr;
-    QAction *actSmartFilter = nullptr;   // P1.4.4 (2026-09-17): SmartFilter sub-layer
-    // P1.4.5 (2026-09-17): SmartObject non-destructive transform right-click
+    QAction *actSmartFilter = nullptr;   // SmartFilter sub-layer
+    // SmartObject non-destructive transform right-click
     // entries. transform pops scale + rotation prompts; reset clears.
     QAction *actSmartTransform = nullptr;
     QAction *actSmartResetTransform = nullptr;
@@ -1000,7 +1000,7 @@ void LayerPanel::onContextMenu(const QPoint &pos)
     } else if (chosen && chosen == actSmartFilter) {
         emit applySmartFilterRequested(index);
     } else if (chosen && chosen == actSmartTransform) {
-        // P1.4.5 (2026-09-17): SmartObject non-destructive scale + rotate.
+        // SmartObject non-destructive scale + rotate
         emit transformSmartObjectRequested(index);
     } else if (chosen && chosen == actSmartResetTransform) {
         // P1.4.5: clear SmartObject transform.
@@ -1009,7 +1009,7 @@ void LayerPanel::onContextMenu(const QPoint &pos)
 }
 
 // =====================================================================
-//  阶段 1 W4.3 Phase 3 (2026-09-04): per-kind 编辑 slots
+//   per-kind 编辑 slots
 // =====================================================================
 
 void LayerPanel::onTextEditChanged()
@@ -1080,7 +1080,7 @@ void LayerPanel::onAdjustmentLutResetClicked()
 }
 
 // =====================================================================
-//  阶段 1 W4.4 Phase 4 (2026-09-04): 蒙版 slots
+//   蒙版 slots
 // =====================================================================
 
 void LayerPanel::onMaskAddClicked()
@@ -1111,7 +1111,7 @@ void LayerPanel::onMaskEnableToggled(bool enabled)
 }
 
 // =====================================================================
-//  阶段 1 W4.4 Phase 5 (2026-09-04): 智能对象扩展 slots
+//   智能对象扩展 slots
 // =====================================================================
 
 void LayerPanel::onSmartObjectEditClicked()
@@ -1139,7 +1139,7 @@ void LayerPanel::onSmartObjectToggleEmbedClicked()
 }
 
 // =====================================================================
-//  P0 leftover 2 (2026-09-21): tree helpers for Group child item IDs.
+//  tree helpers for Group child item IDs
 //   Group children don't live in m_layers, so a flat int layer index
 //   cannot address them. Encode (groupLayerId, childIdx) into a QString
 //   stored in Qt::UserRole. The format is intentionally simple and

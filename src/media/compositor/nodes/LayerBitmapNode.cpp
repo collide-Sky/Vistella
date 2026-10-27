@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerBitmapNode impl - P8.1 (2026-10-16)
+// LayerBitmapNode impl
 
 #include "LayerBitmapNode.h"
 

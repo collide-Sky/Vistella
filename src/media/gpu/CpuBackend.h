@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CpuBackend - P8.2 (2026-10-16) CPU pass-through backend
+// CpuBackend - CPU pass-through backend
 //   processTile returns the input unchanged. The actual pixel work
 //   (paint, blend, etc.) is done by the CompositorNode's compute()
 //   method which already runs on CPU. CpuBackend is a no-op shim

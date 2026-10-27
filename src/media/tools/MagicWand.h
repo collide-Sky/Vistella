@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 //
-// MagicWand - F-L (2026-09-10) + P0-4.5 (2026-09-10) + P2.1 (2026-09-22)
+// MagicWand
 //
 // PS-style MagicWand tool. P2.1: option page (tolerance slider + Contiguous)
 // now wired to the strategy; click -> flood fill mask from seed pixel.
-// Q4.2.3 (2026-09-24): explicit selection mode (Replace/Add/Subtract/Intersect)
+// explicit selection mode (Replace/Add/Subtract/Intersect)
 //   for ModeSelectorBar. Modifier keys (Shift/Alt) still override per-click.
 //
 #pragma once

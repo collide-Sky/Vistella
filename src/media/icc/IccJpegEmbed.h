@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// IccJpegEmbed - P0-8.3 (2026-09-15)
+// IccJpegEmbed
 //
 // JPEG APP2 ICC_PROFILE marker embedder (PS 同款 ICC profile 嵌入)
 //

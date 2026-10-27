@@ -2,7 +2,7 @@
 #define LAYERSTACK_H
 
 // =============================================================
-// LayerStack — 阶段 1 W4.3 Phase 1 完整 LayerStack (2026-09-04)
+// LayerStack — 完整 LayerStack
 //
 // 职责:
 //   1. 维护多个 Layer (QList<LayerPtr>) + 编组 (QList<LayerGroup>)
@@ -33,7 +33,7 @@
 
 #include <functional>
 
-// P0-2.5 (2026-09-08): forward decl for EngineContext
+// forward decl for EngineContext
 //   renderAsync(EngineContext*, callback) 走 background pool 后台跑 render()
 //   LayerStack.cpp 实现时 #include 完整头, 这里只前向声明避免强制依赖
 namespace vistella::tp { class EngineContext; }
@@ -62,7 +62,7 @@ public:
     // ---- 修改操作 (基础) ----
     int  addLayer(const Layer &layer);
     int  addLayer(const QString &name, const cv::Mat &image);
-    // Phase 3 (2026-09-04): 4 种 per-kind add 工厂
+    // 4 种 per-kind add 工厂
     int  addTextLayer(const QString &name, const QString &text,
                       int fontSize = 24, const QColor &color = QColor(Qt::white),
                       const QString &fontFamily = QStringLiteral("Arial"));
@@ -74,7 +74,7 @@ public:
     int  addAdjustmentLayer(const QString &name, const QString &adjustmentType,
                             const cv::Mat &lut = cv::Mat());
 
-    // P1.5.2 (2026-09-21): Group / Ungroup (LayerKind::Group based)
+    // Group / Ungroup (LayerKind::Group based)
     //   mergeIntoGroup: pack N adjacent layers (>= 2) into a new Group container
     //     layer appended at end of stack. Returns new Group index or -1 on
     //     failure (e.g. non-adjacent indices, < 2 layers).
@@ -87,17 +87,17 @@ public:
     //   new approach uses LayerKind::Group + per-stack m_groups storage.
     int  mergeIntoGroup(const QList<int>& indices);
     int  flattenGroup(int groupIdx);
-    // P0 leftover 1 (2026-09-21): key by LayerId (stable pointer) not int index,
+    // key by LayerId (stable pointer) not int index
     //   so render() can look up Group children without re-keying after every
     //   m_layers mutation (moveUp / removeLayer / duplicateLayer / flattenGroup).
     const std::vector<LayerPtr>& groupChildrenOf(LayerId groupId) const;
-    //   P8.1.z (2026-10-22): same lookup from a LayerPtr. Needed to walk
+    //   same lookup from a LayerPtr. Needed to walk
     //   INTO a nested group — a group child is not in m_layers, so there
     //   is no index to call idOf() with, and the caller has no business
     //   reinterpreting a pointer as a LayerId itself.
     const std::vector<LayerPtr>& groupChildrenOf(const LayerPtr& group) const;
 
-    // P0 leftover 3 (2026-09-21): inverse of flattenGroup. Used by
+    // inverse of flattenGroup. Used by
     //   LayerCommand::makeFlattenGroup's undo path to restore a Group
     //   from a captured children snapshot without depending on the now-
     //   shifted m_layers indices. Replaces the Group at `atIndex` in
@@ -116,7 +116,7 @@ public:
     bool setBlend(int index, Layer::BlendMode mode);
     bool rename(int index, const QString &newName);
 
-    // Phase 3 (2026-09-04): per-kind 编辑 setter
+    // per-kind 编辑 setter
     //   返 true 表示 layerChanged signal 已发
     bool setText(int index, const QString &text);
     bool setTextFont(int index, const QString &family, int size, const QColor &color);
@@ -127,7 +127,7 @@ public:
     bool setAdjustmentType(int index, const QString &type);
     bool setAdjustmentLut(int index, const cv::Mat &lut);
 
-    // Phase 5 (2026-09-04): 智能对象扩展 API
+    // 智能对象扩展 API
     //   refresh(index): 重新从源文件加载 (嵌入时也重新复制到 cache)
     //   isSmartObjectSourceMissing(index): 源文件是否存在
     //   toggleSmartObjectEmbed(index): link ↔ embed 切换
@@ -135,7 +135,7 @@ public:
     bool isSmartObjectSourceMissing(int index) const;
     bool toggleSmartObjectEmbed(int index);
 
-    // P1.4.1 (2026-09-17): 智能对象 Convert / Rasterize / Transform 完整化
+    // 智能对象 Convert / Rasterize / Transform 完整化
     //   convertToSmartObject(index, embed=true): in-place Bitmap -> SmartObject.
     //     embed=true: write current image to MD5 cache, sourceFilePath = cache path.
     //     embed=false: sourceFilePath empty (caller will provide later).
@@ -149,7 +149,7 @@ public:
     bool clearSmartObjectTransform(int index);
     QTransform smartObjectTransform(int index) const;
 
-    // P1.4.4 (2026-09-17): SmartFilter chain management (PS-style smart filters)
+    // SmartFilter chain management (PS-style smart filters)
     //   Each SmartObject layer can have 0+ filter sub-layers stored in
     //   smartFiltersFor(smartIdx). Filter sub-layers occupy indices in the main
     //   stack (so they show up in LayerPanel) but are tagged with parentSmartIndex.
@@ -170,19 +170,19 @@ public:
     bool setSmartFilterEnabled(int smartIdx, int filterIdx, bool enabled);
     bool setSmartFilterStrength(int smartIdx, int filterIdx, double strength);
 
-    // P1.4.4 (2026-09-17): Re-insert a previously-removed filter sub-layer
+    // Re-insert a previously-removed filter sub-layer
     //   (used by undo). The layer is added at end of m_layers and inserted
     //   into the chain at `atSlot`. Used by LayerCommand::undo for the
     //   RemoveSmartFilter case.
     int reinsertSmartFilter(const Layer &filterLayer, int atSlot);
 
-    // P1.4.4 (2026-09-17): Public accessor for SmartObject base image.
+    // Public accessor for SmartObject base image
     //   Loads source from sourceFilePath, applies transform/resize to canvas
     //   (no filter chain). Returns cv::Mat or empty if source missing.
     //   Used by UI to obtain the input image for a new SmartFilter.
     cv::Mat rasterizeForRender(int idx) const;
 
-    // ---- P8.1.1.x (2026-10-20): compositor source access ----
+    // compositor source access
     //   rasterizeLayer: public form of the private rasterize(), taking a
     //   LayerPtr rather than an index.
     //
@@ -207,14 +207,14 @@ public:
     //   file-local since it is stateless.
     cv::Mat applySmartFilterChain(const cv::Mat &src, int smartIdx) const;
 
-    // Phase 5 (2026-09-04): 全局 cache 清理
+    // 全局 cache 清理
     //   遍历 cache dir, 删掉不被任何 layer 引用的文件
     //   返删除的文件数
     static int cleanupSmartObjectCache();
-    // Phase 5 (2026-09-04): 给 MainWindow 调, 拿到嵌入 cache 路径 (打开源用)
+    // 给 MainWindow 调, 拿到嵌入 cache 路径 (打开源用)
     static QString smartObjectCachePathFor(const QString &sourceFilePath);
 
-    // Phase 4 (2026-09-04): 蒙版 setter
+    // 蒙版 setter
     //   addMask: 加载一张灰度图当蒙版, 同步 enable
     //   clearMask: 删蒙版 (但保留 enable 状态)
     //   enableMask: 开关蒙版 (不删图)
@@ -223,7 +223,7 @@ public:
     bool clearMask(int index);
     bool enableMask(int index, bool enabled);
 
-    // P1.3.2 (2026-09-16): 扩展 LayerMask 接口 (pixel/vector/density/feather/invert)
+    // 扩展 LayerMask 接口 (pixel/vector/density/feather/invert)
     //   这些方法直接操作 layer.mask struct, 与上面 3 个旧方法互不冲突
     bool addPixelMask(int index, const cv::Mat& grayMask);
     bool addVectorMask(int index, const QVector<QPainterPath>& paths);
@@ -263,7 +263,7 @@ public:
     cv::Mat render() const;                 // 所有可见层按 zOrder + blend 混合
     cv::Mat renderOne(int index) const;     // 单独预览某层 (含 opacity)
 
-    // P0-2.5 (2026-09-08): 异步 render — 走 EngineContext background 池
+    // 异步 render — 走 EngineContext background 池
     //   1. engine == nullptr 走 sync (跟 render() 一致)
     //   2. engine 非空: submit 到 background().submit_fn, 跑完用
     //      QMetaObject::invokeMethod 切回主线程调 callback(cv::Mat)
@@ -275,7 +275,7 @@ public:
     using RenderCallback = std::function<void(cv::Mat)>;
     void renderAsync(vistella::tp::EngineContext *engine, RenderCallback callback) const;
 
-    // ---- P8.1.2 (2026-10-20): compositor-backed render ----
+    // compositor-backed render
     //   renderViaCompositor() builds a P8.1 CompositorGraph from this
     //   stack (LayerBitmapNode + LayerRasterNode + LayerBlendNode +
     //   LayerMaskNode + LayerAdjustmentNode + GroupNode) and renders it
@@ -284,7 +284,7 @@ public:
     //   render() consults the compositorEnabled flag and dispatches
     //   here when it is on.
     //
-    //   Default ON as of P8.2 (2026-10-22): every LayerKind has a node
+    //   Default ON as of every LayerKind has a node
     //   (Text / Vector / SmartObject via LayerRasterNode, Adjustment via
     //   LayerAdjustmentNode), so the graph can render a whole stack.
     //   The switch is still there for A/B comparison and as the way out
@@ -297,7 +297,7 @@ public:
     // TODO(P8.4): setCompositorEnabled() has no production caller, so grayscale and RGBA documents render black with no fallback -- see docs/DEBT.md#A-SETCOMPOSITOR
     void    setCompositorEnabled(bool on);
 
-    // Phase 3 (2026-09-04): 画布尺寸
+    // 画布尺寸
     //   渲染非 Bitmap (text/vector/smart) 时需要知道输出尺寸
     //   默认 = base layer image 尺寸, 或 800x600 fallback
     cv::Size canvasSize() const;
@@ -323,21 +323,21 @@ signals:
 private:
     QList<LayerPtr> m_layers;
 
-    // P8.1.2 (2026-10-20): switch for renderViaCompositor(). Default
+    // switch for renderViaCompositor. Default
     // true since P8.2; see the renderViaCompositor() declaration above.
     bool m_compositorEnabled = true;
     int  m_selection = -1;
     // Phase 3: 画布尺寸 (无 base layer 时 rasterize text/vector 用)
     cv::Size m_canvasSize = cv::Size(800, 600);
 
-    // P1.4.4 (2026-09-17): SmartObject -> SmartFilter sub-layer indices.
+    // SmartObject -> SmartFilter sub-layer indices
     //   Each SmartObject at index `smartIdx` has a QList of filter sub-layer
     //   indices in chain order (0..N-1). Filter sub-layers are full Layer
     //   entries in m_layers (so they show up in LayerPanel) but tagged with
     //   parentSmartIndex so the renderer knows to skip them as standalone.
     QHash<int, QList<int>> m_smartFilterChain;
 
-    // P1.5.2 (2026-09-21): Group children storage. P0 leftover 1 (2026-09-21)
+    // Group children storage
     //   rekeyed by LayerId (stable LayerPtr.get()) instead of int layer index,
     //   so mutations to m_layers (moveUp / removeLayer / duplicateLayer /
     //   flattenGroup) do NOT invalidate m_groups lookups. Value is the vector
@@ -345,7 +345,7 @@ private:
     //   (would break Layer's copy semantics; see Layer.h comment).
     QHash<LayerId, std::vector<LayerPtr>> m_groups;
 
-    // P8.1.z (2026-10-22): m_groups is keyed by LayerId, which IS the
+    // m_groups is keyed by LayerId, which IS the
     // LayerPtr's address. So any operation that produces a NEW LayerPtr
     // for a Group orphans that group's children: the entry still exists
     // under the old address and the clone looks childless. Three
@@ -358,7 +358,7 @@ private:
     void    releaseGroupChildren(const LayerPtr& group);
     int     appendLayerPtr(LayerPtr layer);
 
-    // P8.1.z (2026-10-22): composite a group's children onto `target` in
+    // composite a group's children onto `target` in
     //   order, recursing into nested Groups. Shared by the top-level
     //   render() loop and by nested groups themselves, so nesting works
     //   by construction instead of only at the first level.

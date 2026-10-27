@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CompositorNode - P8.1 (2026-10-16) base class for render graph nodes
+// CompositorNode - base class for render graph nodes
 //   A node declares its upstream inputs (inputNodes) + a per-tile compute
 //   method. Subclasses (LayerBitmapNode, LayerBlendNode, etc.) implement
 //   compute() to produce one tile of output.

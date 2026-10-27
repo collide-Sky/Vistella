@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TransformCommand - P0-6.4 (2026-09-14)
+// TransformCommand
 //                       P0-6.6 扩展: 存 cv::Mat before/after 支持真 undo/redo
 //
 // QUndoCommand 子类 — 撤销/重做 box 变换

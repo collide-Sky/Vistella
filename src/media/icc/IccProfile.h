@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// IccProfile - P0-8.3 (2026-09-15)
+// IccProfile
 //
 // LCMS2-based ICC profile wrapper:
 //   - load .icc / .icm 文件

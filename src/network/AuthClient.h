@@ -2,11 +2,11 @@
 #define AUTHCLIENT_H
 
 // =============================================================
-// AuthClient — 第三方登录 OAuth 客户端 (阶段 0 第 9 步, 占位)
+// AuthClient — 第三方登录 OAuth 客户端 (mock 实现)
 //
 // 设计目标:
-//   1. 阶段 0: 纯接口 + 空 stub, 模拟成功返回 (配合 UserManager 阶段 0 流程跑通)
-//   2. 阶段 5+ 真正接入 OAuth:
+//   1. 纯接口 + 空 stub, 模拟成功返回 (配合 UserManager 流程跑通)
+//   2. 真正接入 OAuth (未实装, 见 docs/DEBT.md#A-AUTH)
 //      - GitHub:    OAuth 2.0 Authorization Code 流程
 //      - QQ:        QQ 互联 OAuth 2.0
 //      - WeChat:    微信开放平台 OAuth 2.0
@@ -31,7 +31,7 @@ class AuthClient : public QObject
     Q_OBJECT
 public:
     enum class Provider {
-        Local,        // 本地用户名+密码 (阶段 0 占位模拟, 阶段 5+ 真用 UserDatabase)
+        Local,        // 本地用户名+密码 (mock: 直接返回模拟成功)
         GitHub,
         QQ,
         WeChat,
@@ -48,18 +48,18 @@ public:
         qint64  expiresAt = 0;        // epoch ms, 0 = 永不过期
         User    user;                // 服务端返回的 user profile
         QString errorMessage;        // 失败时填
-        QString errorCode;           // 机器可读错误码 (阶段 5+ 接入 OAuth 用)
+        QString errorCode;           // 机器可读错误码 (接入 OAuth 后才可能非空)
     };
 
     static AuthClient &instance();
 
-    // ----- 服务端地址 (阶段 5+ 申请完 OAuth 后填真地址) -----
+    // 服务端地址 (申请完 OAuth 后填真地址; mock 实现不发请求)
     void setAuthServerBaseUrl(const QUrl &url) { m_authServerBaseUrl = url; }
     QUrl authServerBaseUrl() const { return m_authServerBaseUrl; }
 
     // ----- 各种 provider 登录 (异步, 通过 loginResult 信号返回) -----
-    //   阶段 0: 模拟成功 (返回本地 mock User)
-    //   阶段 5+ 接真 OAuth 时:
+    //   模拟成功 (返回本地 mock User)
+    //    接真 OAuth 时:
     //     - GitHub/QQ/WeChat: 拉浏览器 OAuth 流程, 拿到 code 后调 loginXxxAsync(code)
     //     - Phone: 先 requestSmsCodeAsync(phone), 用户填验证码, 调 loginPhoneAsync(phone, code)
     void loginLocalAsync(const QString &username, const QString &password);
@@ -68,13 +68,13 @@ public:
     void loginWeChatAsync(const QString &oauthCode);
     void loginPhoneAsync(const QString &phone, const QString &smsCode);
 
-    // 短信验证码 (阶段 5+ 接 SMS 网关)
+    // 短信验证码 (接 SMS 网关; mock 实现直接返回成功)
     void requestSmsCodeAsync(const QString &phone);
 
-    // 刷新 token (阶段 5+ 接 OAuth 后用, 避免 access token 过期要重新登录)
+    // 刷新 token (接 OAuth 后用; mock 实现直接返回成功)
     void refreshTokenAsync(const QString &refreshToken);
 
-    // 注销 (阶段 5+ 接 OAuth 后用, 调 auth server /logout)
+    // 注销 (接 OAuth 后用; mock 实现直接返回成功)
     void logoutAsync(const QString &accessToken);
 
 signals:
@@ -90,7 +90,7 @@ signals:
                             const QString &newRefreshToken,
                             qint64 expiresAt);
 
-    // 网络错误 (阶段 0 不会触发, 阶段 5+ 网络异常时触发)
+    // 网络错误 (mock 实现不发请求, 不会触发)
     void networkError(const QString &url, const QString &err);
 
 private:
@@ -98,10 +98,10 @@ private:
     AuthClient(const AuthClient &) = delete;
     AuthClient &operator=(const AuthClient &) = delete;
 
-    // 阶段 0 内部辅助: 构造一个 mock User + token, 用于所有 loginXxxAsync 占位返回
+    //  内部辅助: 构造一个 mock User + token, 所有 loginXxxAsync 都用它返回
     static AuthResult mockSuccess(Provider p, const QString &username);
 
-    QUrl m_authServerBaseUrl;   // 阶段 0 留空, 阶段 5+ 配真地址
+    QUrl m_authServerBaseUrl;   //  留空, mock 实现不发请求
 };
 
 #endif // AUTHCLIENT_H

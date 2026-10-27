@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SelectionStrategy implementations - P0-4.2 (2026-09-10)
+// SelectionStrategy implementations
 //
 #include "SelectionStrategy.h"
 #include "../masks/ColorRange.h"
@@ -84,7 +84,7 @@ QImage LassoSelectionStrategy::end(const QImage& image)
     QImage mask(image.size(), QImage::Format_Alpha8);
     mask.fill(0);
 
-    // P2.1 (2026-09-22): paint path with optional anti-alias + feathering
+    // paint path with optional anti-alias + feathering
     QPainterPath path;
     path.addPolygon(m_path);
     path.closeSubpath();
@@ -97,7 +97,7 @@ QImage LassoSelectionStrategy::end(const QImage& image)
         painter.end();
     }
 
-    // P2.1 (2026-09-22): feathering — box blur on alpha channel then threshold
+    // feathering — box blur on alpha channel then threshold
     //   feather=0 means crisp mask (current PS default); feather>0 softens edge
     //   by blurring the alpha channel within [r] pixels then re-thresholding at 127.
     if (m_featherRadius > 0 && !mask.isNull()) {
@@ -216,7 +216,7 @@ QImage MagicWandSelectionStrategy::end(const QImage& image)
         LOG_DEBUG("[MagicWand] mask: contiguous seed=({},{}) tol={} pixels={}",
                   sx, sy, m_tolerance, count);
     } else {
-        // P2.1 (2026-09-22): non-contiguous — full image scan within tolerance
+        // non-contiguous — full image scan within tolerance
         //   Selects all pixels matching the seed color anywhere in the image,
         //   not just the connected region. PS Equivalent of unchecking Contiguous.
         int count = 0;
@@ -241,7 +241,7 @@ void MagicWandSelectionStrategy::cancel()
     m_seed = QPointF();
 }
 
-// ===== ColorRange (P2.4 2026-09-22) =====
+// ===== ColorRange =====
 //
 // PS-style Color Range selection: user drops 1+ sample points, mask = pixels
 //   within fuzziness (HSV distance) of any sample. Implemented via

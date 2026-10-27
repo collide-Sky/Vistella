@@ -14,7 +14,6 @@
 //   - Auto      : pure UI (tree views, layer panel list) where the page
 //                 does no heavy pixel work; capability layer decides.
 //
-//   P7.6.x v3 commit 3 (2026-10-14).
 #pragma once
 
 #include "VTabPageBase.h"
@@ -131,7 +130,7 @@ public:
     RenderPath preferredRenderPath() const { return RenderPath::CpuOnly; }
     docks::PropertiesDock* inner() const { return m_inner; }
 
-    // P7.10 (2026-10-15): active layer change → drop cached imageInfo /
+    // active layer change → drop cached imageInfo /
     // bbox / rotation / text. The inner PropertiesDock is stateless, so
     // invalidate is a no-op for the data side; we just trigger a
     // repaint via update() so any stale pixels are redrawn.
@@ -154,7 +153,7 @@ public:
     RenderPath preferredRenderPath() const { return RenderPath::GpuPreferred; }
     docks::ChannelPathPanel* inner() const { return m_inner; }
 
-    // P7.10 (2026-10-15): active channel change → drop channel mask cache
+    // active channel change → drop channel mask cache
     // + repaint. The inner panel re-reads the active channel on the next
     // paint. Triggers the same code path the user would hit by clicking
     // an RGB / Red / Green / Blue entry in the channel list.
@@ -179,7 +178,7 @@ public:
     void setUndoStack(class QUndoStack* stack);
     docks::HistoryDock* inner() const { return m_inner; }
 
-    // P7.10 (2026-10-15): undoStack is already wired through setUndoStack()
+    // undoStack is already wired through setUndoStack
     // and QUndoStack::indexChanged drives HistoryDock internally. The
     // hook here is a defensive double-check for callers that mutate
     // the stack without going through QUndoStack::push/pop.

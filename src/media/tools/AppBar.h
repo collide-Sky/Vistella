@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// AppBar - P5.5+ (2026-10-09)
+// AppBar
 //
 //   PS-style "above-canvas global toggle bar" — three compact groups:
 //     - Quick Mask: checkable toggle that drives the MaskBrush tool.

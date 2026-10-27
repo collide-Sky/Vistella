@@ -41,7 +41,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     // 日志页: 初始化当前值 + 绑定信号
     setupLogPage();
 
-    // P8.3.x (2026-10-19): GPU 页 - 嵌到 nav + stack
+    // GPU 页 - 嵌到 nav + stack
     setupGpuPage();
 }
 
@@ -197,7 +197,7 @@ void SettingsDialog::onLogListClicked()
 }
 
 // =============================================================================
-//  P8.3.x (2026-10-19): GPU 设置页
+//  GPU 设置页
 //   把 SettingsGpuPanel 嵌到 nav + stack, 用户切 GPU 模式后不需要重启
 // =============================================================================
 void SettingsDialog::setupGpuPage()

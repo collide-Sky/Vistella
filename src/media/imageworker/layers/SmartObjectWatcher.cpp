@@ -1,5 +1,5 @@
 // =============================================================================
-//  SmartObjectWatcher implementation - P1.4.1 (2026-09-17)
+//  SmartObjectWatcher implementation
 // =============================================================================
 
 #include "SmartObjectWatcher.h"

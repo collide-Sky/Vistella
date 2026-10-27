@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// Crop implementation - F-L (2026-09-10) + P2.3 (2026-09-22)
+// Crop implementation
 //
 #include "Crop.h"
 #include "../imagewindow.h"

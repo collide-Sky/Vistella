@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ChannelMixerAdjustDialog - P0-3.2 v2 (2026-09-18)
+// ChannelMixerAdjustDialog
 //
 // PS-style Channel Mixer dialog: 3x3 grid of sliders
 // (output channel R/G/B vs source channel R/G/B), range -200..200,

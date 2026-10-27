@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LevelsAdjustDialog - P0-3.2 v2 (2026-09-18)
+// LevelsAdjustDialog
 //
 // PS-style Levels dialog: 5 sliders (inLow/inHigh/gamma/outLow/outHigh)
 // with a channel QComboBox (RGB/Red/Green/Blue).

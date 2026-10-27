@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ShapeTool implementation - P0-9.1 (2026-09-15)
+// ShapeTool implementation
 //
 // 详见 ShapeTool.h 头注释
 //
@@ -140,7 +140,7 @@ void ShapeTool::onMouseRelease(QMouseEvent* /*e*/, ImageWindow* host, const QPoi
     vecLayer.kind = layers::Layer::Vector;
     vecLayer.name = QStringLiteral("形状 (vector)");
     vecLayer.vectorPaths.append(path);
-    // P0-9.4 (2026-09-15): fill / stroke 颜色 + stroke 宽度 走 m_fillColor/m_strokeColor/m_strokeWidth
+    // fill / stroke 颜色 + stroke 宽度 走 m_fillColor/m_strokeColor/m_strokeWidth
     vecLayer.vectorFillColors.append(m_fillColor);
     vecLayer.vectorStrokeColors.append(m_strokeColor);
     vecLayer.vectorStrokeWidths.append(m_strokeWidth);
@@ -189,7 +189,7 @@ void ShapeTool::onKeyPress(QKeyEvent* e, ImageWindow* host)
         vecLayer.kind = layers::Layer::Vector;
         vecLayer.name = QStringLiteral("多边形 (vector)");
         vecLayer.vectorPaths.append(path);
-        // P0-9.4 (2026-09-15): fill / stroke 颜色 + stroke 宽度
+        // fill / stroke 颜色 + stroke 宽度
         vecLayer.vectorFillColors.append(m_fillColor);
         vecLayer.vectorStrokeColors.append(m_strokeColor);
         vecLayer.vectorStrokeWidths.append(m_strokeWidth);
@@ -212,7 +212,7 @@ void ShapeTool::onKeyRelease(QKeyEvent* /*e*/, ImageWindow* /*host*/) {}
 
 QWidget* ShapeTool::optionPage(QWidget* parent)
 {
-    // P0-9.4 (2026-09-15): PS 同款 5 kind combo + Fill color + Stroke color + Stroke width
+    // PS 同款 5 kind combo + Fill color + Stroke color + Stroke width
     auto* page = new QWidget(parent);
     auto* layout = new QHBoxLayout(page);
     layout->setContentsMargins(4, 2, 4, 2);

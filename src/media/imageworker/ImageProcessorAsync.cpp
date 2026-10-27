@@ -1,13 +1,13 @@
 // =============================================================
 // ImageProcessorAsync 实现
-// 阶段 1 W2.3 (2026-09-03) — 详见 ImageProcessorAsync.h
-// P0-2.5 (2026-09-08): 6 个 EngineContext overload (走 background pool)
+//  详见 ImageProcessorAsync.h
+// 6 个 EngineContext overload (走 background pool)
 // =============================================================
 
 #include "ImageProcessorAsync.h"
 #include "../imageprocessor.h"
 #include "../../core/Async.h"
-// P0-2.5 (2026-09-08): EngineContext 完整 include
+// EngineContext 完整 include
 #include "../../core/ThreadPool/engine_context.h"
 #include "../../core/ThreadPool/executor.hpp"
 
@@ -44,7 +44,7 @@ QFuture<Result<cv::Mat>> ImageProcessorAsync::runOp(Fn &&fn)
         });
 }
 
-// P0-2.5 (2026-09-08): EngineContext 版 helper
+// EngineContext 版 helper
 //   走 background().submit_fn, 返 std::future<Result<cv::Mat>>
 //   跟 runOp 同样包装: cv::Mat 空 → err(InvalidArgument)
 //                     cv::Exception / std::exception → err(Internal)
@@ -184,7 +184,7 @@ QFuture<Result<cv::Mat>> ImageProcessorAsync::edgeDetect(cv::Mat img, double low
 }
 
 // =====================================================================
-// P0-2.5 (2026-09-08): 6 个 EngineContext overload
+// 6 个 EngineContext overload
 //   走 background pool, 返 std::future<Result<cv::Mat>>
 //   跟 P0-2 ImageAdjustmentPanel::asyncApplyCurrentParams 用同样的
 //   submit_fn + Task::Fn 模式, facade 跟它保持调用风格一致

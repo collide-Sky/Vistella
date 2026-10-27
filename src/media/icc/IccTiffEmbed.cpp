@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// IccTiffEmbed implementation - P0-8.4 (2026-09-15)
+// IccTiffEmbed implementation
 //
 // 详见 IccTiffEmbed.h 头注释
 //
@@ -203,7 +203,7 @@ bool embedIccToTiff(const QString& filePath,
             write16(static_cast<quint16>(34675), reinterpret_cast<uchar*>(entryBuf));
             write16(static_cast<quint16>(7), reinterpret_cast<uchar*>(entryBuf + 2));   // UNDEFINED
             write32(static_cast<quint32>(iccData.size()), reinterpret_cast<uchar*>(entryBuf + 4));
-            write32(iccValuePlaceholder, reinterpret_cast<uchar*>(entryBuf + 8));   // 占位, 后面填
+            write32(iccValuePlaceholder, reinterpret_cast<uchar*>(entryBuf + 8));   // TODO(P8.9): the ICC tag value offset is written as a constant, so the embedded profile is unreadable -- see docs/DEBT.md#A-ICCTIFFTAG
             newFile.append(entryBuf, 12);
         }
 

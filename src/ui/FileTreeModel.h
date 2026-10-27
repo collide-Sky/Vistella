@@ -46,7 +46,7 @@ public:
     QString rootPath() const { return m_rootPath; }
 
     // 触发目录节点的 lazy load (QTreeView::expanded 信号接这里)
-    //   如果没占位 child / 已加载过, no-op
+    //   如果没虚拟 child / 已加载过, no-op
     void expand(const QModelIndex &index);
 
     // 拿 item 的绝对路径 / isDir (给 dock / 业务调用)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// FilterFactory implementation - P0-5.2 (2026-09-10)
+// FilterFactory implementation
 //
 #include "FilterFactory.h"
 
@@ -34,7 +34,7 @@ std::unique_ptr<FilterStrategy> FilterFactory::createFilter(FilterKind kind)
     case FilterKind::MedianNoise:    return std::make_unique<MedianNoiseFilter>();
     case FilterKind::WhiteBalance:   return std::make_unique<WhiteBalanceFilter>();
 
-    // P7.3 (2026-10-12): PS 风格化菜单 — alias 现有策略 + 简化实装.
+    // PS 风格化菜单 — alias 现有策略 + 简化实装
     // 8 模糊: 表面/方框/高斯/进一步/特殊/形状 走现有 Bilateral/Box/Gaussian.
     // 径向/镜头/扭曲/渲染 大多复杂 (cv::warpPolar + depth map / cv::remap), P7.3
     //  阶段允许 nullptr (菜单 disabled + status message "未实装").

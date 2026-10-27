@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 //
-// BackendCapabilities - P8.2 (2026-10-16) GPU capability detection
+// BackendCapabilities - GPU capability detection
 //   Probed once at startup. The result is cached for the session.
 //   P8.2 MVP: capabilityProvider is a function pointer; production
 //   wires a real QOpenGLContext probe in P8.2.x. The interface is
 //   stable: callers ask isGpuAvailable() and get a bool.
 //
-//   Per-stroke re-probe (user拍板 2026-10-16): not done in P8.2
+//   Per-stroke re-probe (user拍板): not done in
 //   because the real probe is too heavy; the cached-at-startup
 //   value is used. P8.2.x may add a lightweight re-probe path on
 //   user-toggle from P8.3's settings panel.
@@ -59,7 +59,7 @@ public:
     // Register the actual probe. P8.2.x replaces the stub.
     void setProvider(ProviderFn fn);
 
-    // P8.3 (2026-10-16): real OpenGL probe via QOpenGLContext +
+    // real OpenGL probe via QOpenGLContext
     // QOffscreenSurface. Returns true if OpenGL 2.0+ is available
     // and a context can be made current. Tested in tst_P8_3; the
     // result is environment-dependent (test runners may have no GPU

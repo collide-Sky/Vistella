@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CloneTool implementation - P0-9.3 (2026-09-15) + P2.2 (2026-09-22)
+// CloneTool implementation
 //
 #include "CloneTool.h"
 #include "../imagewindow.h"

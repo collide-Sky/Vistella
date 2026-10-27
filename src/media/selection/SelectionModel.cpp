@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SelectionModel implementation - P0-4.1 (2026-09-10)
+// SelectionModel implementation
 //
 #include "SelectionModel.h"
 #include "logger.h"
@@ -215,7 +215,7 @@ void SelectionModel::recomputeBbox()
     }
 }
 
-// ===== P3.6 (2026-09-23): PS select > Modify 5 项 + Transform =====
+// ===== PS select > Modify 5 项 + Transform =====
 //   所有方法生成新 mask 应用,触发 changed + bbox recompute.
 
 // feather: 高斯模糊 + 阈值化 (阈值 128 保持 mask 边缘)

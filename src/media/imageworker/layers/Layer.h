@@ -2,11 +2,11 @@
 #define LAYER_H
 
 // =============================================================
-// Layer — 阶段 1 W4.3 Phase 1 完整 Layer (2026-09-04)
+// Layer — 完整 Layer
 //
 // 设计动机:
-//   阶段 0 imageWindow.m_current 是单一 cv::Mat, 改一处覆盖全部
-//   阶段 1 W4.3 完整 PS 图层系统, 5 种 LayerKind + 15 种 BlendMode + 链接/编组/锁定
+//    imageWindow.m_current 是单一 cv::Mat, 改一处覆盖全部
+//    完整 PS 图层系统, 5 种 LayerKind + 15 种 BlendMode + 链接/编组/锁定
 //
 // 5 种 LayerKind (Phase 1 全部声明, Phase 3 全部实现):
 //   - Bitmap       (位图, cv::Mat, Phase 1 实现)
@@ -49,8 +49,8 @@ struct Layer {
         Text,          // text + fontSize + color
         SmartObject,   // sourceFilePath
         Adjustment,    // adjustmentType + adjustmentLut
-        SmartFilter,   // P1.4.4 (2026-09-17): SmartObject sub-filter (filterType + filterStrength)
-        Group          // P1.5.2 (2026-09-21): Container layer; children live in
+        SmartFilter,   // SmartObject sub-filter (filterType + filterStrength)
+        Group          // Container layer; children live in
                       // LayerStack::m_groups keyed by Group layer index.
     };
     LayerKind kind = Bitmap;
@@ -79,7 +79,7 @@ struct Layer {
     QVector<QPainterPath> vectorPaths;
     QVector<QColor>        vectorFillColors;
     QVector<qreal>         vectorStrokeWidths;
-    // P0-9.1 (2026-09-15): vector stroke colors (PS 同款, 每 shape 独立 stroke color)
+    // vector stroke colors (PS 同款, 每 shape 独立 stroke color)
     QVector<QColor>        vectorStrokeColors;
 
     // ---- Text payload (kind == Text, Phase 3) ----
@@ -92,7 +92,7 @@ struct Layer {
     QString sourceFilePath;       // 源文件绝对路径 (嵌入时为空)
     bool    sourceEmbedded = false; // true = 嵌入 (复制源文件到 cache), false = 链接
 
-    // P1.4.1 (2026-09-17): Non-destructive transform (SmartObject only).
+    // Non-destructive transform (SmartObject only)
     //   Identity = no transform applied. rasterize() applies to source pixels
     //   when loading. Persisted via LayerCommand::SetSmartObjectTransform.
     QTransform transform;
@@ -115,7 +115,7 @@ struct Layer {
     cv::Mat layerMask;            // 灰度图 8U, 0=透明 255=不透明
     bool    maskEnabled = false;
 
-    // P1.3.2 (2026-09-16): extended mask state (pixel/vector/density/feather/invert)
+    // extended mask state (pixel/vector/density/feather/invert)
     LayerMask mask;               // new structured mask (additive to layerMask)
 
     // ---- 构造 ----

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 //
-// TileGrid + TileKey - P8.1 (2026-10-16) incremental compositor
+// TileGrid + TileKey - incremental compositor
 //   TileGrid: image-space decomposition into (tx, ty) tiles, 256x256 default.
 //   TileKey:  composite identity (nodeId, tx, ty, version) for cache lookup.
 //
-//   P8.1 commit (2026-10-16). P8.2 GPU backend reads TileKey the same way
+//   GPU backend reads TileKey the same way
 //   (P8.2 just changes what the cache contains - a GPU texture or a
 //   command-buffer), and P8.4 parallel executor fans tiles across threads
 //   using the same grid.

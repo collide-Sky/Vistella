@@ -2,7 +2,7 @@
 #define SMARTOBJECTWATCHER_H
 
 // =============================================================================
-//  SmartObjectWatcher - P1.4.1 (2026-09-17)
+//  SmartObjectWatcher
 //
 //  Monitors a LayerStack's SmartObject source files for external modification
 //  via QFileSystemWatcher and emits sourceFileChanged(index, path) on mtime

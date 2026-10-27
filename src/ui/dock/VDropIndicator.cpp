@@ -1,5 +1,4 @@
 // VDropIndicator.cpp
-//   P7.6.x v3 commit 2 (2026-10-14).
 #include "VDropIndicator.h"
 
 #include <QPaintEvent>

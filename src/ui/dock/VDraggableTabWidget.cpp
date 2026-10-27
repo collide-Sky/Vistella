@@ -1,5 +1,4 @@
 // VDraggableTabWidget.cpp
-//   P7.6.x v3 commit 2 (2026-10-14).
 #include "VDraggableTabWidget.h"
 
 #include <QApplication>
@@ -153,9 +152,11 @@ void VDraggableTabWidget::insertPage(int index, QWidget* page)
     // Wire the title so the tab bar reflects changes to the page.
     page->installEventFilter(this);
 
-    // TODO(P8.5): insertTab() runs before insertWidget(), so the first tab makes QStackedWidget warn "not contained in stack" -- see docs/DEBT.md#A-STACKWIDGET
-    m_tabBar->insertTab(index, s.title);
+    // The page must reach the stack before the tab bar sees it: inserting the
+    // first tab of an empty tab bar makes Qt select index 0 immediately, and
+    // that selection handler switches the stack's current page.
     m_stack->insertWidget(index, page);
+    m_tabBar->insertTab(index, s.title);
     if (m_pages.size() == 1) m_tabBar->setCurrentIndex(0);
 
     emit pageAdded(page);

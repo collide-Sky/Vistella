@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ToolContext - F-C (2026-09-09)
+// ToolContext
 //
 // F-C stage only: holds current ToolState + forwards events to it.
 // Mediator integration (signal-driven setState) is F-D stage.
@@ -21,7 +21,7 @@ class ImageWindow;
 
 namespace tools {
 
-// P7.6 (2026-10-13): shared brush state. P7.6.x (2026-10-14) UI: BrushOptionsPanel
+// shared brush state. UI: BrushOptionsPanel
 //   (ImageOptionBar idx=7) writes via ImageOptionBar::onBrushSharedStateChangedFromPanel,
 //   Brush/Clone/Heal/Patch/MaskBrush read via brushSettingsChanged.
 //   Not nested (moc does not like nested struct). Top-level namespace.
@@ -33,12 +33,12 @@ struct BrushSharedState {
     double  smoothing = 0.0;   // 0..100 % (P7.9.1: default 0, was 10.0)
     int     angle     = 0;     // 0..359 deg
     int     brushSize = 13;    // 1..2000 px; PS default 13
-    // P7.9.1 (2026-10-15): PS brush mode advanced parameters
+    // PS brush mode advanced parameters
     double  hardness  = 50.0;  // 0..100 %; 0=soft, 100=hard
     double  spacing   = 25.0;  // 0..1000 %; stamp-to-stamp distance as % of brushSize
     double  scatter   = 0.0;   // 0..100 %; position jitter for each stamp
 
-    // P7.9.1 (2026-10-15): P8.2 GPU backend hint.
+    // GPU backend hint
     //   true  = paint path benefits from GPU acceleration (hardness smoothing +
     //           scatter jitter, blend mode >= 5 = non-trivial). CPU fallback is fine
     //           but slower; GPU path will arrive in P8.2.
@@ -80,7 +80,7 @@ public:
     void onKeyPress(QKeyEvent* e);
     void onKeyRelease(QKeyEvent* e);
 
-    // P7.6 (2026-10-13): shared brush state accessor (BrushOptionsPanel via
+    // shared brush state accessor (BrushOptionsPanel via
     //   ImageOptionBar reads/writes). P7.6.x UI.
     BrushSharedState& brushSharedState() { return m_brushShared; }
     const BrushSharedState& brushSharedState() const { return m_brushShared; }
@@ -91,7 +91,7 @@ public:
     void setSmoothing(double pct);
     void setAngle(int deg);
     void setBrushSize(int px);
-    // P7.9.1 (2026-10-15): extended shared brush state (hardness/spacing/scatter).
+    // extended shared brush state (hardness/spacing/scatter)
     void setHardness(double pct);
     void setSpacing(double pct);
     void setScatter(double pct);
@@ -107,8 +107,8 @@ signals:
     // Current tool's cursor changed (e.g. internal state change)
     void cursorChanged(const QCursor& cursor);
 
-    // P7.6 (2026-10-13): brushSettingsChanged — any of opacity/flow/angle/size/blendMode change emits
-    //   signal. P7.6.x (2026-10-14) UI: subscribers are ImageOptionBar (forwards to
+    // brushSettingsChanged — any of opacity/flow/angle/size/blendMode change emits
+    //   signal. UI: subscribers are ImageOptionBar (forwards to
     //   BrushOptionsPanel::applySharedState) + future brush tools (P7.9 commit).
     void brushSettingsChanged();
 
@@ -120,8 +120,8 @@ private:
     // Own current tool
     std::unique_ptr<ToolState>       m_current;
 
-    // P7.6 (2026-10-13): shared brush state (mode/opacity/flow/smoothing/angle/brushSize).
-    //   P7.6.x (2026-10-14) UI writes via BrushOptionsPanel (ImageOptionBar).
+    // shared brush state (mode/opacity/flow/smoothing/angle/brushSize)
+    //   UI writes via BrushOptionsPanel (ImageOptionBar)
     BrushSharedState                 m_brushShared;
 
     // Initial default tool (None state, no event response)

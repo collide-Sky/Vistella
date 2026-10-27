@@ -2,7 +2,7 @@
 #define MEDIADISPATCHER_H
 
 // =============================================================
-// MediaDispatcher — 中央文件分发器 (阶段 0 第 2 步)
+// MediaDispatcher — 中央文件分发器
 //
 // 职责:
 //   1. 维护 4 大处理模块 (imageWorker / audioWorker / videoWorker / visionWorker) 的注册表
@@ -55,7 +55,7 @@ public:
     // ----- 路由: 启动模块空白工作区 -----
     //   找模块 → 调 module->createNew() → 返回 workspace
     //   id 是模块的 IModule::info().id (e.g. "imageWorker")
-    //   阶段 0 时各 Worker 还没建, createNew 返回 nullptr → 弹"暂未实现"提示
+    //    时各 Worker 还没建, createNew 返回 nullptr → 弹"暂未实现"提示
     IWorkspace *openModuleById(const QString &id, QWidget *parent = nullptr);
 
 signals:

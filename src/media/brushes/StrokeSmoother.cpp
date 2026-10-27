@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// StrokeSmoother impl - P1.1 (2026-09-15)
+// StrokeSmoother impl
 
 #include "StrokeSmoother.h"
 

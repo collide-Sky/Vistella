@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TransformMath - P0-6.3 (2026-09-14)
+// TransformMath
 //
 // 4 mode 矩阵数学 (Scale / Rotate / Skew / Distort) — 一次性到位, 不分阶段实装
 //   - Scale:    等比 / 非等比缩放 (Shift = 等比)
@@ -36,7 +36,7 @@ public:
                                        TransformBox::Handle handle,
                                        const QPointF& newPos,
                                        bool shift);
-    // P3.2.4 (2026-09-22): 用 origRect (拖动前 rect) 算 Scale/Skew 矩阵.
+    // 用 origRect (拖动前 rect) 算 Scale/Skew 矩阵
     //   Scale/Skew commitTransform 时 box.rect() 已经被 dragHandle 更新到 newPos
     //   后状态, 传 box.rect() 会让 scaleMatrix 因为 rect.bottomRight == newPos
     //   退化 identity. Rotate/Distort 忽略 origRect (不依赖).
@@ -54,7 +54,7 @@ public:
                                  const QPointF& newPos, bool shift);
     // distortMatrix: 把 origRect 4 角 (TL/TR/BR/BL) 映射到扭曲后 4 角 corners
     //   corners = 4 元素数组 (TL/TR/BR/BL 顺序)
-    //   P3.2.1 (2026-09-22): 旧版本 quadToQuad(src, src) 两边都用扭曲后 4 角,
+    //   旧版本 quadToQuad(src, src) 两边都用扭曲后 4 角
     //   导致 src==src 返 identity — 4 角变了没效果. 修复用 origRect 4 角做 src.
     static QTransform distortMatrix(const QRectF& origRect, const QPointF* corners);
 

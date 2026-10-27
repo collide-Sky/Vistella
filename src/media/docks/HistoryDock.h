@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// HistoryDock - P0-8.1 (2026-09-15)
+// HistoryDock
 //
 // PS 风格历史面板 (RightPanelDock 第 6 tab):
 //   - 显示 QUndoStack 所有 command (text() = "添加文字" / "自由变换" / "滤镜: Blur" 等)
@@ -32,7 +32,7 @@ public:
     explicit HistoryDock(QWidget* parent = nullptr);
     ~HistoryDock() override;
 
-    // F-O (2026-09-10) test accessors
+    // test accessors
     int     rowCount() const;
     int     currentRow() const;
     QString textAt(int row) const;

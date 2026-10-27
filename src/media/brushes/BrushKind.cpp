@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushKind impl - P7.9.2 (2026-10-16) 13 brush dynamic types
+// BrushKind impl - 13 brush dynamic types
 //   kindNeedsGpu() needs the full tools::BrushSharedState definition to
 //   call its needsGpu() member. BrushKind.h only forward-decls it to avoid
 //   pulling the whole tools/ subdir into brushes/. This .cpp does the
 //   single cross-namespace work.
 //
-//   P7.9.2 commit (2026-10-16).
 
 #include "BrushKind.h"
 

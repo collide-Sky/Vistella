@@ -1,12 +1,12 @@
 // =============================================================
 // LayerCommand 实现
-// 阶段 1 W4.3 Phase 1 (2026-09-04) — 详见 LayerCommand.h
-// P0-3.3 (2026-09-08) — SetAdjustmentLut 升级 image-based undo/redo
+//  详见 LayerCommand.h
+// SetAdjustmentLut 升级 image-based undo/redo
 // =============================================================
 
 #include "LayerCommand.h"
 
-// P0-3.3 (2026-09-08): 实现 image-based undo/redo 需要调 ImageWindow::replaceCurrentImage
+// 实现 image-based undo/redo 需要调 ImageWindow::replaceCurrentImage
 //   .cpp 里 #include "imagewindow.h" 是必要的, 不会拉进 media 模块循环依赖
 //   (LayerCommand.h 走前置声明, .cpp 走完整 include, 是标准 PIMPL 风格)
 #include "../../imagewindow.h"
@@ -91,7 +91,7 @@ LayerCommand::LayerCommand(LayerStack *stack, int mergeIndex, QUndoCommand *pare
     }
 }
 
-// P0 leftover 3 (2026-09-21): Phase 1 simplified Group/Ungroup constructors
+// simplified Group/Ungroup constructors
 //   (link flag based, lines 94-114 in the original file) removed. The new
 //   factories below integrate with P1.5.2 LayerKind::Group + m_groups.
 //
@@ -132,7 +132,7 @@ LayerCommand* LayerCommand::makeFlattenGroup(LayerStack *stack, int groupIdx)
     return cmd;
 }
 
-// P2.5 bug fix (2026-09-22): Move factory pattern. Previously callers did
+// Move factory pattern. Previously callers did
 //   push(new LayerCommand(stack, sel, +1)) + m_layerStack->moveUp(sel)
 //   which double-moved (push's redo() called moveUp, then caller called
 //   moveUp again). The factories below apply the move themselves; redo()
@@ -162,7 +162,7 @@ LayerCommand* LayerCommand::makeMoveDown(LayerStack *stack, int index)
     return cmd;
 }
 
-// 阶段 1 W4.3 Phase 3 (2026-09-04): 3 参 (stack, op, index) 专用构造器
+//  3 参 (stack, op, index) 专用构造器
 //   避免跟 (stack, int, int) Move 构造器歧义
 LayerCommand::LayerCommand(LayerStack *stack, Op op, int index)
     : QUndoCommand(), m_stack(stack), m_op(op), m_index(index)
@@ -171,7 +171,7 @@ LayerCommand::LayerCommand(LayerStack *stack, Op op, int index)
 }
 
 // =====================================================================
-//  阶段 1 W4.3 Phase 3 (2026-09-04): per-kind 编辑 factory
+//   per-kind 编辑 factory
 // =====================================================================
 
 LayerCommand* LayerCommand::makeSetText(LayerStack *stack, int index, const QString &oldText)
@@ -220,7 +220,7 @@ LayerCommand* LayerCommand::makeSetAdjustmentLut(LayerStack *stack, int index, c
     return cmd;
 }
 
-// P0-3.3 (2026-09-08): 升级版 SetAdjustmentLut factory
+// 升级版 SetAdjustmentLut factory
 //   接受 host + newImage, undo/redo 走 replaceCurrentImage 恢复 image
 //   m_oldMat 在这里重定义为"before image 快照" (跟 layer.adjustmentLut 字段名同名但实际存 image)
 //   m_newMat = "after image 快照" (仅在 host 模式有意义, 旧版不用)
@@ -243,7 +243,7 @@ LayerCommand* LayerCommand::makeSetAdjustmentLut(LayerStack *stack, int index,
 }
 
 // =====================================================================
-//  阶段 1 W4.4 Phase 4 (2026-09-04): 蒙版 factory
+//   蒙版 factory
 // =====================================================================
 
 LayerCommand* LayerCommand::makeAddMask(LayerStack *stack, int index,
@@ -274,7 +274,7 @@ LayerCommand* LayerCommand::makeEnableMask(LayerStack *stack, int index, bool ol
     return cmd;
 }
 
-// 阶段 1 W4.4 Phase 5 (2026-09-04): 智能对象 link↔embed 切换 factory
+//  智能对象 link↔embed 切换 factory
 LayerCommand* LayerCommand::makeToggleSmartObjectEmbed(LayerStack *stack, int index, bool oldEmbedded)
 {
     auto *cmd = new LayerCommand(stack, ToggleSmartObjectEmbed, index);
@@ -284,7 +284,7 @@ LayerCommand* LayerCommand::makeToggleSmartObjectEmbed(LayerStack *stack, int in
 }
 
 // =====================================================================
-//  P1.4.1 (2026-09-17): Convert / Rasterize / Transform factories
+//  Convert / Rasterize / Transform factories
 // =====================================================================
 
 // ConvertToSmartObject: caller must invoke convertToSmartObject() BEFORE pushing
@@ -330,7 +330,7 @@ LayerCommand* LayerCommand::makeSetSmartObjectTransform(LayerStack *stack, int i
 }
 
 // =====================================================================
-//  P1.4.4 (2026-09-17): SmartFilter chain undo factories
+//  SmartFilter chain undo factories
 // =====================================================================
 //
 // AppendSmartFilter: caller has already called appendSmartFilter() before
@@ -402,7 +402,7 @@ void LayerCommand::undo()
     if (!m_stack) return;
     switch (m_op) {
     case Add: {
-        // P2.5 bug fix (2026-09-22): undo REMOVES the layer.
+        // undo REMOVES the layer
         //   Caller is expected to pre-addLayer before push (see
         //   ImageWindow::applyLayerOp + LayerPanel::duplicateLayer
         //   patterns: caller does addLayer/duplicateLayer first, then
@@ -418,7 +418,7 @@ void LayerCommand::undo()
         break;
     }
     case Move: {
-        // P2.5 bug fix (2026-09-22): undo reverses the move applied by the
+        // undo reverses the move applied by the
         //   makeMoveUp / makeMoveDown factory. m_index = pre-move index.
         //   redo is a no-op (factory already applied the move).
         //   forward was moveUp(m_index):   undo = moveDown(m_index + 1)
@@ -473,7 +473,7 @@ void LayerCommand::undo()
         break;
     }
     case Group: {
-        // P0 leftover 3 (2026-09-21): undo mergeIntoGroup = flattenGroup.
+        // undo mergeIntoGroup = flattenGroup
         if (m_stack && m_index >= 0 && m_index < m_stack->count()) {
             if (auto l = m_stack->at(m_index); l && l->kind == Layer::Group) {
                 m_stack->flattenGroup(m_index);
@@ -482,7 +482,7 @@ void LayerCommand::undo()
         break;
     }
     case Ungroup: {
-        // P0 leftover 3 (2026-09-21): undo flattenGroup = remove the
+        // undo flattenGroup = remove the
         //   N children currently in m_layers at [atIndex, atIndex+N) and
         //   reinsertGroup a fresh Group container there. flattenGroup
         //   left the children in m_layers; we must remove them before
@@ -528,7 +528,7 @@ void LayerCommand::undo()
         break;
     }
     case SetAdjustmentLut: {
-        // P0-3.3 (2026-09-08) 分支: m_host 非空 → 走 image-based undo (P0-3.2 AdjustmentPanel 用法)
+        // 分支: m_host 非空 → 走 image-based undo (AdjustmentPanel 用法)
         //   m_host 走 replaceCurrentImage 恢复 image (跟 ImageEditCommand::undo 等价, 但用 layer 命名空间)
         //   m_host 为空 → 走原 l->adjustmentLut 路径 (P0-3.2 之前的用法, 兼容)
         if (m_host) {
@@ -663,7 +663,7 @@ void LayerCommand::redo()
     if (!m_stack) return;
     switch (m_op) {
     case Add: {
-        // P2.5 bug fix (2026-09-22): redo is a no-op because the caller
+        // redo is a no-op because the caller
         //   has already pre-added the layer (see LayerPanel/ImageWindow
         //   pattern: addLayer/duplicateLayer first, then push the Add
         //   LayerCommand). Matches Group/Ungroup factory pattern.
@@ -686,7 +686,7 @@ void LayerCommand::redo()
         break;
     }
     case Move: {
-        // P2.5 bug fix (2026-09-22): redo is a no-op. Callers go through
+        // redo is a no-op. Callers go through
         //   makeMoveUp / makeMoveDown factories which apply the move
         //   themselves (factory pattern, matches Group/Ungroup/SetText).
         //   Direct push(new LayerCommand(stack, index, direction)) without
@@ -700,28 +700,28 @@ void LayerCommand::redo()
         break;
     }
     case Visible: {
-        // P2.5 bug fix (2026-09-22): redo is a no-op. Caller did
+        // redo is a no-op. Caller did
         //   setVisible(newValue) before pushing; pushing a redo that
         //   reverts to m_boolVal (the old value) would silently undo the
         //   caller's setVisible. Matches Opacity/SetText pattern.
         break;
     }
     case Locked: {
-        // P2.5 bug fix (2026-09-22): redo is a no-op (matches Visible).
+        // redo is a no-op (matches Visible)
         break;
     }
     case Linked: {
-        // P2.5 bug fix (2026-09-22): redo is a no-op (matches Visible).
+        // redo is a no-op (matches Visible)
         break;
     }
     case Blend: {
-        // P2.5 bug fix (2026-09-22): redo is a no-op. Caller did
+        // redo is a no-op. Caller did
         //   setBlend(newMode) before pushing; a redo that reverts to
         //   m_intVal (the old mode) would silently undo the caller.
         break;
     }
     case Rename: {
-        // P2.5 bug fix (2026-09-22): redo is a no-op. Caller did
+        // redo is a no-op. Caller did
         //   rename(newName) before pushing; a redo that reverts to
         //   m_strVal (the old name) would silently undo the caller.
         break;
@@ -731,12 +731,12 @@ void LayerCommand::redo()
         break;
     }
     case Group: {
-        // P0 leftover 3 (2026-09-21): redo is a no-op because the factory
+        // redo is a no-op because the factory
         //   already applied mergeIntoGroup. Matches SmartFilter pattern.
         break;
     }
     case Ungroup: {
-        // P0 leftover 3 (2026-09-21): redo is a no-op because the factory
+        // redo is a no-op because the factory
         //   already applied flattenGroup. Matches SmartFilter pattern.
         break;
     }
@@ -755,7 +755,7 @@ void LayerCommand::redo()
         //   真实 mainwindow 流程: push(cmd 存 old) → setXxx(new) → undo 还原 old → setXxx(new) → redo no-op
         break;
     case SetAdjustmentLut:
-        // P2.5 bug fix (2026-09-22): redo is a no-op for both host and
+        // redo is a no-op for both host and
         //   legacy paths. The caller (AdjustmentPanel::applyCurrentTab +
         //   commitUndoDebounced) has already applied m_newMat via
         //   setCurrentImage before pushing this command. Without the

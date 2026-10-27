@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerOpacityNode impl - P8.1.1.y (2026-10-22)
+// LayerOpacityNode impl
 
 #include "LayerOpacityNode.h"
 

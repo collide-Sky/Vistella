@@ -39,10 +39,10 @@ public:
     FileTreeNodeData       &data()       { return m_data; }
     void setData(const FileTreeNodeData &d) { m_data = d; }
 
-    // ----- lazy load (目录默认占位 child, 第一次 expand 才真扫) -----
+    // lazy load (目录默认带一个虚拟 child, 第一次 expand 才真扫)
     bool lazyLoaded() const { return m_lazyLoaded; }
     void setLazyLoaded(bool v) { m_lazyLoaded = v; }
-    bool hasLazyPlaceholder() const;          // 占位 child ("...") 是否还在
+    bool hasLazyPlaceholder() const;          // 虚拟 child ("...") 是否还在
 
 private:
     FileTreeNodeData      m_data;

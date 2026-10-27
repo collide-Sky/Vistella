@@ -40,8 +40,8 @@ void UserManager::setState(State s)
 
 void UserManager::login(const QString &username, const QString &password)
 {
-    // 阶段 0 占位: 模拟登录, 不真发网络请求
-    //   阶段 5+ 接 AuthClient, 调真实 OAuth 接口
+    //  mock: 模拟登录, 不发网络请求
+    //    接 AuthClient, 调真实 OAuth 接口 (未实装, 见 docs/DEBT.md#A-AUTH)
     qInfo("[UserManager] login requested: user='%s'", qPrintable(username));
     setState(Authenticating);
 
@@ -73,10 +73,10 @@ void UserManager::login(const QString &username, const QString &password)
 
 void UserManager::loginWithToken(const QString &accessToken)
 {
-    // 阶段 0 占位: 模拟
+    //  mock: 模拟
     qInfo("[UserManager] loginWithToken: token='%s...'", qPrintable(accessToken.left(8)));
     setState(Authenticating);
-    // 阶段 5+: 调 AuthClient 验证 token, 拿 user info
+    // 调 AuthClient 验证 token, 拿 user info (未实装, 见 docs/DEBT.md#A-AUTH)
     User u;
     u.id            = QStringLiteral("token-user");
     u.username      = QStringLiteral("token_user");
@@ -101,7 +101,7 @@ void UserManager::logout()
 
 void UserManager::registerLocal(const QString &username, const QString &password)
 {
-    Q_UNUSED(password);  // 阶段 5 才做密码哈希
+    Q_UNUSED(password);  //  才做密码哈希
     qInfo("[UserManager] registerLocal: user='%s'", qPrintable(username));
     if (username.isEmpty()) {
         emit loginFailed(tr("用户名不能为空"));
@@ -122,8 +122,8 @@ void UserManager::registerLocal(const QString &username, const QString &password
 
 void UserManager::tryAutoLogin()
 {
-    // 阶段 0: 读本地最近 user, 直接切到 Authenticated
-    // 阶段 5+: 验证 token 有效性, 失败回 Offline
+    // 读本地最近 user, 直接切到 Authenticated
+    // 验证 token 有效性, 失败回 Offline (未实装, 见 docs/DEBT.md#A-AUTH)
     if (!m_db || !m_db->isOpen()) {
         qWarning("[UserManager] tryAutoLogin: db not open");
         return;

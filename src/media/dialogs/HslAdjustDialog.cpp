@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// HslAdjustDialog implementation - F-K (2026-09-09) / P0 leftover review (2026-09-21)
+// HslAdjustDialog implementation - /
 //
 #include "HslAdjustDialog.h"
 #include "logger.h"
@@ -64,7 +64,7 @@ void HslAdjustDialog::onSliderChanged(int /*band*/)
 {
     syncLabels();
     // PS behaviour: live preview emits preview() on every slider change.
-    //   P0 leftover review (2026-09-21): use updateParam + triggerPreview
+    //   use updateParam + triggerPreview
     //   so AdjustDialogBase marks m_modified = true (enables Apply button).
     updateParam("hueShifts", currentHueShifts());
     updateParam("satShifts", currentSatShifts());

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LeftToolBar - F-D (2026-09-09)
+// LeftToolBar
 //
 // PS-style vertical toolbar on the left of canvas.
 //   F-D stage: 2 tools (Move + Eyedropper) in 2-column grid
@@ -49,7 +49,7 @@ public:
     // P7.1: PS-style fg/bg double-click swap (event filter).
     bool eventFilter(QObject* watched, QEvent* event);
 
-    // P7.1 (2026-10-12): PS-style foreground / background color accessors.
+    // PS-style foreground / background color accessors
     //   fg/bg swatches (50x50 fg + 10x50 bg) live in the bottom strip of
     //   this dock and stay in lockstep with ColorDock. Click fg / bg to
     //   open QColorDialog; double-click triggers swap. Click the small
@@ -76,7 +76,7 @@ private slots:
     void onBgSwatchDoubleClicked();
 
 private:
-    // 8 工具 factory (F-L 2026-09-10: 加 RectSelect/Lasso/MagicWand/Crop/Text/Brush)
+    // 8 工具 factory (加 RectSelect/Lasso/MagicWand/Crop/Text/Brush)
     static ToolState* createMoveTool();
     static ToolState* createRectSelectTool();
     static ToolState* createLassoTool();
@@ -85,14 +85,14 @@ private:
     static ToolState* createTextTool();
     static ToolState* createBrushTool();
     static ToolState* createEyedropperTool();
-    // P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 个 factory
+    // 形状/矢量 + 修复工具 6 个 factory
     static ToolState* createShapeTool();
     static ToolState* createPenTool();
     static ToolState* createCloneTool();
     static ToolState* createHealTool();
     static ToolState* createPatchTool();
     static ToolState* createRedEyeTool();
-    // P1.3.4 (2026-09-17): MaskBrush factory (像素蒙版画笔)
+    // MaskBrush factory (像素蒙版画笔)
     static ToolState* createMaskBrushTool();
 
     // P7.1: paint fg/bg swatch widget.
@@ -107,7 +107,7 @@ private:
     QColor m_fgColor = Qt::black;
     QColor m_bgColor = Qt::white;
 
-    Ui::LeftToolBar* ui = nullptr;  // .ui auto-generated (F-P.3 2026-09-09)
+    Ui::LeftToolBar* ui = nullptr;  // ui auto-generated
 };
 
 } // namespace tools

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerRasterNode - P8.1.1.x (2026-10-20)
+// LayerRasterNode
 //
 //   Source node (no inputs) for the layer kinds that must be
 //   rasterized before they can be composited:

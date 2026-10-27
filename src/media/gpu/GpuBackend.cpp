@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// GpuBackend impl - P8.2.x (2026-10-19) real Qt OpenGL pass-through
+// GpuBackend impl - real Qt OpenGL pass-through
 // shader pipeline.
 //
 //   processTile() flow under m_lock:

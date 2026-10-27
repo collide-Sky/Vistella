@@ -57,7 +57,7 @@ signals:
 
 private:
     QList<RecentEntry> m_entries;
-    // 默认多媒体 (3D 模块已移除, 2026-09-02)
+    // 默认多媒体 (3D 模块已移除)
     int m_mode = int(RecentModeMultimedia);
 };
 

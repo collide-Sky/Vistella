@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushPreset + BrushPresetManager impl - P1.1 (2026-09-15)
+// BrushPreset + BrushPresetManager impl
 //   JSON serialization + the 5 built-in PS-equivalent presets + persistence.
 
 #include "BrushPreset.h"

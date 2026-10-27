@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// PatchTool implementation - P0-9.3 (2026-09-15) + P0-9.4 (2026-09-15) + P2.2 (2026-09-22)
+// PatchTool implementation
 //
 #include "PatchTool.h"
 #include "../imagewindow.h"

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// RedEyeTool implementation - P0-9.3 (2026-09-15) + P2.2 (2026-09-22)
+// RedEyeTool implementation
 //
 #include "RedEyeTool.h"
 #include "../imagewindow.h"

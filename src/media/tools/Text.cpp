@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// Text implementation - P0-7.1 (2026-09-14)
+// Text implementation
 //
 // 详见 Text.h 头注释
 //
@@ -162,7 +162,7 @@ void Text::onKeyPress(QKeyEvent* e, ImageWindow* host)
 
 QWidget* Text::optionPage(QWidget* parent)
 {
-    // P0-7.1 (2026-09-14): PS 完整文字工具栏
+    // PS 完整文字工具栏
     //   字体 ComboBox / 字号 SpinBox / 颜色按钮 / Bold / Italic / 对齐
     //   + "提交所有编辑" / "取消所有编辑" 按钮
     //

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// HealTool implementation - P0-9.4 (2026-09-15) + P2.2 (2026-09-22)
+// HealTool implementation
 //
 // PS-style Healing Brush (J) — cv::inpaint integration:
 //   - Alt + click: sample source point
@@ -9,7 +9,6 @@
 //     2. cv::inpaint (Telea algorithm) fills mask using surrounding texture
 //     3. Write inpainted region back to m_current
 //
-// P2.2 (2026-09-22):
 //   - Page title i18n override (parent class uses default "Clone Stamp")
 //   - Inherits ImageEditCommand undo integration + QSlider optionPage from
 //     CloneTool base (HealTool doesn't override optionPage — base UI is fine)

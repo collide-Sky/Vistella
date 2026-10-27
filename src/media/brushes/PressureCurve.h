@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// PressureCurve - P1.1 (2026-09-15) Brush full implementation
+// PressureCurve - Brush full implementation
 //   PS-style pressure response curve (minimum, maximum, curve shape).
 //   Maps raw stylus pressure (0..1) -> remapped pressure (0..1).
 //

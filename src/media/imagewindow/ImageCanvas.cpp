@@ -3,7 +3,7 @@
 // ImageCanvas — QGraphicsView 派生, 接管 scene/zoom/wheel/eventFilter
 // (P0-1: 拆 imagewindow.cpp 上帝类的 6 大组件之一)
 //
-// P0-1.3 (2026-09-07): full migration
+// full migration
 //   - Owns m_scene / m_item / m_zoom (moved from ImageWindow)
 //   - 4 zoom slots (onZoomIn / Out / FitWindow / ResetZoom) implemented here
 //   - wheelEvent: Ctrl+wheel zoom logic (moved from ImageWindow::eventFilter)
@@ -41,17 +41,17 @@ ImageCanvas::ImageCanvas(QWidget* parent) : QGraphicsView(parent) {
     setViewportUpdateMode(QGraphicsView::SmartViewportUpdate);
     setOptimizationFlags(QGraphicsView::DontSavePainterState |
                          QGraphicsView::DontAdjustForAntialiasing);
-    // 阶段 1 前置优化 C.2 (2026-09-03): 补 2 个性能基线
+    //  前置优化 补 2 个性能基线
     //   1) CacheBackground: 背景 (grid / 空 scene 底色) 缓存为 pixmap,
     //      scroll 时只画 items 不重画 background, 24MP 大图滚动顺滑很多
-    //   2) scene NoIndex: 阶段 0/1 imageWorker 顶层只有 1 个 pixmap item + 几个文字 item,
+    //   2) scene NoIndex: imageWorker 顶层只有 1 个 pixmap item + 几个文字 item
     //      < 100 items 用 NoIndex 比默认 BspTreeIndex 快 (避免 BSP 树维护开销)
-    //      阶段 1+ 如果加图层系统 (几十个 item), 改回 BspTreeIndex
+    //       如果加图层系统 (几十个 item), 改回 BspTreeIndex
     setCacheMode(QGraphicsView::CacheBackground);
     m_scene->setItemIndexMethod(QGraphicsScene::NoIndex);
     setFocusPolicy(Qt::StrongFocus);
 
-    // P0-4.3 (2026-09-10): marching ants ticker
+    // marching ants ticker
     m_ants = new selection::MarchingAnts(this);
     connect(m_ants, &selection::MarchingAnts::phaseChanged,
             this, [this](int) { viewport()->update(); });
@@ -199,7 +199,7 @@ void ImageCanvas::setSelectionModel(selection::SelectionModel* sel)
               sel ? "yes" : "null");
 }
 
-// P0-6.10 (2026-09-14): 自由变换 box weak ref + viewport update
+// 自由变换 box weak ref + viewport update
 void ImageCanvas::setTransformBox(transform::TransformBox* box)
 {
     m_box = box;
@@ -209,7 +209,7 @@ void ImageCanvas::setTransformBox(transform::TransformBox* box)
     viewport()->update();
 }
 
-// P2.1 (2026-09-22): mask overlay toggle (PS-style "Show Selection Overlay")
+// mask overlay toggle (PS-style "Show Selection Overlay")
 void ImageCanvas::setMaskOverlayVisible(bool v)
 {
     if (m_showMaskOverlay == v) return;
@@ -219,7 +219,7 @@ void ImageCanvas::setMaskOverlayVisible(bool v)
 }
 
 // ---------------------------------------------------------------------------
-// P7.11 (2026-10-15): dirty-rect repaint API.
+// dirty-rect repaint API
 //
 // invalidateRect(sceneRect) accumulates a scene-space rectangle. All
 // calls before the next paint event are unioned. On the next paint
@@ -275,7 +275,7 @@ void ImageCanvas::flushDirtyRect()
 
 void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
 {
-    // P7.11 (2026-10-15): commit any pending dirty-rect union right
+    // commit any pending dirty-rect union right
     // before the viewport commits the frame. drawForeground is the
     // last paint hook QGraphicsView invokes before flushing, so this
     // is the right place to schedule the accumulated update.
@@ -296,7 +296,7 @@ void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
     QRectF sceneBbox(origin + QPointF(bbox.x(), bbox.y()),
                      QSizeF(bbox.width(), bbox.height()));
 
-    // P2.1 (2026-09-22): mask overlay — fill the selected region with 30% blue
+    // mask overlay — fill the selected region with 30% blue
     //   tint so users can see exactly what is selected without obscuring the
     //   image. Default off (PS default: marching ants only). Toggle via
     //   setMaskOverlayVisible() (called from menu / keyboard shortcut).
@@ -337,7 +337,7 @@ void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
     p->drawRect(sceneBbox);
     p->restore();
 
-    // P0-6.10 (2026-09-14): 自由变换 box 渲染 — 10 handle + 1 rotation line
+    // 自由变换 box 渲染 — 10 handle + 1 rotation line
     //   m_box != nullptr 时画 (m_box 由 ImageWindow 持有, m_canvas 仅 weak ref)
     if (m_box) {
         p->save();

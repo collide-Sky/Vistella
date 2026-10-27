@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerBitmapNode - P8.1 (2026-10-16) demo: wraps a Bitmap Layer.
+// LayerBitmapNode - demo: wraps a Bitmap Layer
 //   Source node (no inputs). compute() copies the tile region from
 //   m_layer->image. If the layer is empty or wrong size, returns empty
 //   (RenderGraph leaves the destination canvas black, which matches

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// MoveTool - F-C (2026-09-09)
+// MoveTool
 //
 // State pattern concrete class - Move tool (V)
 //   cursor: SizeAllCursor (4-direction arrow)

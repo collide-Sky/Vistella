@@ -147,7 +147,7 @@ HomePage::HomePage(QWidget *parent)
     connect(pinDel, &ActionButtonDelegate::triggered, this, &HomePage::onPinClicked);
     connect(delDel, &ActionButtonDelegate::triggered, this, &HomePage::onDeleteClicked);
     connect(ui->tableView, &QTableView::doubleClicked, this, &HomePage::onRowDoubleClicked);
-    // Stage G (2026-09-15): 视图菜单回主页后单击最近记录也能打开 (之前只有双击)
+    // 视图菜单回主页后单击最近记录也能打开 (之前只有双击)
     //   PS 风格: 单击选中, 双击打开 (跟 PS/VS 一致), 单击不应该直接打开
     //   user 报"点击最近历史无反应"是因为视图菜单切到主页后第一次激活没自动 focus table
     //   → 鼠标点击事件被吞. 这里强制设 SelectionModel focus + 单击也走 openPathRequested
@@ -166,7 +166,7 @@ HomePage::HomePage(QWidget *parent)
     connect(ui->btnOpenFolder,&QToolButton::clicked, this, &HomePage::onOpenFolderClicked);
 
     // 4 个模块入口按钮 (图片/音频/视频/视觉处理)
-    //   阶段 1 才会真正实现, 现在 emit signal 让 MainWindow 知道即可
+    //    才会真正实现, 现在 emit signal 让 MainWindow 知道即可
     connect(ui->modImage,     &QToolButton::clicked, this, &HomePage::onModuleClicked);
     connect(ui->modAudio,     &QToolButton::clicked, this, &HomePage::onModuleClicked);
     connect(ui->modVideo,     &QToolButton::clicked, this, &HomePage::onModuleClicked);
@@ -183,7 +183,7 @@ HomePage::~HomePage()
     delete ui;
 }
 
-// Stage G (2026-09-15): 视图菜单切回主页时自动 focus tableView
+// 视图菜单切回主页时自动 focus tableView
 //   之前: HomePage 创建后焦点丢给 doc tab, 用户切回来点击没反应
 //   现在: showEvent 抢焦点 + 选第 1 行 (有最近记录的话)
 void HomePage::showEvent(QShowEvent *e)
@@ -198,7 +198,7 @@ void HomePage::showEvent(QShowEvent *e)
     }
 }
 
-// (3D 模块已移除, 2026-09-02: setNewButtonEnabled / setMode 删除)
+// (3D 模块已移除, setNewButtonEnabled / setMode 删除)
 //   后续如果需要多模态切分再加回
 
 void HomePage::applyTheme()

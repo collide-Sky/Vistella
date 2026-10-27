@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LiquifyCommand - P1.2.8 (2026-09-16)
+// LiquifyCommand
 //
 // QUndoCommand for the Liquify filter. Unlike FilterCommand, the after-image
 // is pre-computed by the dialog (interactive editing happens there), so the

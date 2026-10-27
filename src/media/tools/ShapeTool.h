@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ShapeTool - P0-9.1 (2026-09-15)
+// ShapeTool
 //
 // PS 同款形状工具 (5 kind: Rectangle / Ellipse / Line / Polygon / Custom):
 //   - click + drag: 创建 shape (跟 PS marquee 同款)
@@ -66,7 +66,7 @@ public:
     ShapeKind kind() const { return m_kind; }
     void setKind(ShapeKind k) { m_kind = k; }
 
-    // P0-9.4 (2026-09-15): fill / stroke 颜色 + stroke 宽度 (optionPage 直接调)
+    // fill / stroke 颜色 + stroke 宽度 (optionPage 直接调)
     QColor fillColor() const { return m_fillColor; }
     QColor strokeColor() const { return m_strokeColor; }
     qreal  strokeWidth() const { return m_strokeWidth; }
@@ -81,7 +81,7 @@ private:
 
     ShapeKind m_kind = ShapeKind::Rectangle;
 
-    // P0-9.4 (2026-09-15): fill / stroke 颜色 + stroke 宽度 (默认蓝色半透明 + 深灰边框)
+    // fill / stroke 颜色 + stroke 宽度 (默认蓝色半透明 + 深灰边框)
     QColor m_fillColor   = QColor(0, 120, 215, 180);
     QColor m_strokeColor = QColor(40, 40, 40, 255);
     qreal  m_strokeWidth = 1.5;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// FilterDialog - P0-5.9 (2026-09-10), P3.1.1 (2026-09-22)
+// FilterDialog
 //
 // Non-modal filter dialog (PS-style, "Filter Gallery" 风格).
 //   - Filter name (big font) + param widgets (slider/spinbox/picker)
@@ -9,7 +9,6 @@
 //   - OK: clear preview + push FilterCommand (uses dialog strategy's params)
 //   - Cancel: clear preview
 //
-// P3.1.1 (2026-09-22):
 //   - strategy() accessor exposes the dialog-owned FilterStrategy so the
 //     caller (P3.1.3 host preview, OK push command) can read its params
 //   - Owns m_strategy (created via FilterFactory in ctor); same instance

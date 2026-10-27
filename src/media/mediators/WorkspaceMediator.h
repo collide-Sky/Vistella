@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// WorkspaceMediator - F-B2 (2026-09-08)
+// WorkspaceMediator
 //
 // Mediator 模式, 1 个类只负责"工作区切换 + 3 dock 内容配置"一个方向
 //   转发: 调用方 → WorkspaceMediator → 订阅方 (二级工具栏 工作区按钮 / RightPanelStack 3 dock)

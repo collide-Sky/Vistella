@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ColorDock - F-H (2026-09-09) + F-M (2026-09-10) + P7.7 (2026-10-14)
+// ColorDock
 //
 //   P7.7: Right-side color panel split into 4 sub-tabs (PS-style):
 //     - 颜色 (Color):   fg/bg swatch + pick + swap + default

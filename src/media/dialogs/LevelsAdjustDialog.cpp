@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LevelsAdjustDialog implementation - P0-3.2 v2 (2026-09-18)
+// LevelsAdjustDialog implementation
 //
 #include "LevelsAdjustDialog.h"
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BlackWhiteAdjustDialog - P0-3.2 v2 (2026-09-18)
+// BlackWhiteAdjustDialog
 //
 // PS-style Black & White dialog: 6 colour sliders
 // (Reds / Yellows / Greens / Cyans / Blues / Magentas, range -200..300,

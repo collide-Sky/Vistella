@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushDynamics - P1.1 (2026-09-15) Brush full implementation
+// BrushDynamics - Brush full implementation
 //   PS-style brush dynamics (PS Brush panel "Shape Dynamics / Scattering /
 //   Texture / Dual Brush / Transfer / Smoothing").
 //   Each dynamics field has a value + jitter range + control source.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushPreset + BrushPresetManager - P1.1 (2026-09-15) Brush full implementation
+// BrushPreset + BrushPresetManager - Brush full implementation
 //   BrushPreset: name + settings + dynamics + shape + thumbnail (for picker UI).
 //   BrushPresetManager: built-in 5 presets (Hard Round / Soft Round / Airbrush /
 //   Chalk / Charcoal) at startup + JSON load/save for user presets + ABR import.

@@ -2,10 +2,10 @@
 #define HTTPCLIENT_H
 
 // =============================================================
-// HttpClient — 通用 HTTP 客户端 (阶段 0 第 9 步, 占位)
+// HttpClient — 通用 HTTP 客户端 (mock 实现)
 //
-// 阶段 0: 空 stub, 不真发请求
-// 阶段 5+ 真正实现:
+// 空 stub, 不发真实请求
+//  真正实现 (未实装, 见 docs/DEBT.md#A-AUTH):
 //   - 基于 QNetworkAccessManager (Qt Network 模块)
 //   - 支持 HTTPS / 自定义 CA / Bearer Token / 超时 / 重试
 //   - 异步回调 (response signal)
@@ -44,13 +44,13 @@ public:
     void setBearerToken(const QString &token) { m_bearerToken = token; }
     QString bearerToken() const { return m_bearerToken; }
 
-    // ----- 通用 GET / POST (阶段 0 空 stub, 阶段 5+ 用 QNetworkAccessManager 实现) -----
+    // 通用 GET / POST (空 stub; 计划用 QNetworkAccessManager 实现)
     void getAsync(const QUrl &url, const QMap<QString, QString> &headers = {});
     void postAsync(const QUrl &url,
                    const QByteArray &body,
                    const QMap<QString, QString> &headers = {});
 
-    // ----- JSON 便利 (阶段 5+ 实现: postAsync + 解析 response.body) -----
+    // JSON 便利 (计划: postAsync + 解析 response.body)
     void postJsonAsync(const QUrl &url,
                        const QJsonObject &json,
                        const QMap<QString, QString> &headers = {});

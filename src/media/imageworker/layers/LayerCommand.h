@@ -2,7 +2,7 @@
 #define LAYERCOMMAND_H
 
 // =============================================================
-// LayerCommand — 阶段 1 W4.3 Phase 1 图层操作 QUndoCommand (2026-09-04)
+// LayerCommand — 图层操作 QUndoCommand
 //
 // 覆盖的图层操作 (每个 Op 存 before/after 完整状态):
 //   Add      — 新建 layer, undo 删除
@@ -52,23 +52,23 @@ public:
     enum Op {
         Add, Remove, Move, Opacity, Visible, Locked, Linked,
         Blend, Rename, Merge, Group, Ungroup,
-        // 阶段 1 W4.3 Phase 3 (2026-09-04): per-kind 编辑 Op
+        //  per-kind 编辑 Op
         SetText,            // 文字内容 (m_strVal = old)
         SetTextFont,        // 字体三件套 (m_strVal=old family, m_intVal=old size, m_oldColor=old color)
         SetSmartObject,     // 智能对象源 (m_strVal=old path, m_boolVal=old embed)
         SetAdjustmentType,  // 调整类型 (m_strVal=old type)
         SetAdjustmentLut,   // 调整 LUT (m_oldMat=old lut)
-        // 阶段 1 W4.4 Phase 4 (2026-09-04): 蒙版 Op
+        //  蒙版 Op
         AddMask,            // 加蒙版 (m_oldMat=old mask, m_boolVal=wasEnabled)
         ClearMask,          // 删蒙版 (m_oldMat=old mask, m_boolVal=wasEnabled)
         EnableMask,         // 开关 (m_boolVal=old enabled)
-        // 阶段 1 W4.4 Phase 5 (2026-09-04): 智能对象扩展 Op
+        //  智能对象扩展 Op
         ToggleSmartObjectEmbed,  // link↔embed (m_boolVal=old embedded)
-        // P1.4.1 (2026-09-17): 智能对象 Convert / Rasterize / Transform
+        // 智能对象 Convert / Rasterize / Transform
         ConvertToSmartObject,    // Bitmap->SmartObject (in-place kind change)
         RasterizeSmartObject,   // SmartObject->Bitmap (in-place kind change)
         SetSmartObjectTransform,// affine transform (m_oldTransform/m_newTransform)
-        // P1.4.4 (2026-09-17): SmartFilter sub-layer Ops
+        // SmartFilter sub-layer Ops
         AppendSmartFilter,      // add SmartFilter sub-layer (m_strVal=filterType, m_intVal=filterIdx)
         RemoveSmartFilter,      // remove SmartFilter sub-layer (m_layer=old full Layer)
         MoveSmartFilter,        // reorder (m_intVal=newSlot)
@@ -81,7 +81,7 @@ public:
     // Remove: 同 Add, push 时 remove, undo 时 add
     static LayerCommand* makeRemove(LayerStack *stack, int index);
     // Move: index 是被移动的 layer, direction = +1 (上) / -1 (下)
-    //   P2.5 bug fix (2026-09-22): callers should use the makeMoveUp /
+    //   callers should use the makeMoveUp /
     //   makeMoveDown factories below (factory pattern, same as Group/Ungroup).
     //   The 3-arg (stack, index, direction) constructor is kept for source
     //   compatibility but its redo() is now a no-op — if you push it directly
@@ -100,7 +100,7 @@ public:
     LayerCommand(LayerStack *stack, Op op, int index, const QString &strVal, QUndoCommand *parent = nullptr);  // rename
     // Merge: mergeDown index, undo 拆分 (Phase 1 简化: 用 m_beforeMerge / m_afterMerge 存两个 layer)
     LayerCommand(LayerStack *stack, int mergeIndex, QUndoCommand *parent = nullptr);
-    // P0 leftover 3 (2026-09-21): Phase 1 simplified Group/Ungroup (link flag)
+    // simplified Group/Ungroup (link flag)
     //   is REMOVED. Use makeMergeIntoGroup / makeFlattenGroup factories below
     //   which integrate with P1.5.2 LayerKind::Group + m_groups storage.
     //
@@ -117,10 +117,10 @@ public:
     //   LayerStack::flattenGroup (factory captures a children snapshot
     //   internally for undo).
     static LayerCommand* makeFlattenGroup(LayerStack *stack, int groupIdx);
-    // 阶段 1 W4.3 Phase 3 (2026-09-04): per-kind 编辑专用
+    //  per-kind 编辑专用
     //   3 参 (stack, op, index) 避免跟 (stack, index, direction) 歧义
     explicit LayerCommand(LayerStack *stack, Op op, int index);
-    // 阶段 1 W4.3 Phase 3 (2026-09-04): per-kind 编辑 factory
+    //  per-kind 编辑 factory
     //   用 static make 避免构造函数签名冲突 (rename/text 都是 QString)
     static LayerCommand* makeSetText(LayerStack *stack, int index, const QString &oldText);
     static LayerCommand* makeSetTextFont(LayerStack *stack, int index,
@@ -130,7 +130,7 @@ public:
                                              const QString &oldPath, bool oldEmbed);
     static LayerCommand* makeSetAdjustmentType(LayerStack *stack, int index, const QString &oldType);
     static LayerCommand* makeSetAdjustmentLut(LayerStack *stack, int index, const cv::Mat &oldLut);
-    // P0-3.3 (2026-09-08): 升级版 SetAdjustmentLut
+    // 升级版 SetAdjustmentLut
     //   接受 ImageWindow* host + newImage, undo/redo 走 replaceCurrentImage
     //   旧版 (无 host) 走原 l->adjustmentLut 路径, 兼容已存在的 P0-3.2 代码
     //   m_oldMat 重定义为"before image 快照", m_newMat = "after image 快照"
@@ -140,16 +140,16 @@ public:
                                               const cv::Mat &oldImage,
                                               const cv::Mat &newImage,
                                               ImageWindow *host);
-    // 阶段 1 W4.4 Phase 4 (2026-09-04): 蒙版 factory
+    //  蒙版 factory
     //   oldMask (空 Mat = 原无蒙版), wasEnabled (原 enabled 状态)
     static LayerCommand* makeAddMask(LayerStack *stack, int index,
                                       const cv::Mat &oldMask, bool wasEnabled);
     static LayerCommand* makeClearMask(LayerStack *stack, int index,
                                         const cv::Mat &oldMask, bool wasEnabled);
     static LayerCommand* makeEnableMask(LayerStack *stack, int index, bool oldEnabled);
-    // 阶段 1 W4.4 Phase 5 (2026-09-04): 智能对象扩展 factory
+    //  智能对象扩展 factory
     static LayerCommand* makeToggleSmartObjectEmbed(LayerStack *stack, int index, bool oldEmbedded);
-    // P1.4.1 (2026-09-17): Convert / Rasterize / Transform factories
+    // Convert / Rasterize / Transform factories
     //   ConvertToSmartObject: stores full before layer (cv::Mat clone) for undo.
     //   RasterizeSmartObject: stores full before layer (cv::Mat clone + sourceFilePath).
     //   SetSmartObjectTransform: old/new QTransform + hasTransform flag.
@@ -162,7 +162,7 @@ public:
                                                      bool oldHas,
                                                      const QTransform &newT,
                                                      bool newHas);
-    // P1.4.4 (2026-09-17): SmartFilter chain undo factories.
+    // SmartFilter chain undo factories
     //   AppendSmartFilter: caller appends the filter first (UI pushes the
     //     LayerCommand after appendSmartFilter returns the new idx); on
     //     undo we drop the filter sub-layer and any chain bookkeeping.
@@ -213,20 +213,20 @@ private:
     Layer       m_mergeAfter;        // Merge: 下层 (merge target) after
     QList<bool> m_groupBefore;       // Group: 区间内 link 状态
     QList<bool> m_ungroupBefore;     // Ungroup: 全部 link 状态
-    // P1.4.1 (2026-09-17): Convert / Rasterize smart object before-state.
+    // Convert / Rasterize smart object before-state
     //   We reuse m_layer for the "before" snapshot (containing cv::Mat + sourceFilePath
     //   + transform) so we can restore the original payload on undo. This is
     //   lighter than introducing a separate "ConvertBefore/after" + "RasterizeBefore".
-    // P1.4.1 (2026-09-17): Smart object transform undo state.
+    // Smart object transform undo state
     QTransform  m_oldTransform;      // SetSmartObjectTransform: before
     QTransform  m_newTransform;      // SetSmartObjectTransform: after
     bool        m_oldHasTransform = false;  // SetSmartObjectTransform: before has flag
     bool        m_newHasTransform = false;  // SetSmartObjectTransform: after has flag
-    // P1.4.4 (2026-09-17): SmartFilter undo state.
+    // SmartFilter undo state
     //   AppendSmartFilter / RemoveSmartFilter reuse m_layer (full clone).
     //   MoveSmartFilter stores old/new slot in m_intVal (current) / m_index2 (old).
     int         m_oldSlot = -1;      // MoveSmartFilter: slot before move
-    // P0 leftover 3 (2026-09-21): Group/Ungroup undo state. The Group /
+    // Group/Ungroup undo state. The Group /
     //   Ungroup Op enum values are kept (for forward compatibility with
     //   any UI strings already constructed), but the storage below drives
     //   P1.5.2 LayerKind::Group redo/undo rather than the P0-1 link flag.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// Brush tool implementation - P1.1 (2026-09-15) Brush full implementation
+// Brush tool implementation - Brush full implementation
 //   Wires the BrushSettings/BrushEngine/StrokeSmoother into the tool state machine.
 //   On mouse press: reset smoother, push undo baseline.
 //   On mouse move:  smooth point, generate stamp, apply to m_current, render.
@@ -191,7 +191,7 @@ void Brush::paintSingleStamp(ImageWindow* host, const QPointF& scenePos, double 
     cv::Mat& target = host->currentImage();
     if (target.empty()) return;
 
-    // P7.9.1 (2026-10-15): read shared brush state from ToolContext.
+    // read shared brush state from ToolContext
     //   Before: this used m_preset.settings.size / m_blendMode only.
     //   Now: blendMode + brushSize + opacity + flow come from sharedState
     //   (the panel's current values), so the brush tool reacts in real

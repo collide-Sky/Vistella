@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// RightPanelStack implementation - F-G (2026-09-09)
+// RightPanelStack implementation
 //
 #include "RightPanelStack.h"
 #include "ColorDock.h"

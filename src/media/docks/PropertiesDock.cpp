@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// PropertiesDock implementation - F-I (2026-09-09)
+// PropertiesDock implementation
 //
 #include "PropertiesDock.h"
 
@@ -18,7 +18,7 @@ PropertiesDock::PropertiesDock(QWidget* parent) : QWidget(parent)
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
 
-    // 关键 (F-I 2026-09-09): QScrollArea 装 form layout, maxHeight 150px 防止 1316 拉高 bug
+    // 关键: QScrollArea 装 form layout, maxHeight 150px 防止 1316 拉高 bug
     //   之前 PropertiesDock 内部 widget 自动 grow 高, 触发主 window resize
     m_scroll = new QScrollArea(this);
     m_scroll->setWidgetResizable(true);
@@ -44,7 +44,7 @@ PropertiesDock::PropertiesDock(QWidget* parent) : QWidget(parent)
     m_formLayout->addRow(tr("格式:"),   m_formatLabel);
     m_formLayout->addRow(tr("DPI:"),    m_dpiLabel);
 
-    // P0-4.9 (2026-09-10): separator + selection bbox (4 rows: x/y/w/h)
+    // separator + selection bbox (4 rows: x/y/w/h)
     auto* sepLabel = new QLabel(tr("--- 选区 (Selection) ---"), m_formWidget);
     sepLabel->setStyleSheet("color: gray; font-weight: bold;");
     m_formLayout->addRow(sepLabel);
@@ -61,12 +61,12 @@ PropertiesDock::PropertiesDock(QWidget* parent) : QWidget(parent)
     m_formLayout->addRow(tr("宽度:"),    m_selWLabel);
     m_formLayout->addRow(tr("高度:"),    m_selHLabel);
 
-    // P0-6.12 (2026-09-14): transform rotation 1 行 (在选区 X/Y/W/H 之后)
+    // transform rotation 1 行 (在选区 X/Y/W/H 之后)
     m_rotLabel = new QLabel(tr("(无)"), m_formWidget);
     m_rotLabel->setStyleSheet("color: gray;");
     m_formLayout->addRow(tr("旋转:"),    m_rotLabel);
 
-    // P0-7.4 (2026-09-14): text properties 6 行 (字体/字号/颜色/Bold/Italic/位置)
+    // text properties 6 行 (字体/字号/颜色/Bold/Italic/位置)
     //   在 rotation 之后追加 (Transform tool + Text tool 切换时 PropertiesDock 共用同一处)
     auto* textSep = new QLabel(tr("--- 文字 (Text) ---"), m_formWidget);
     textSep->setStyleSheet("color: gray; font-weight: bold;");
@@ -93,7 +93,7 @@ PropertiesDock::PropertiesDock(QWidget* parent) : QWidget(parent)
     m_scroll->setWidget(m_formWidget);
     outer->addWidget(m_scroll);
 
-    // F-O (2026-09-10): throttle high-frequency setImageInfo calls. 200ms
+    // throttle high-frequency setImageInfo calls. 200ms
     // window collapses N calls into 1 applyPendingInfo() (trailing edge).
     m_setInfoThrottle = new core::Throttle(200, this);
     connect(m_setInfoThrottle, &core::Throttle::fired,
@@ -102,12 +102,12 @@ PropertiesDock::PropertiesDock(QWidget* parent) : QWidget(parent)
 
 void PropertiesDock::setupFormLayout()
 {
-    // 占位, 实际在 ctor 里做了
+    // 未使用, 实际在 ctor 里做了
 }
 
 void PropertiesDock::setImageInfo(const ImageInfo& info)
 {
-    // F-O (2026-09-10): stash the latest info and arm the throttle. Multiple
+    // stash the latest info and arm the throttle. Multiple
     // calls within 200ms only result in one applyPendingInfo() with the LAST
     // info. Public signature unchanged.
     m_pendingInfo = info;
@@ -131,7 +131,7 @@ void PropertiesDock::applyPendingInfo()
 
 void PropertiesDock::clear()
 {
-    // F-O (2026-09-10): cancel any pending throttle window and reset cached
+    // cancel any pending throttle window and reset cached
     // info, so a stale setImageInfo() does not get re-applied 200ms later.
     m_pendingInfo = ImageInfo{};
     if (m_setInfoThrottle) m_setInfoThrottle->cancel();
@@ -140,11 +140,11 @@ void PropertiesDock::clear()
     m_sizeLabel->setText(tr("(无)"));
     m_formatLabel->setText(tr("(无)"));
     m_dpiLabel->setText(tr("(无)"));
-    // P0-4.9 (2026-09-10): clear selection bbox too
+    // clear selection bbox too
     clearSelectionBbox();
 }
 
-// P0-4.9 (2026-09-10): selection bbox 4 rows (x/y/w/h)
+// selection bbox 4 rows (x/y/w/h)
 void PropertiesDock::setSelectionBbox(const QRect& bbox)
 {
     if (bbox.isEmpty()) {
@@ -167,7 +167,7 @@ void PropertiesDock::clearSelectionBbox()
     if (m_selHLabel) m_selHLabel->setText(tr("(无)"));
 }
 
-// P0-6.12 (2026-09-14): transform rotation setter
+// transform rotation setter
 //   deg = 任意实数 (负数支持); clearRotation 把 label 重置为 "(无)"
 void PropertiesDock::setRotation(qreal deg)
 {
@@ -185,7 +185,7 @@ void PropertiesDock::clearRotation()
     }
 }
 
-// P0-7.4 (2026-09-14): text properties 6 行 setter/clear
+// text properties 6 行 setter/clear
 //   高亮 (color: black) 表示有选中 text item, 灰色 (color: gray) 表示无
 void PropertiesDock::setTextProperties(const TextProperties& props)
 {
@@ -241,7 +241,7 @@ void PropertiesDock::clearTextProperties()
     if (m_textPosLabel)    { m_textPosLabel->setText(tr("(无)"));    m_textPosLabel->setStyleSheet(gray); }
 }
 
-// ---- F-O (2026-09-10) test accessors (read-only) ----
+// test accessors (read-only)
 int PropertiesDock::appliedCount() const
 {
     return m_appliedCount;
@@ -267,7 +267,7 @@ QString PropertiesDock::dpiLabelText() const
     return m_dpiLabel ? m_dpiLabel->text() : QString();
 }
 
-// ---- P0-7.5 (2026-09-14) text properties accessors ----
+// text properties accessors
 QString PropertiesDock::textFontLabel() const
 {
     return m_textFontLabel ? m_textFontLabel->text() : QString();

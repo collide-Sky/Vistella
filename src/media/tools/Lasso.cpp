@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// Lasso implementation - F-L (2026-09-10) + P0-4.5 (2026-09-10) + P2.1 (2026-09-22)
+// Lasso implementation
 //
 #include "Lasso.h"
 #include "../imagewindow.h"
@@ -80,7 +80,7 @@ QString Lasso::pageTitle() const { return QCoreApplication::translate("tools::La
 
 QCursor Lasso::cursor() const
 {
-    // F-N (2026-09-10): PS Lasso uses crosshair
+    // PS Lasso uses crosshair
     return Qt::CrossCursor;
 }
 

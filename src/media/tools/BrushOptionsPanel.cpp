@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushOptionsPanel impl - P1.1 (2026-09-15)
-// P7.6.x (2026-10-14): 接入 BrushSharedState 6 字段 (blendMode/size/opacity/flow/
+// BrushOptionsPanel impl
+// 接入 BrushSharedState 6 字段 (blendMode/size/opacity/flow/
 //   angle/smoothing). 取代 TopOptionBar. 撮合在 ImageOptionBar::attach() 里.
 
 #include "BrushOptionsPanel.h"
@@ -52,13 +52,13 @@ BrushOptionsPanel::BrushOptionsPanel(QWidget* parent)
     connect(ui->cmbPreset, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &BrushOptionsPanel::onPresetComboChanged);
 
-    // P7.6.x (2026-10-14): BlendMode 不走 presetChanged (preset 里没这值) 走 sharedStateChanged.
+    // BlendMode 不走 presetChanged (preset 里没这值) 走 sharedStateChanged
     connect(ui->cmbBlendMode, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &BrushOptionsPanel::onBlendModeChanged);
 
     connect(ui->btnPicker, &QToolButton::clicked, this, &BrushOptionsPanel::pickerRequested);
 
-    // P7.9.2 (2026-10-16): kind picker button -> QMenu with 13 kinds.
+    // kind picker button -> QMenu with 13 kinds
     if (ui->btnKindPicker) {
         connect(ui->btnKindPicker, &QToolButton::clicked,
                 this, &BrushOptionsPanel::onKindPickerClicked);
@@ -133,7 +133,7 @@ void BrushOptionsPanel::setPreset(const brushes::BrushPreset &p)
     // Match preset combo to name
     setPresetName(p.name);
 
-    // P7.9.2 (2026-10-16): also reflect the preset's kind in lblKind +
+    // also reflect the preset's kind in lblKind
     //   m_kind. setPreset() is the canonical "load preset" path; the kind
     //   is the preset's own kind field.
     m_kind = p.kind;
@@ -190,7 +190,7 @@ void BrushOptionsPanel::onAnySettingChanged()
 {
     if (m_suspend) return;
     emit presetChanged(currentPreset());
-    // P7.6.x (2026-10-14): 6 共享字段 (size/opacity/flow/angle/smoothing) 中 5 个
+    // 6 共享字段 (size/opacity/flow/angle/smoothing) 中 5 个
     //   跟 BrushPreset 字段重叠 — 它们也会触发 sharedStateChanged 跟 ToolContext 同步.
     //   BlendMode 由 onBlendModeChanged 单独发.
     emit sharedStateChanged();
@@ -207,7 +207,7 @@ void BrushOptionsPanel::onPresetComboChanged(int idx)
 {
     if (m_suspend) return;
     m_presetIndex = idx;
-    // P7.9.2 (2026-10-16): 5 -> 13 built-in presets. Switch expanded; order
+    // 5 -> 13 built-in presets. Switch expanded; order
     //   matches BrushKind::allKinds() so the index of any preset is the
     //   same as the index in the static BrushPresetManager::builtIns() list.
     const brushes::BrushPreset p = makeBuiltInByIndex(idx);
@@ -222,7 +222,7 @@ void BrushOptionsPanel::onPresetComboChanged(int idx)
     emit sharedStateChanged();  // 9 重叠字段也跟 ToolContext 同步
 }
 
-// ---------------- P7.6.x (2026-10-14) shared state ----------------
+// shared state
 
 BrushOptionsPanel::SharedState BrushOptionsPanel::sharedStatePulledIn() const
 {
@@ -233,7 +233,7 @@ BrushOptionsPanel::SharedState BrushOptionsPanel::sharedStatePulledIn() const
     s.flowPct    = ui->sliderFlow->value();
     s.smoothing  = ui->sliderSmoothAmount->value();
     s.angle      = ui->sliderAngle->value();
-    // P7.9.1 (2026-10-15): 3 advanced fields — .ui already has the widgets
+    // 3 advanced fields —.ui already has the widgets
     // (sliderHardness/sliderSpacing/sliderScatter + spin partners) from
     // earlier design; we just plumb them through the shared state.
     s.hardness   = ui->sliderHardness->value();
@@ -266,9 +266,9 @@ void BrushOptionsPanel::applySharedState(const SharedState& s)
     m_suspend = false;
 }
 
-// ---------------- P7.9.2 (2026-10-16) 13 brush kinds ----------------
+// 13 brush kinds
 //
-//   Design (user拍板 2026-10-16):
+//   Design (user拍板)
 //     - lblKind readonly shows "Basic - Hard Round" / "Wet - Watercolor" /
 //       "Special - Eraser" etc.
 //     - btnKindPicker (QToolButton "v") pops a QMenu with 13 QActions under

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TransformTool - P0-6.2 (2026-09-14)
+// TransformTool
 //
 // PS 风格自由变换工具 (Ctrl+T / 8 handle / 4 mode):
 //   - 跟 ToolContext 集成 (setState 时 onEnter, 切走时 onExit)
@@ -34,7 +34,7 @@ class ImageWindow;
 
 namespace tools {
 
-// P0-6.12 (2026-09-14): rotation 同步用 callback (ToolState 抽象类无 Q_OBJECT, 不能 emit signals)
+// rotation 同步用 callback (ToolState 抽象类无 Q_OBJECT, 不能 emit signals)
 //   父类 ToolState 保持不变, callback 模式让 ImageWindow 注入 propsDock setter
 class TransformTool : public ToolState
 {
@@ -73,7 +73,7 @@ public:
     // 撤销栈用 — 拖动结束时 ImageWindow 抓取
     bool hasPendingTransform() const { return m_pending; }
 
-    // P0-6.12 (2026-09-14): rotation 同步 callback (ToolState 无 Q_OBJECT, 不能 emit)
+    // rotation 同步 callback (ToolState 无 Q_OBJECT, 不能 emit)
     //   ImageWindow::onFreeTransform 注入: [this](qreal deg) { propsDock->setRotation(deg); }
     using RotationCallback = std::function<void(qreal)>;
     void setRotationCallback(RotationCallback cb) { m_rotationCb = std::move(cb); }

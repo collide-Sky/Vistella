@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// IccProfile implementation - P0-8.3 (2026-09-15)
+// IccProfile implementation
 //
 #include "IccProfile.h"
 #include "logger.h"

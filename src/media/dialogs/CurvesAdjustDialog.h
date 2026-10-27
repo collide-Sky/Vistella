@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CurvesAdjustDialog - P0-3.2 v2 (2026-09-18)
+// CurvesAdjustDialog
 //
 // PS-style Curves dialog: reuses the existing CurveEditor widget
 // (declared in imagewindow/AdjustmentPanel.h) together with a

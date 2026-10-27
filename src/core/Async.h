@@ -2,10 +2,10 @@
 #define vistella_ASYNC_H
 
 // =============================================================
-// Async — 异步任务基础架构 (阶段 1 前置优化 C.1, 2026-09-03)
+// Async — 异步任务基础架构 (前置优化 C.1)
 //
 // 设计动机:
-//   阶段 1+ worker (imageWorker / audioWorker / videoWorker / visionWorker)
+//    worker (imageWorker / audioWorker / videoWorker / visionWorker) — 未接线
 //   大量计算密集操作 (OpenCV 滤镜, 音频解码, 视频转码, AI 推理), 同步执行会卡 UI.
 //   用 QtConcurrent + QFutureWatcher 提供轻量级异步 API, 不用每处自己写 QThread.
 //
@@ -27,9 +27,9 @@
 //   4. 错误传递 — 用 Result<T> (见 Result.h), 跟 worker 错误处理统一
 //      - Async::run<Result<T>>(...) 返 QFuture<Result<T>>, 失败带 Error
 //
-//   5. 进度报告 — 不用 (阶段 1 简单, 进度走 log + status bar; 阶段 7+ AI 推理再考虑)
+//   5. 进度报告 — 不用 (进度走 log + status bar)
 //
-// 用法示例 (阶段 1 imageWorker 滤镜):
+// 用法示例 (imageWorker 滤镜)
 //     auto future = Async::run<vistella::Result<cv::Mat>>(
 //         [img = m_current]() -> vistella::Result<cv::Mat> {
 //             cv::Mat out;

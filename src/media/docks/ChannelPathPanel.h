@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ChannelPathPanel - F-M.3 (2026-09-10)
+// ChannelPathPanel
 //
 // Right-side panel dock 3 / LayersDock tab 1: channels + paths (PS-style).
 //   F-M.3 stage: framework only, all items are static placeholders.
@@ -66,7 +66,7 @@ signals:
     // TODO(P8.6): channelSelected and pathSelected have no connect, so the panel is inert -- see docs/DEBT.md#A-CHANNELPATH
     void channelSelected(const QString& name);
     void pathSelected(const QString& name);
-    // P6 (2026-10-09): selection save/load + Quick Mask toggle signals.
+    // selection save/load + Quick Mask toggle signals
     //   ImageWindow subscribes and routes them through cv::Mat / ToolMediator.
     void saveSelectionRequested();
     void loadSelectionRequested();

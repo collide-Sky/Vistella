@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ToolState - F-C (2026-09-09)
+// ToolState
 //
 // State 模式抽象类 — 每个基础工具一个 ToolState 子类
 //   onEnter: 切到此工具时调 (装 eventFilter / 改 cursor / 通知 Mediator)

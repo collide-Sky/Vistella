@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushEngine - P1.1 (2026-09-15) Brush full implementation
+// BrushEngine - Brush full implementation
 //   CPU-side brush stamp generation + paint + scattering/texture/dual-brush application.
 //   All methods are static (no state), so engine is thread-safe and can run on
 //   background thread (worker pool) when painting large brushes.

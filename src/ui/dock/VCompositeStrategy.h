@@ -2,7 +2,7 @@
 //
 // Composite strategy for a RightPanelDock (and any other composite container
 // holding several sub-pages).
-//   P7.6.x v3 (2026-10-14): placeholders for P8.4 multi-threaded compositing.
+//   placeholders for multi-threaded compositing
 //   Actual parallel compositing is wired in P8.4 (EngineContext::background
 //   pool). For now the enum is the single switch site, so the upgrade is a
 //   1-line flip in the producer.

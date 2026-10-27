@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// AbrParser - P1.1 (2026-09-15) Brush full implementation
+// AbrParser - Brush full implementation
 //   Adobe Brush (.abr) format reader. Supports ABRv6 computed brushes ('m' type).
 //   ABRv9 / sampled brushes ('t' type) deferred to P1.1 follow-up.
 //

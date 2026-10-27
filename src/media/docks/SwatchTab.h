@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SwatchTab - P7.7 (2026-10-14) + P7.8 (2026-10-14)
+// SwatchTab
 //
 //   Sub-page 2 of ColorDock. PS-style "Swatch" tab.
 //   P7.7: 12-color flat grid (4 cols x 3 rows).

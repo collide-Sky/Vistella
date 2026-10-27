@@ -2,12 +2,12 @@
 #define AIMANAGER_H
 
 // =============================================================
-// AIManager — AI 模型管理器 (阶段 0 第 3 步)
+// AIManager — AI 模型管理器
 //
 // 职责:
 //   1. 注册 / 注销所有 IAIModel 实例 (Worker 启动时注册, 关闭时注销)
 //   2. 按 modelId 路由推理请求
-//   3. 后端选择 (阶段 0 写死 "onnxruntime", 后续可换, IAIModel 内部不感知)
+//   3. 后端选择 (写死 "onnxruntime", 后续可换, IAIModel 内部不感知)
 //
 // 跟 MediaDispatcher 的关系:
 //   MediaDispatcher 路由"打开文件" → 对应 IModule (Worker)
@@ -39,13 +39,13 @@ public:
     IAIModel *model(const QString &id) const;
     int modelCount() const { return m_models.size(); }
 
-    // ----- 后端 (阶段 0 写死 ONNX Runtime, 后续可换 TensorRT / OpenVINO) -----
+    // 后端 (写死 ONNX Runtime, 后续可换 TensorRT / OpenVINO)
     QString backendName() const { return m_backendName; }
     void setBackendName(const QString &name);
 
     // ----- 模型路径解析 -----
-    //   阶段 0: 简单拼接 (config/models/<id>.onnx)
-    //   阶段 4+: 接 SettingsDialog 配置, 支持多模型目录
+    //   简单拼接 (config/models/<id>.onnx)
+    //   接 SettingsDialog 配置 (未实装, 见 docs/DEBT.md#A-AUTH)
     QString resolveModelPath(const QString &modelId) const;
 
     // ----- 便利: 按 id 提交异步推理 -----

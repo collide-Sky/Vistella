@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TextOverlayController - P0-1.2 (2026-09-07) full impl
+// TextOverlayController - full impl
 //   接管 imagewindow.cpp 中所有"文字"逻辑:
 //     - m_textItems 列表 (搬过来 = m_items)
 //     - m_currentTextItem (搬过来 = m_current)
@@ -26,7 +26,7 @@
 TextOverlayController::TextOverlayController(QObject* parent) : QObject(parent) {}
 TextOverlayController::~TextOverlayController() = default;
 
-// P0-7.3 (2026-09-14): emit currentChanged 让 PropertiesDock 同步当前选中 item 的属性
+// emit currentChanged 让 PropertiesDock 同步当前选中 item 的属性
 void TextOverlayController::setCurrent(GraphicsTextItem* item) {
     if (m_current == item) return;
     m_current = item;
@@ -48,7 +48,7 @@ void TextOverlayController::unregisterTextItem(GraphicsTextItem* item) {
     emit itemRemoved(item);
 }
 
-// P0-1.2 (2026-09-07): clearAll - 给 ImageWindow 析构前调 (替代原 m_textItems 遍历清理)
+// clearAll - 给 ImageWindow 析构前调 (替代原 m_textItems 遍历清理)
 void TextOverlayController::clearAll() {
     // 注意: 不在这里 removeItem + delete (scene 由 host 管, scene 析构时会自动处理)
     // 只清 list + 通知, scene 析构自动 delete
@@ -59,7 +59,7 @@ void TextOverlayController::clearAll() {
     for (auto* item : copy) emit itemRemoved(item);
 }
 
-// P0-1.2 (2026-09-07): 给 ImageWindow 析构时调 (替代原来的 m_textItems 遍历)
+// 给 ImageWindow 析构时调 (替代原来的 m_textItems 遍历)
 void TextOverlayController::removeAllFromSceneAndDelete() {
     if (!m_host) {
         m_items.clear();
@@ -241,7 +241,7 @@ void TextOverlayController::onColorSelected(const QColor& color) {
     }
 }
 
-// 占位: 之前 imagewindow.h 有这个 stub, 现在保留接口
+// TODO(P8.5): applyStyleToCurrent() is an empty stub kept for a future caller -- see docs/DEBT.md#A-TEXTOVERLAYAPPLY
 void TextOverlayController::applyStyleToCurrent() {
     if (!m_current) return;
     QFont f(m_textFont);
@@ -252,7 +252,7 @@ void TextOverlayController::applyStyleToCurrent() {
     m_current->setDefaultTextColor(m_textColor);
 }
 
-// P0-7.3 (2026-09-14): 给 PropertiesDock 读当前 item 完整 style
+// 给 PropertiesDock 读当前 item 完整 style
 //   m_current 为 null 时返回 default style (font/size/color/bold/italic)
 //   有 m_current 时读 item 的实际 state (font/color) + 几何 (pos/rotation)
 TextOverlayController::CurrentStyle TextOverlayController::getCurrentStyle() const {

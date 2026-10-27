@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// AdjustDialogBase implementation - F-K (2026-09-09)
+// AdjustDialogBase implementation
 //
 #include "AdjustDialogBase.h"
 #include "logger.h"
@@ -44,7 +44,7 @@ AdjustDialogBase::AdjustDialogBase(const QString& title, QWidget* parent)
 
 void AdjustDialogBase::init()
 {
-    // F-K (2026-09-09): derived ctor 调 base ctor 后调 init() 触发 setupUi
+    // derived ctor 调 base ctor 后调 init 触发 setupUi
     //   避免 base ctor 调 virtual function 编译直接 call base::setupUi 链接错
     if (m_body) setupUi(m_body);
 }

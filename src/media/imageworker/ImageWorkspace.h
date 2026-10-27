@@ -2,11 +2,11 @@
 #define IMAGEWORKSPACE_H
 
 // =============================================================
-// ImageWorkspace — 阶段 1 imageWorker 模块的 IWorkspace 实现
+// ImageWorkspace — imageWorker 模块的 IWorkspace 实现
 //
 // 设计动机 (2026-09-03 W1 骨架):
-//   阶段 0 ImageWindow 继承 QMainWindow, 不能直接当 IWorkspace (IWorkspace 继承 QWidget).
-//   阶段 1 imageWorker 模块化时, 不想重写 ImageWindow (QMainWindow 内部菜单栏/工具栏跟 IWorkspace
+//    ImageWindow 继承 QMainWindow, 不能直接当 IWorkspace (IWorkspace 继承 QWidget)
+//    imageWorker 模块化时, 不想重写 ImageWindow (QMainWindow 内部菜单栏/工具栏跟 IWorkspace
 //   抽象冲突), 所以新建 ImageWorkspace 包一个 ImageWindow.
 //
 //   架构:
@@ -47,7 +47,7 @@ public:
     bool    saveAs(const QString &path) override;
     bool    loadFile(const QString &path) override;
 
-    // ----- 阶段 1 W1 公开接口: 取底层 ImageWindow (主窗口专有功能: undo/redo/selectAll 等) -----
+    // 公开接口: 取底层 ImageWindow (主窗口专有功能: undo/redo/selectAll 等)
     ImageWindow *imageWindow() const { return m_imageWindow; }
 
 private:

@@ -16,7 +16,6 @@
 // native cursor + cancel-on-Esc). The mime data carries a pointer to the
 // source page; the manager just provides the registry and indicator owner.
 //
-//   P7.6.x v3 commit 2 (2026-10-14).
 #pragma once
 
 #include <QObject>

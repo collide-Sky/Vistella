@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TileGrid impl - P8.1 (2026-10-16)
+// TileGrid impl
 
 #include "TileGrid.h"
 

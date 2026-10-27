@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerStackAdapter - P8.1.1 (2026-10-16) LayerStack -> CompositorGraph
-//   adapter. P8.1.1 Phase B (2026-10-20) adds Group support.
+// LayerStackAdapter - LayerStack -> CompositorGraph
+//   adapter. adds Group support
 //
 //   Builds a CompositorGraph that renders a layers::LayerStack
 //   bottom-up via a chain of LayerBitmapNode + LayerBlendNode

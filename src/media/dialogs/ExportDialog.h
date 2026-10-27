@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ExportDialog - P0-8.2 (2026-09-15)
+// ExportDialog
 //
 // PS 同款 "Save For Web" 风格导出对话框:
 //   - 格式: PNG / JPEG / TIFF / WebP / BMP / GIF
@@ -9,7 +9,7 @@
 //   - TIFF compression: None / LZW / Deflate
 //   - WebP quality slider 0-100 (默认 90)
 //   - resize: 100% / 75% / 50% / 25% / 自定义
-//   - 嵌入 ICC profile (P0-8.3 阶段 3 集成)
+//   嵌入 ICC profile (集成)
 //
 // 集成:
 //   - ImageIOController::onExport() 替代 onSaveAs
@@ -66,7 +66,7 @@ public:
     // 给 ImageIOController 设置原图尺寸 (用于 resize preview)
     void setSourceSize(int width, int height);
 
-    // P0-8.5 (2026-09-15) test accessors
+    // test accessors
     QString formatName() const;
     int     jpegQuality() const;
     int     pngCompression() const;

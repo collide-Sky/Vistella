@@ -94,7 +94,7 @@ bool FileTreeModel::hasChildren(const QModelIndex &parent) const
     if (p == m_root) {
         return m_root->childCount() > 0;
     }
-    // 目录: 永远 hasChildren (lazy load 用占位 "..." 触发)
+    // 目录: 永远 hasChildren (lazy load 用虚拟 "..." 触发)
     if (p->data().isDir) return true;
     return false;
 }
@@ -132,7 +132,7 @@ void FileTreeModel::setRootPath(const QString &path)
     auto *rootItem = new FileTreeItem(rd, m_root);
     m_root->appendChild(rootItem);
 
-    // 占位 child (lazy load)
+    // 虚拟 child (lazy load)
     FileTreeNodeData ph;
     ph.fileName = QStringLiteral("...");
     rootItem->appendChild(new FileTreeItem(ph, rootItem));
@@ -211,7 +211,7 @@ void FileTreeModel::scanChildren(FileTreeItem *parentItem)
         nd.supportedExt = true;
         auto *item = new FileTreeItem(nd, parentItem);
         parentItem->appendChild(item);
-        // 占位 child (让 QTreeView 显示 expand 三角)
+        // 虚拟 child (让 QTreeView 显示 expand 三角)
         FileTreeNodeData ph;
         ph.fileName = QStringLiteral("...");
         item->appendChild(new FileTreeItem(ph, item));
@@ -238,7 +238,7 @@ void FileTreeModel::removeAllChildren(FileTreeItem *parentItem)
     if (!parentItem || parentItem->childCount() == 0) return;
     // 2026-09-02 修复: 这里不调 begin/end rows, 由调用方根据场景包
     //   - setRootPath: 用 beginResetModel/endResetModel (整 model 重置)
-    //   - expand():    用 beginRemoveRows/endRemoveRows 删占位
+    //   expand: 用 beginRemoveRows/endRemoveRows 删虚拟 child
     //   嵌套在 beginResetModel 里的 beginRemoveRows 会被 Qt 视作非法
     parentItem->removeAllChildren();
 }

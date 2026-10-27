@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ColorTab implementation - P7.7 (2026-10-14)
+// ColorTab implementation
 //
 #include "ColorTab.h"
 #include "logger.h"

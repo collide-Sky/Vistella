@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// DialogMediator - F-B3 (2026-09-08)
+// DialogMediator
 //
 // Mediator 模式, 1 个类只负责"非模态 dialog 调度"一个方向
 //   转发: 菜单/工具栏 → DialogMediator → 实际 dialog 实例 (showDialog / hideDialog)
@@ -60,7 +60,7 @@ signals:
     //   DialogFactory (F-K 阶段实装): 收到 showDialog 信号后创建 dialog 实例
     //   其他 Mediator (切换工作区时关掉无关 dialog)
     void dialogShowRequested(const QString& dialogId, const QVariantMap& args);
-    // P0 leftover 5 (2026-09-21): emitted after DialogFactory creates the
+    // emitted after DialogFactory creates the
     //   dialog (and registers it in m_dialogs). Subscribers (ImageWindow)
     //   wire per-dialog signals here (applied -> AdjustmentPanel).
     void dialogCreated(const QString& dialogId, QObject* dialog);
@@ -68,7 +68,7 @@ signals:
     void dialogHidden(const QString& dialogId);
 
 private slots:
-    // P0 leftover 4 (2026-09-21): internal self-wire. showDialog emits
+    // internal self-wire. showDialog emits
     //   dialogShowRequested; this slot calls DialogFactory to create
     //   the dialog and registers it in m_dialogs.
     void onShowDialogRequested(const QString& dialogId, const QVariantMap& args);

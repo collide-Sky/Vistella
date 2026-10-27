@@ -20,7 +20,6 @@
 //   - Content:     contentWidget() — the inner widget VDraggableTabWidget
 //                  shows. Default returns `this`.
 //
-//   P7.6.x v3 commit 3 (2026-10-14).
 #pragma once
 
 #include <QWidget>
@@ -63,7 +62,7 @@ public:
     // Convenience accessor: tag for diagnostics.
     QString titleForTab() const { return pageTitle(); }
 
-    // P7.10 (2026-10-15): incremental cache invalidation hook.
+    // incremental cache invalidation hook
     //   Called when something outside the page's reactive update path
     //   changes (e.g. active layer change, active channel change, undo/
     //   redo stack mutation). Default is no-op; subclasses override to

@@ -31,7 +31,7 @@
 #include <exception>
 
 #ifdef _WIN32
-// Stage H v4 (2026-09-15): filter Qt6/DWrite first-chance C++ exceptions
+// filter Qt6/DWrite first-chance C++ exceptions
 //   Qt6 + DWrite 退出时主动抛 0xE06D7363 (C++ EH) 但被 Qt 内部 catch,
 //   在调试器 (cdb.exe) 下被当 first-chance 异常断在 main() 返回处
 //   注册 unhandled exception filter 让 0xE06D7363 跳过 (EXCEPTION_CONTINUE_EXECUTION)
@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
     qputenv("QT_QUICK_BACKEND", "software");
     qputenv("QSG_RHI_BACKEND", "software");
 
-    // 阶段 1 Step A Bug DEBUG (2026-09-04): 所有 qDebug 同时写 D:\vistella_qdebug.log
+    //  所有 qDebug 同时写 D:\vistella_qdebug.log
     //   用来诊断"slider init 触发但点击不触发"问题
     //   用户跑 EXE 后看这个 log 即可知道信号有没有到
     static QFile qDebugLog("D:/vistella_qdebug.log");
@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
             LOG_WARN("UserManager init 失败, db={}, 启动后用户管理功能不可用", dbPath.toStdString());
         } else {
             LOG_INFO("UserManager 初始化完成, db={}", dbPath.toStdString());
-            // 阶段 0: 不自动登录, 阶段 5+ 加 tryAutoLogin
+            // 不自动登录 (tryAutoLogin 未实装, 见 docs/DEBT.md#A-AUTH)
         }
     } catch (const std::exception &e) {
         LOG_EXCEPTION(vistella::LogLevel::Error, "UserManager init", e);
@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
         const bool clean = SessionManager::instance().isLastExitClean();
         if (clean) {
             // 正常退出: 不弹窗, 直接显示
-            // PS/WPS/VS 风格 (2026-09-10): mainStack ctor 默认 page 0 (HomePage)
+            // PS/WPS/VS 风格 mainStack ctor 默认 page 0 (HomePage)
             //   无 session 看到 HomePage, 有 session 已经被 restore
             LOG_DEBUG("上次正常退出, 显示主窗口 (mainStack ctor 默认 page 0)");
             w.applyWindowMode();   // 走 setMode 唯一入口 (修复 cancel-recovery 路径)
@@ -269,7 +269,7 @@ int main(int argc, char *argv[])
             SessionManager::instance().saveOpenFiles({});
             SessionManager::instance().saveActiveFile(QString());
             SessionManager::instance().setLastExitClean(true);
-            // Q4.2.2.1 fix (2026-09-24): 强制 Normal. Q4.1 只把 loadWindowState() 默认改 Normal,
+            // 强制 Normal. 只把 loadWindowState 默认改 Normal
             //   但 QSettings 仍可能存 "window/mode=1" (上次关窗时是 Maximized). 不恢复路径
             //   语义上就是"重新开始", 应该是 Normal 居中 1280x800, 不沿用上次最大化.
             //   走 setMode 唯一入口 (跟 Q4.1 INVARIANT 一致).
@@ -299,11 +299,11 @@ int main(int argc, char *argv[])
         ret = 1;
     }
 
-    // 公共 ThreadPool 关闭 (2026-09-07): EngineContext RAII 自动 shutdown
+    // 公共 ThreadPool 关闭 EngineContext RAII 自动 shutdown
     //   析构顺序: AI/GPU → 业务池 → 交互池 (见 EngineContext::~EngineContext)
     LOG_INFO("EngineContext shutting down...");
 
-    // 2026-09-03: 关闭顶层 try, 主函数退出时统一处理
+    // 关闭顶层 try, 主函数退出时统一处理
     } catch (const std::exception &e) {
         try { LOG_EXCEPTION(vistella::LogLevel::Critical, "main body", e); } catch (...) {}
         ret = 1;

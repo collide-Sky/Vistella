@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CompositorGraph impl - P8.1 (2026-10-16)
+// CompositorGraph impl
 
 #include "CompositorGraph.h"
 

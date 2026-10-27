@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// GradientTab - P7.7 (2026-10-14)
+// GradientTab
 //
 //   Sub-page 3 of ColorDock. PS-style "Gradient" tab:
 //     - 5 gradient types combo (linear/radial/angle/diamond/symmetric)

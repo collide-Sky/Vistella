@@ -4,8 +4,8 @@
 #include <QDebug>
 
 // =============================================================
-// HttpClient 单例实现 (阶段 0 占位)
-// 阶段 5+ 真正实现: 用 QNetworkAccessManager 包装
+// HttpClient 单例实现 (mock: 不发真实请求)
+//  真正实现: 用 QNetworkAccessManager 包装 (未实装, 见 docs/DEBT.md#A-AUTH)
 // =============================================================
 
 HttpClient &HttpClient::instance()
@@ -22,12 +22,12 @@ HttpClient::HttpClient(QObject *parent)
 void HttpClient::getAsync(const QUrl &url, const QMap<QString, QString> &headers)
 {
     Q_UNUSED(headers);
-    // 阶段 0 占位: 立即 emit 错误 (不真发请求)
-    //   阶段 5+ 用 QNetworkAccessManager::get(QNetworkRequest(url))
+    //  mock: 立即 emit 错误 (不发真实请求)
+    //    用 QNetworkAccessManager::get(QNetworkRequest(url)) (未实装, 见 docs/DEBT.md#A-AUTH)
     qWarning("[HttpClient] getAsync stub: %s", qPrintable(url.toString()));
     Response r;
     r.success = false;
-    r.errorMessage = QStringLiteral("HttpClient not implemented yet (阶段 0 stub)");
+    r.errorMessage = QStringLiteral("HttpClient not implemented yet");
     emit response(r);
     emit error(url, r.errorMessage);
 }
@@ -42,7 +42,7 @@ void HttpClient::postAsync(const QUrl &url,
              qPrintable(url.toString()), body.size());
     Response r;
     r.success = false;
-    r.errorMessage = QStringLiteral("HttpClient not implemented yet (阶段 0 stub)");
+    r.errorMessage = QStringLiteral("HttpClient not implemented yet");
     emit response(r);
     emit error(url, r.errorMessage);
 }
@@ -51,7 +51,7 @@ void HttpClient::postJsonAsync(const QUrl &url,
                                const QJsonObject &json,
                                const QMap<QString, QString> &headers)
 {
-    // 阶段 5+: QJsonDocument(json).toJson(QJsonDocument::Compact) -> postAsync
+    // QJsonDocument(json).toJson(QJsonDocument::Compact) -> postAsync (未实装, 见 docs/DEBT.md#A-AUTH)
     const QByteArray body = QJsonDocument(json).toJson(QJsonDocument::Compact);
     QMap<QString, QString> h = headers;
     h[QStringLiteral("Content-Type")] = QStringLiteral("application/json");

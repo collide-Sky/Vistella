@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerOpacityNode - P8.1.1.y (2026-10-22)
+// LayerOpacityNode
 //
 //   Filter node (one input) that attenuates its input toward black by a
 //   fixed opacity:  out = src * opacity

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ColorTab - P7.7 (2026-10-14)
+// ColorTab
 //
 //   Sub-page 1 of ColorDock. PS-style "Color" tab:
 //     - foreground/background swatch (fg 30x30 over bg 50x50)

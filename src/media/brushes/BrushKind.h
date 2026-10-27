@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushKind - P7.9.2 (2026-10-16) 13 brush dynamic types
+// BrushKind - 13 brush dynamic types
 //   PS-style brush taxonomy: 8 Basic + 3 Wet + 2 Special = 13 total kinds.
 //   Each preset carries a `kind` so the dock can show the current family
 //   (cmbKind readonly label) and the GPU backend can pick a default based
@@ -10,7 +10,6 @@
 //   - Wet 3:   always true (wet edges + scatter are heavy; GPU wins).
 //   - Special 2: always false (Smudge / Eraser are simple; CPU is fine).
 //
-//   P7.9.2 commit (2026-10-16).
 
 #pragma once
 

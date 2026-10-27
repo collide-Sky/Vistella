@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// Throttle implementation - F-O (2026-09-10)
+// Throttle implementation
 //
 #include "Throttle.h"
 #include "logger.h"

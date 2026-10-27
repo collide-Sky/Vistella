@@ -12,7 +12,7 @@ class QSortFilterProxyModel;
 class RecentListModel;
 
 // 主页"模块"区 4 个按钮对应的模块入口
-//   命名跟阶段 0 规划的 4 个 Worker 对应: imageWorker / audioWorker / videoWorker / visionWorker
+//   命名跟 规划的 4 个 Worker 对应: imageWorker / audioWorker / videoWorker / visionWorker
 //   enum value 跟 string id 一一对应 (main.cpp MediaDispatcher 按 string 路由)
 enum class HomeModule {
     ImageWorker  = 0,    // 图片处理
@@ -31,7 +31,7 @@ public:
     // 主题切换时调用
     void applyTheme();
 
-    // (3D 模块已移除, 2026-09-02: setNewButtonEnabled / setMode 删除)
+    // (3D 模块已移除, setNewButtonEnabled / setMode 删除)
     //   后续如果需要多模态切分再加回
 
 signals:
@@ -42,7 +42,7 @@ signals:
     void moduleRequested(HomeModule mod);          // 点击 4 个模块按钮
 
 protected:
-    // Stage G (2026-09-15): 视图菜单切回主页后自动 focus tableView
+    // 视图菜单切回主页后自动 focus tableView
     //   之前: 切到主页时焦点还在 doc tab, 用户点击最近记录无响应
     //   现在: showEvent 抢焦点到 tableView + 选第一行, 单击立即响应
     void showEvent(QShowEvent *e) override;

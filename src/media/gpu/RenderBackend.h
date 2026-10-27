@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 //
-// RenderBackend - P8.2 (2026-10-16) per-tile GPU/CPU backend interface
+// RenderBackend - per-tile GPU/CPU backend interface
 //   Pure abstract: a backend takes a tile (cv::Mat) and returns a
 //   processed tile. The interface is small so future backends (D3D12,
 //   Metal, Vulkan) can implement it without taking a dependency on
 //   Qt / OpenCV specifics.
 //
-//   P8.2 MVP scope (user拍板 2026-10-16):
+//   MVP scope (user拍板)
 //     - CpuBackend: pass-through (default; always available).
 //     - GpuBackend: stub. Declared + instantiable; processTile returns
 //       the input unchanged. The real shader path arrives in P8.2.x

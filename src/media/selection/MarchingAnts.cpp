@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// MarchingAnts implementation - P0-4.3 (2026-09-10)
+// MarchingAnts implementation
 //
 #include "MarchingAnts.h"
 #include "logger.h"

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CameraRawDialog implementation - P3.5 (2026-09-23)
+// CameraRawDialog implementation
 //
 #include "CameraRawDialog.h"
 

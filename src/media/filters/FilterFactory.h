@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// FilterFactory - P0-5.2 (2026-09-10)
+// FilterFactory
 //
 // Factory pattern for 20 FilterStrategy instances.
 //   - createFilter(FilterKind): unique_ptr<FilterStrategy> (new instance, default params)

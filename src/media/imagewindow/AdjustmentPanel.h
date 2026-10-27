@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// AdjustmentPanel - P0-3.2 (2026-09-08)
+// AdjustmentPanel
 //
 // PS 风格的色彩调整 UI: 5 tab 容器
 //   1. Curves       - 8 控制点自定义 QWidget 编辑器, 实时 buildCurvesLUT
@@ -36,7 +36,7 @@
 #include <QTabWidget>
 #include <QPolygonF>
 #include <QVector>
-#include <QTimer>          // P0-3.3 (2026-09-08): debounce commit timer
+#include <QTimer>          // debounce commit timer
 
 #include <opencv2/core.hpp>
 
@@ -136,7 +136,7 @@ public:
         int rR = 200, rG = 0,   rB = 0;
         int gR = 0,   gG = 200, gB = 0;
         int bR = 0,   bG = 0,   bB = 200;
-        // P1.5.1 (2026-09-18): Monochrome 输出 (PS 同款): 输出灰度
+        // Monochrome 输出 (PS 同款): 输出灰度
         bool monochrome = false;
     };
 
@@ -149,11 +149,11 @@ public:
 
     // 应用当前 tab 的调值 (调值变化时调)
     // 走 background pool async, 完成后切主线程刷显示
-    // P0-3.3 (2026-09-08): 不再立即推 ImageEditCommand, 改走 debounce commit
+    // 不再立即推 ImageEditCommand, 改走 debounce commit
     //   200ms 内多次 valueChanged 只 push 一条 undo, 避免拖动时栈爆炸
     void applyCurrentTab();
 
-    // P0-3.3 (2026-09-08): debounce commit - 调值"静默"200ms 后推一条 LayerCommand::SetAdjustmentLut
+    // debounce commit - 调值"静默"200ms 后推一条 LayerCommand::SetAdjustmentLut
     //   由内部 QTimer 触发, 也可以手动调 (拖完立即 commit)
     void commitUndoDebounced();
 
@@ -167,7 +167,7 @@ signals:
     void paramChanged();         // 任何调值变化
 
 public slots:
-    // P1.5.1 (2026-09-18): Dispatcher for standalone DialogFactory dialogs.
+    // Dispatcher for standalone DialogFactory dialogs
     //   CurvesAdjustDialog::applied -> AdjustmentPanel::setStandaloneParams("Curves", args)
     //   Updates m_curves/m_levels/m_bw/m_cm, refreshes inline UI, calls applyCurrentTab().
     //   dialogId in {"Curves", "Levels", "HSL", "B&W", "ChannelMixer"}.
@@ -181,12 +181,12 @@ private:
     void buildBlackWhitePage();
     void buildChannelMixerPage();
 
-    // P1.5.1 (2026-09-18): per-tab dispatcher helpers, called by setStandaloneParams
+    // per-tab dispatcher helpers, called by setStandaloneParams
     void applyCurvesFromArgs(const QVariantMap& args);
     void applyLevelsFromArgs(const QVariantMap& args);
     void applyBnWFromArgs(const QVariantMap& args);
     void applyChannelMixerFromArgs(const QVariantMap& args);
-    // P0 leftover review (2026-09-21): HSL standalone dialog args land
+    // HSL standalone dialog args land
     //   here (QList<int> hueShifts (8) + QList<int> satShifts (8) + int lightness).
     void applyHslFromArgs(const QVariantMap& args);
 
@@ -206,7 +206,7 @@ private:
     // UI 控件
     QTabWidget* m_tabWidget = nullptr;
 
-    // P0-3.3 (2026-09-08) LOD debounce 状态:
+    // LOD debounce 状态
     //   m_pendingBefore: 当前 debounce 窗口的"before" image (首次 valueChanged 时 snapshot)
     //   m_commitTimer: 200ms 单次定时器, 静默期到就 push 一条 LayerCommand
     //   设计: 拖动过程中频繁 applyCurrentTab, 但只 push 一条 undo

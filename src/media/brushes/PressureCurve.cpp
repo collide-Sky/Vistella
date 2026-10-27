@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// PressureCurve impl - P1.1 (2026-09-15)
+// PressureCurve impl
 
 #include "PressureCurve.h"
 

@@ -1,12 +1,12 @@
 // =============================================================
 // LayerStack 实现
-// 阶段 1 W4.3 Phase 1 (2026-09-04) — 详见 LayerStack.h
+//  详见 LayerStack.h
 // =============================================================
 
 #include "LayerStack.h"
 #include "BlendMode.h"
 
-// P8.1.2 (2026-10-20): compositor-backed render path.
+// compositor-backed render path
 #include "../../compositor/TileGrid.h"
 #include "../../compositor/RenderGraph.h"
 #include "../../compositor/nodes/LayerStackAdapter.h"
@@ -27,7 +27,7 @@
 #include <QMetaObject>
 #include <QCoreApplication>
 
-// P0-2.5 (2026-09-08): EngineContext 完整 include (renderAsync 用)
+// EngineContext 完整 include (renderAsync 用)
 #include "../../../core/ThreadPool/engine_context.h"
 #include "../../../core/ThreadPool/executor.hpp"
 
@@ -50,7 +50,7 @@ LayerStack::~LayerStack()
 }
 
 // =====================================================================
-//  P1.4.4 (2026-09-17): SmartFilter dispatcher (5 hardcoded filters inlined)
+//  SmartFilter dispatcher (5 hardcoded filters inlined)
 // =====================================================================
 //   Apply a single filter to a cv::Mat and return the result.
 //   Supported: "GaussianBlur" / "Sharpen" / "Brightness" / "Contrast" /
@@ -180,7 +180,7 @@ int LayerStack::addLayer(const Layer &layer)
     return appendLayerPtr(std::make_shared<Layer>(layer));
 }
 
-// P8.1.z (2026-10-22): append an already-allocated layer, keeping ITS
+// append an already-allocated layer, keeping ITS
 // address. addLayer(const Layer&) necessarily allocates a fresh LayerPtr,
 // which would break m_groups lookups keyed on that address — so anything
 // that has to preserve a Group's identity (duplicateLayer) goes through
@@ -202,7 +202,7 @@ int LayerStack::addLayer(const QString &name, const cv::Mat &image)
 }
 
 // =====================================================================
-//  Phase 3 (2026-09-04): 4 种 per-kind 工厂方法
+//  4 种 per-kind 工厂方法
 // =====================================================================
 
 int LayerStack::addTextLayer(const QString &name, const QString &text,
@@ -270,7 +270,7 @@ int LayerStack::addAdjustmentLayer(const QString &name, const QString &adjustmen
     return addLayer(l);
 }
 
-// P8.1.z (2026-10-22): clone a layer AND carry its group children across
+// clone a layer AND carry its group children across
 //   to the clone's address.
 //
 //   m_groups is keyed by LayerId, and LayerId is the LayerPtr's address.
@@ -298,7 +298,7 @@ LayerPtr LayerStack::cloneLayerWithGroupChildren(const LayerPtr& src)
     return clone;
 }
 
-// P8.1.z (2026-10-22): drop a group layer's children entry when the layer
+// drop a group layer's children entry when the layer
 //   itself goes away. Without this, removeLayer() left the vector of
 //   child LayerPtrs alive in m_groups forever.
 void LayerStack::releaseGroupChildren(const LayerPtr& group)
@@ -307,7 +307,7 @@ void LayerStack::releaseGroupChildren(const LayerPtr& group)
     m_groups.remove(reinterpret_cast<LayerId>(group.get()));
 }
 
-// P1.5.2 (2026-09-21): Group adjacent layers into a Group container.
+// Group adjacent layers into a Group container
 //   1. Validate: >= 2 indices, sorted ascending, contiguous.
 //   2. Capture each layer's full copy (LayerPtr deep clone via std::make_shared<Layer>).
 //   3. Remove originals (high idx to low idx to avoid index shift).
@@ -347,19 +347,19 @@ int LayerStack::mergeIntoGroup(const QList<int>& indices)
     // Append Group at end
     const int groupIdx = addLayer(grp);
     if (groupIdx < 0) return -1;
-    // P0 leftover 1 (2026-09-21): key m_groups by LayerId, not int layer index,
+    // key m_groups by LayerId, not int layer index
     //   so subsequent m_layers mutations (moveUp / removeLayer / flattenGroup)
     //   don't invalidate this lookup.
     m_groups.insert(idOf(groupIdx), std::move(clones));
     return groupIdx;
 }
 
-// P1.5.2 (2026-09-21): Replace Group at groupIdx with its children in order.
+// Replace Group at groupIdx with its children in order
 //   1. Validate: index in range, kind == Group.
 //   2. Snapshot children (move m_groups[LayerId] to local vector).
 //   3. Rebuild m_layers: insert children at groupIdx, drop Group entry.
 //   4. emit countChanged + layerAdded signals.
-//   P0 leftover 1 (2026-09-21): m_groups keyed by LayerId (stable), so we
+//   m_groups keyed by LayerId (stable), so we
 //   look up by LayerId and DON'T need to re-key other entries after flatten.
 //   Returns number of children inserted, or -1 on failure.
 int LayerStack::flattenGroup(int groupIdx)
@@ -414,7 +414,7 @@ const std::vector<LayerPtr>& LayerStack::groupChildrenOf(const LayerPtr& group) 
     return groupChildrenOf(reinterpret_cast<LayerId>(group.get()));
 }
 
-// P0 leftover 3 (2026-09-21): inverse of flattenGroup, used by LayerCommand
+// inverse of flattenGroup, used by LayerCommand
 //   to undo a flatten. Builds a fresh Group layer, inserts it at atIndex,
 //   and registers the cloned children under the new Group's LayerId.
 //   Caller is responsible for capturing the children snapshot before
@@ -438,13 +438,13 @@ int LayerStack::reinsertGroup(int atIndex, std::vector<LayerPtr> children)
 bool LayerStack::removeLayer(int index)
 {
     if (index < 0 || index >= m_layers.size()) return false;
-    // P1.4.4 (2026-09-17): SmartFilter chain bookkeeping is intentionally
+    // SmartFilter chain bookkeeping is intentionally
     //   NOT done here. Callers that remove SmartFilter sub-layers should go
     //   through removeSmartFilter() (which handles chain), and SmartObject
     //   removal should be paired with rasterizeSmartObject()/a cascade helper
     //   to also drop orphaned SmartFilter children. Doing chain cleanup
     //   here would double-mutate and leave stale indices in m_smartFilterChain.
-    // P8.1.z (2026-10-22): capture the LayerPtr BEFORE removal. Reading
+    // capture the LayerPtr BEFORE removal. Reading
     //   m_layers[index] after removeAt() is out of range whenever index
     //   was the last element — which is exactly what happens when
     //   mergeIntoGroup() removes its originals from the top down.
@@ -469,7 +469,7 @@ bool LayerStack::duplicateLayer(int index)
     if (auto l = at(index)) {
         Layer copy = *l;   // 拷贝构造 (cv::Mat clone, QString 值语义)
         copy.name = l->name + QStringLiteral(" copy");
-        // P8.1.z (2026-10-22): a duplicated Group must keep its children.
+        // a duplicated Group must keep its children
         // appendLayerPtr (not addLayer) keeps the clone's address, which
         // is the address its m_groups entry was re-keyed to.
         if (l->kind == Layer::Group) {
@@ -576,7 +576,7 @@ bool LayerStack::rename(int index, const QString &newName)
 }
 
 // =====================================================================
-//  Phase 3 (2026-09-04): 5 个 per-kind setter
+//  5 个 per-kind setter
 // =====================================================================
 
 bool LayerStack::setText(int index, const QString &text)
@@ -673,11 +673,11 @@ bool LayerStack::setAdjustmentLut(int index, const cv::Mat &lut)
 }
 
 // =====================================================================
-//  Phase 4 (2026-09-04): 蒙版
+//  蒙版
 // =====================================================================
 
 namespace {
-// 阶段 1 W4.4 Phase 4 (2026-09-04): mask 应用
+//  mask 应用
 //   把 layer mask 灰度图广播到 3 通道, 跟 layerMat 逐像素相乘
 //   mask 0 → 像素置 0 (透明); mask 255 → 像素保留
 //   返回新 Mat (不修改入参)
@@ -743,7 +743,7 @@ bool LayerStack::enableMask(int index, bool enabled)
 }
 
 // =====================================================================
-//  P1.3.2 (2026-09-16): 扩展 LayerMask struct 接口
+//  扩展 LayerMask struct 接口
 // =====================================================================
 
 bool LayerStack::addPixelMask(int index, const cv::Mat& grayMask)
@@ -833,7 +833,7 @@ const LayerMask* LayerStack::maskAt(int index) const
 }
 
 // =====================================================================
-//  阶段 1 W4.4 Phase 5 (2026-09-04): 智能对象扩展
+//   智能对象扩展
 // =====================================================================
 
 bool LayerStack::refreshSmartObject(int index)
@@ -859,7 +859,7 @@ bool LayerStack::isSmartObjectSourceMissing(int index) const
     if (!l || l->kind != Layer::SmartObject) return false;
     if (l->sourceFilePath.isEmpty()) return true;
     if (l->sourceEmbedded) {
-        // P1.4.1 (2026-09-17): convertToSmartObject sets sourceFilePath to the
+        // convertToSmartObject sets sourceFilePath to the
         //   cache path directly; if that file exists, treat as present.
         if (QFile::exists(l->sourceFilePath)) return false;
         // Otherwise it's a link→embedded smart object: MD5-derive the cache.
@@ -895,7 +895,7 @@ bool LayerStack::toggleSmartObjectEmbed(int index)
 }
 
 // =====================================================================
-//  P1.4.1 (2026-09-17): 智能对象 Convert / Rasterize / Transform
+//  智能对象 Convert / Rasterize / Transform
 // =====================================================================
 
 // Helper to allocate a fresh cache path for convertToSmartObject. The path is
@@ -943,7 +943,7 @@ bool LayerStack::rasterizeSmartObject(int index)
 {
     auto l = at(index);
     if (!l || l->kind != Layer::SmartObject) return false;
-    // P1.4.1 (2026-09-17): rasterize fails when source is missing on disk
+    // rasterize fails when source is missing on disk
     //   (matches Photoshop behavior: rasterizing a broken smart object surfaces
     //    "Could not rasterize..." instead of committing a placeholder).
     if (isSmartObjectSourceMissing(index)) return false;
@@ -955,7 +955,7 @@ bool LayerStack::rasterizeSmartObject(int index)
                        ? l->sourceFilePath
                        : smartObjectCachePath(l->sourceFilePath);
     }
-    // P1.4.4 (2026-09-17): Drop SmartFilter sub-layers first (reverse order
+    // Drop SmartFilter sub-layers first (reverse order
     //   so the indices in m_smartFilterChain[index] stay valid during removal).
     auto childCopy = smartFiltersFor(index);
     for (int i = childCopy.size() - 1; i >= 0; --i) {
@@ -1015,7 +1015,7 @@ QTransform LayerStack::smartObjectTransform(int index) const
 
 int LayerStack::cleanupSmartObjectCache()
 {
-    // 阶段 1 W4.4 Phase 5 (2026-09-04): 清掉 smartobject-cache 目录里所有文件
+    //  清掉 smartobject-cache 目录里所有文件
     //   Phase 5 简化: 不查"是否被任何 stack 引用", 全删 (简单粗暴)
     //   嵌入的智能对象下次 render 会自动重新复制
     //   链接的智能对象完全不影响 (它们走源文件)
@@ -1031,14 +1031,14 @@ int LayerStack::cleanupSmartObjectCache()
     return removed;
 }
 
-// 阶段 1 W4.4 Phase 5 (2026-09-04): public wrapper, 跟 private smartObjectCachePath 一样
+//  public wrapper, 跟 private smartObjectCachePath 一样
 QString LayerStack::smartObjectCachePathFor(const QString &sourceFilePath)
 {
     return smartObjectCachePath(sourceFilePath);
 }
 
 // =====================================================================
-//  P1.4.4 (2026-09-17): SmartFilter chain management
+//  SmartFilter chain management
 // =====================================================================
 //   Each SmartObject at stack index `smartIdx` owns a QList<int> of filter
 //   sub-layer indices in chain order. Filter sub-layers occupy indices in
@@ -1094,7 +1094,7 @@ bool LayerStack::removeSmartFilter(int smartIdx, int filterIdx)
     auto &chain = m_smartFilterChain[smartIdx];
     const int pos = chain.indexOf(filterIdx);
     if (pos < 0) return false;
-    // P1.4.4 (2026-09-17): Remove from m_layers FIRST, then fix up chain
+    // Remove from m_layers FIRST, then fix up chain
     //   indices. removeLayer shifts all subsequent indices down by 1, so
     //   we decrement chain entries > filterIdx to point at their new positions.
     if (!removeLayer(filterIdx)) return false;
@@ -1143,7 +1143,7 @@ bool LayerStack::setSmartFilterStrength(int smartIdx, int filterIdx, double stre
     return true;
 }
 
-// P1.4.4 (2026-09-17): Public accessor returning the SmartObject's rasterized
+// Public accessor returning the SmartObject's rasterized
 //   base image (after transform + resize). Used by UI to obtain `imageBefore`
 //   when appending a new SmartFilter. Empty on failure / wrong kind.
 cv::Mat LayerStack::rasterizeForRender(int idx) const
@@ -1153,7 +1153,7 @@ cv::Mat LayerStack::rasterizeForRender(int idx) const
     return rasterize(l);
 }
 
-// P8.1.1.x (2026-10-20): public rasterize() for the compositor's
+// public rasterize for the compositor's
 //   source nodes. Takes a LayerPtr rather than an index because group
 //   children are only reachable through groupChildrenOf().
 cv::Mat LayerStack::rasterizeLayer(const LayerPtr &l) const
@@ -1162,7 +1162,7 @@ cv::Mat LayerStack::rasterizeLayer(const LayerPtr &l) const
     return rasterize(l);
 }
 
-// P8.1.1.x (2026-10-20): SmartFilter chain application, factored out of
+// SmartFilter chain application, factored out of
 //   render() so both render paths use one implementation.
 //
 //   The chain runs on the FULL rasterized image rather than per tile,
@@ -1186,7 +1186,7 @@ cv::Mat LayerStack::applySmartFilterChain(const cv::Mat &src, int smartIdx) cons
     return out;
 }
 
-// P1.4.4 (2026-09-17): Re-insert a SmartFilter (used by undo).
+// Re-insert a SmartFilter (used by undo)
 //   The layer is appended at end of m_layers and the new index is inserted
 //   into the parent chain at `atSlot` (clamped to [0..chain.size()]). Returns
 //   the new layer index or -1 on failure.
@@ -1359,7 +1359,7 @@ void LayerStack::setCanvasSize(const cv::Size &size)
 
 QString LayerStack::smartObjectCachePath(const QString &sourceFilePath)
 {
-    // 阶段 1 W4.4 Phase 5 (2026-09-04) BUG FIX: 用 source 路径的 MD5 哈希做文件名
+    //  BUG FIX: 用 source 路径的 MD5 哈希做文件名
     //   原代码用 QUuid 每次生成不同 → addSmartObjectLayer 写 cache A, 后续查 cache B 不存在
     //   修法: 同一 sourceFilePath 永远对应同一 cache 路径
     const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
@@ -1441,7 +1441,7 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
     case Layer::SmartObject: {
         QString path = l->sourceFilePath;
         if (l->sourceEmbedded) {
-            // P1.4.1 (2026-09-17): convertToSmartObject writes the cache path
+            // convertToSmartObject writes the cache path
             //   directly into sourceFilePath (no MD5 derivation). For such
             //   layers the path IS the cache file, so use it as-is when it
             //   exists. For link→embedded toggles, sourceFilePath is still
@@ -1452,7 +1452,7 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
         }
         const cv::Size sz = canvasSize();
         if (path.isEmpty() || !QFile::exists(path)) {
-            // 阶段 1 W4.4 Phase 5 (2026-09-04): 缺源时返 placeholder
+            //  缺源时返 placeholder
             //   灰底 + 红 X + 文本 "MISSING", 跟 PS 行为一致
             cv::Mat placeholder(sz, CV_8UC3, cv::Scalar(200, 200, 200));
             // 画对角线 (红色)
@@ -1471,7 +1471,7 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
                      cv::Scalar(0, 0, 200), 2);
             return placeholder;
         }
-        // P1.4.1 (2026-09-17): apply non-destructive affine transform if set
+        // apply non-destructive affine transform if set
         //   Identity = no-op. cv::warpAffine in-place semantics on a clone.
         if (l->hasTransform && !l->transform.isIdentity() && l->transform.isAffine()) {
             cv::Mat M(2, 3, CV_64F);
@@ -1501,7 +1501,7 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
     }
 }
 
-// P8.1.z (2026-10-22): composite a group's children onto `target`, in
+// composite a group's children onto `target`, in
 //   order, PS-style: each child blends with its own blendMode, and a
 //   nested Group composites like any other layer but contributes its own
 //   subtree first and then applies its opacity.
@@ -1550,8 +1550,8 @@ void LayerStack::compositeChildrenInto(const std::vector<LayerPtr> &children,
 
 cv::Mat LayerStack::render() const
 {
-    // P8.1.2 (2026-10-20): compositor-backed render path.
-    //   Default on since P8.2 (2026-10-22), once every LayerKind had a
+    // compositor-backed render path
+    //   Default on since, once every LayerKind had a
     //   node type. setCompositorEnabled(false) falls back to the legacy
     //   per-layer loop below.
     if (m_compositorEnabled) return renderViaCompositor();
@@ -1579,10 +1579,10 @@ cv::Mat LayerStack::render() const
     for (int i = std::max(0, baseIdx); i < m_layers.size(); ++i) {
         const auto &l = m_layers[i];
         if (!l || !l->visible) continue;
-        // P1.4.4 (2026-09-17): SmartFilter sub-layers render only as part of
+        // SmartFilter sub-layers render only as part of
         //   their parent SmartObject's chain; skip them in the main loop.
         if (l->kind == Layer::SmartFilter) continue;
-        // P0 leftover 1 (2026-09-21): Group recursive render.
+        // Group recursive render
         //   PS-style: children blend with their own blendModes into a fresh
         //   groupMat starting from current canvas, then groupMat composites
         //   over canvas using Group.opacity (Normal blend). Group's own
@@ -1633,7 +1633,7 @@ cv::Mat LayerStack::render() const
         // 其他 kind: rasterize 后 blend
         cv::Mat layerMat = rasterize(l);
         if (layerMat.empty()) continue;
-        // P1.4.4 (2026-09-17): SmartObject chain application.
+        // SmartObject chain application
         //   Walk the chain in order and re-apply each enabled filter
         //   fresh (so reorder / strength changes take effect without
         //   re-running append). Shared with the compositor path via
@@ -1641,7 +1641,7 @@ cv::Mat LayerStack::render() const
         if (l->kind == Layer::SmartObject) {
             layerMat = applySmartFilterChain(layerMat, i);
         }
-        // Phase 4 (2026-09-04): 应用蒙版 (mask 调制 layer alpha)
+        // 应用蒙版 (mask 调制 layer alpha)
         if (l->maskEnabled && !l->layerMask.empty()) {
             layerMat = applyMask(layerMat, l->layerMask);
         }
@@ -1667,7 +1667,7 @@ cv::Mat LayerStack::renderOne(int index) const
     }
     cv::Mat m = rasterize(l);
     if (m.empty()) return cv::Mat();
-    // Phase 4 (2026-09-04): 单层预览也应用 mask
+    // 单层预览也应用 mask
     if (l->maskEnabled && !l->layerMask.empty()) {
         m = applyMask(m, l->layerMask);
     }
@@ -1718,7 +1718,7 @@ QStringList LayerStack::layerNames() const
     return names;
 }
 
-// P0-2.5 (2026-09-08): renderAsync — 异步 render
+// renderAsync — 异步 render
 //   走 EngineContext background().submit_fn 后台跑, 完成后用
 //   QMetaObject::invokeMethod 切回主线程 (Qt::QueuedConnection) 调 callback.
 //
@@ -1737,7 +1737,7 @@ QStringList LayerStack::layerNames() const
 //   5. QCoreApplication::instance() 必须存在 (背景: 单元测试用 QTEST_MAIN 默认构造)
 //      兜底: instance() == nullptr → 同步兜底 (跟 engine==nullptr 路径一致)
 // =====================================================================
-//  P8.1.2 (2026-10-20): compositor-backed render
+//  compositor-backed render
 // =====================================================================
 //
 // Renders the stack through the P8.1 CompositorGraph instead of the
@@ -1747,7 +1747,7 @@ QStringList LayerStack::layerNames() const
 // is the per-pixel blend work and the tile cache lives on the
 // RenderGraph, not on the DAG.
 //
-// Feature flag: set via setCompositorEnabled(). Default is OFF so
+// Feature flag: set via setCompositorEnabled. Off by default so
 // the legacy path stays the default until the remaining layer kinds
 // (Vector / Text / SmartObject / Adjustment) have their nodes. Tests
 // in tst_P8_1_1 exercise this path directly.

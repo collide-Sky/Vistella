@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ColorDock implementation - F-H (2026-09-09) + F-M (2026-09-10) + P7.7 (2026-10-14)
+// ColorDock implementation
 //
 //   P7.7 refactor: ColorDock is a QTabWidget host with 4 sub-tabs.
 //   Sub-tab widgets (ColorTab/SwatchTab/GradientTab/PatternTab) own their state.

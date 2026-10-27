@@ -13,7 +13,7 @@
 #include <future>
 #include <functional>
 
-// P0-3.1 (2026-09-08): forward decl for EngineContext (applyLutAsync 走 background pool)
+// forward decl for EngineContext (applyLutAsync 走 background pool)
 //   跟 P0-2.5 ImageProcessorAsync / LayerStack::renderAsync 同样的模式
 namespace vistella::tp { class EngineContext; }
 
@@ -21,7 +21,7 @@ class ImageProcessor
 {
 public:
     // 把 OpenCV cv::Mat 写到 PNG/JPG/BMP 文件
-    // P0-8.2 (2026-09-15): 加 quality + format 参数 (PS 同款多格式导出)
+    // 加 quality + format 参数 (PS 同款多格式导出)
     //   quality:  -1 = 默认 (不传 quality); 0-100 (JPEG/WebP 有效)
     //   format:   "PNG" / "JPEG" / "TIFF" / "WEBP" / "BMP" / "GIF"
     //             空 = 走 path 后缀自动推断
@@ -60,13 +60,13 @@ public:
     static void resize(const cv::Mat &in, cv::Mat &out, double scale);
     static void rotate90(const cv::Mat &in, cv::Mat &out, int direction);  // 0/1/2 = 0/90/180/270 CW
 
-    // P0-6.6 (2026-09-14): 几何变换
+    // 几何变换
     //   flipCode: 0=around x (垂直翻转), 1=around y (水平翻转), -1=both
     static void flip(const cv::Mat &in, cv::Mat &out, int flipCode);
     //   仿射变换 (旋转 + 缩放 + 斜切, 2x3 矩阵)
     //   M 是 2x3 cv::Mat (CV_32F 或 CV_64F)
     static void warpAffine(const cv::Mat &in, cv::Mat &out, const cv::Mat &M, cv::Size dsize);
-    // P3.2.3 (2026-09-22): 4 corner 透视变换 (QTransform 2x3 affine 不能 cover,
+    // 4 corner 透视变换 (QTransform 2x3 affine 不能 cover
     //   Distort 模式拖成非平行四边形时用这个). 4 corner 顺序: TL, TR, BR, BL.
     static void warpPerspective(const cv::Mat &in, cv::Mat &out,
                                const QPointF srcQuad[4], const QPointF dstQuad[4]);
@@ -140,7 +140,7 @@ public:
     };
     static ImageInfo describe(const cv::Mat &img, const QString &filePath = QString());
 
-    // ===== P0-3.1 (2026-09-08): 色彩调整 LUT (PS 风格) =====
+    // ===== 色彩调整 LUT (PS 风格) =====
     // 设计原则 (一次性到位, 不留补丁):
     //   1. 所有 build* 函数返 cv::Mat (256 行 1 列 CV_8U) = 单通道 LUT
     //      - applyLut 内部用 cv::LUT, 接受 256 元素 LUT
@@ -167,7 +167,7 @@ public:
     // 异步 applyLut — P0-3.2 UI 入口, engine==nullptr 走同步兜底
     static std::future<cv::Mat> applyLutAsync(const cv::Mat &in, const cv::Mat &lut,
                                               vistella::tp::EngineContext *engine);
-    // 异步 applyLut callback overload (P0-3.2 2026-09-08)
+    // 异步 applyLut callback overload
     //   跟 P0-2.5 LayerStack::renderAsync 同样的模式: 走 background pool,
     //   完成后调 callback(cv::Mat result). callback 在后台线程触发, 调用方
     //   必须自己用 QMetaObject::invokeMethod 切回主线程刷显示

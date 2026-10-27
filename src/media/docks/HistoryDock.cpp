@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// HistoryDock implementation - P0-8.1 (2026-09-15)
+// HistoryDock implementation
 //
 // 详见 HistoryDock.h 头注释
 //

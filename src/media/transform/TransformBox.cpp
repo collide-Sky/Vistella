@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TransformBox implementation - P0-6.1 (2026-09-14)
+// TransformBox implementation
 //
 // 实现要点:
 //   - handlePos / hitTest 走 scene 坐标 (跟 view 缩放无关)
@@ -90,7 +90,7 @@ TransformBox::Handle TransformBox::hitTest(const QPointF& scenePos) const
 
 void TransformBox::dragHandle(Handle h, const QPointF& newPos)
 {
-    // P3.2.5 (2026-09-23): 第一次进入 Scale/Skew drag 时 snapshot origRect.
+    // 第一次进入 Scale/Skew drag 时 snapshot origRect
     //   dragHandle 内部更新 m_rect 到 newPos 后状态, 但 commit 时 caller
     //   需要 pre-drag state 算非平凡 scaleMatrix (避免 rect.bottomRight ==
     //   newPos 导致 identity). m_dragging 标志区分 "拖动中" 跟 "静止".

@@ -2,16 +2,16 @@
 #define IAMODEL_H
 
 // =============================================================
-// IAIModel — AI 模型统一接口 (阶段 0 第 3 步)
+// IAIModel — AI 模型统一接口
 //
 // 设计原则:
-//   - 后端无关 (阶段 0 写 ONNX Runtime, 后续可换 TensorRT / OpenVINO / 自研)
+//   后端无关 (写 ONNX Runtime, 后续可换 TensorRT / OpenVINO / 自研)
 //   - 不依赖具体模型 (YOLOv8 / SAM / ESRGAN 都实现这个接口)
 //   - 同步推理 (小任务) + 异步推理 (大任务) 两种模式
 //   - 异步用 signal 返回, 不阻塞 UI 线程
 //
 // 注意: src/ai/ 不依赖 src/image/src/audio/..., 任何 Worker 都能 include
-//   QVariant 作为通用输入输出容器, 阶段 4 需要为 cv::Mat 等自定义类型
+//   QVariant 作为通用输入输出容器, 需要为 cv::Mat 等自定义类型
 //   调 Q_DECLARE_METATYPE + qRegisterMetaType 才能塞进 signal 参数
 // =============================================================
 

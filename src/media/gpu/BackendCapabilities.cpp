@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BackendCapabilities impl - P8.2 (2026-10-16) + P8.3 (2026-10-16)
+// BackendCapabilities impl
 
 #include "BackendCapabilities.h"
 

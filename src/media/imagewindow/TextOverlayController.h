@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //
 // TextOverlayController - QObject, 接管文字 item 的增/删/改/扁平化
-// (P0-1.2 2026-09-07: 完整实现, 从 imagewindow.cpp 搬过来)
+// (完整实现, 从 imagewindow.cpp 搬过来)
 //
 #pragma once
 
@@ -28,14 +28,14 @@ public:
     void unregisterTextItem(GraphicsTextItem* item);
     QList<GraphicsTextItem*> textItems() const { return m_items; }
 
-    // P0-1.2 (2026-09-07): 一次性清空 (给 ImageWindow 析构前调, 释放 scene 上的 item)
+    // 一次性清空 (给 ImageWindow 析构前调, 释放 scene 上的 item)
     //   clearAll: 仅清 m_items + emit itemRemoved, 不动 scene
     //   removeAllFromSceneAndDelete: 从 scene removeItem + delete + 清 m_items
     void clearAll();
     void removeAllFromSceneAndDelete();
 
     // Currently focused text item (font/size/color changes apply to it).
-    //   P0-7.3 (2026-09-14): emit currentChanged (PropertiesDock 联动)
+    //   emit currentChanged (PropertiesDock 联动)
     void               setCurrent(GraphicsTextItem* item);
     GraphicsTextItem*  current() const                     { return m_current; }
 
@@ -51,7 +51,7 @@ public:
     void    setTextFont(const QString& f)  { m_textFont  = f; }
     void    setTextSize(int s)             { m_textSize  = s; }
 
-    // P0-7.2 (2026-09-14): PS 完整文字工具栏 Bold/Italic state
+    // PS 完整文字工具栏 Bold/Italic state
     //   跟 m_textFont/m_textSize 一起存 default style
     //   每次 onFontChanged/onSizeChanged/onColorSelected/applyStyleToCurrent
     //   都会应用到 m_current
@@ -60,7 +60,7 @@ public:
     void    setTextBold(bool on)          { m_textBold = on; }
     void    setTextItalic(bool on)        { m_textItalic = on; }
 
-    // P0-7.3 (2026-09-14): 给 PropertiesDock 读当前 item 完整 style
+    // 给 PropertiesDock 读当前 item 完整 style
     //   m_current 为 null 时, 返回 default style
     struct CurrentStyle {
         QString  font;
@@ -73,12 +73,12 @@ public:
     };
     CurrentStyle getCurrentStyle() const;
 
-    // P0-1.2 (2026-09-07): 给 ImageWindow 转发用
+    // 给 ImageWindow 转发用
     //   进马赛克: 锁所有文字 item 的双击编辑 (setBlockDoubleClickEdit(true))
     //   退马赛克: 解锁
     void    setMosaicMode(bool on);
 
-    // P0-1.2 (2026-09-07): 给 ImageWindow 转发用 (UI 控件变化)
+    // 给 ImageWindow 转发用 (UI 控件变化)
     //   onFontChanged: 字体变化 -> 写 m_textFont, 应用到 m_current
     //   onSizeChanged: 字号变化 -> 写 m_textSize, 应用到 m_current
     //   onColorSelected: 颜色选择 (来自 QColorDialog) -> 写 m_textColor, 应用到 m_current
@@ -118,7 +118,7 @@ private:
     QColor  m_textColor = QColor(Qt::white);
     QString m_textFont  = QStringLiteral("Microsoft YaHei UI");
     int     m_textSize  = 24;
-    // P0-7.2 (2026-09-14): PS 完整 Bold/Italic state
+    // PS 完整 Bold/Italic state
     bool    m_textBold   = false;
     bool    m_textItalic = false;
 };

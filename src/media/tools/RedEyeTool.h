@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// RedEyeTool - P0-9.3 (2026-09-15) + P2.2 (2026-09-22)
+// RedEyeTool
 //
 // PS-style Red Eye Removal tool:
 //   - drag rectangle to select red-eye region
@@ -10,7 +10,6 @@
 // Algorithm (simplified):
 //   - per-pixel red-eye check, apply PS desaturate formula
 //
-// P2.2 (2026-09-22):
 //   - i18n title via QCoreApplication::translate("tools::RedEyeTool", "Red Eye Tool")
 //   - optionPage: Pupil Size slider (default 30px) + Darken slider (default 50%)
 //   - ImageEditCommand undo: snapshot before apply, push single command after

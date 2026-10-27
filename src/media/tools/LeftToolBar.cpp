@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LeftToolBar implementation - F-D (2026-09-09) + F-L (2026-09-10)
+// LeftToolBar implementation
 //
 #include "LeftToolBar.h"
 #include "ui_LeftToolBar.h"
@@ -22,13 +22,13 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
 {
     ui = new Ui::LeftToolBar;
     ui->setupUi(this);
-    // Q4.4 (2026-10-08): 用 QStyle standardIcon 替换字母 placeholder.
+    // 用 QStyle standardIcon 替换字母 placeholder
     //   没 SVG 资源的情况下, Qt 内置 standard pixmap (cross / arrow / file) 视觉比
     //   "M/R/L/W/C/T/B/I" 强得多. 后续 P5 接 SVG 图标, 直接 setIcon(SVG) 即可.
-    // P5 (2026-10-08): 用 SVG 资源替换 QStyle 占位, 9 个工具有自绘 SVG (Move/RectSelect/
+    // TODO(P8.9): six tools still use the QStyle fallback icon instead of the SVG set -- see docs/DEBT.md#A-TOOLICON
     //   Lasso/MagicWand/Crop/Text/Brush/Eyedropper/Shape). 资源通过 vistella_tool_icons
     //   qt_add_resources 加载, PREFIX /icons/tools, setIcon(QIcon(":/icons/tools/tool-xxx.svg")).
-    //   剩下 6 个工具 (Pen/Clone/Heal/Patch/RedEye/MaskBrush) 暂时用 QStyle 占位, 后续 P5+ 补 SVG.
+    //   剩下 6 个工具 (Pen/Clone/Heal/Patch/RedEye/MaskBrush) 暂时用 QStyle 图标
     auto svgIcon = [](const QString& name) {
         return QIcon(QStringLiteral(":/icons/tools/") + name);
     };
@@ -41,7 +41,7 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     ui->btnBrush->setIcon(svgIcon("tool-brush.svg"));
     ui->btnEyedropper->setIcon(svgIcon("tool-eyedropper.svg"));
     ui->btnShape->setIcon(svgIcon("tool-shape.svg"));
-    // P5+ (2026-10-09): 6 个二线工具 SVG 补齐 (Pen/Clone/Heal/Patch/RedEye/MaskBrush).
+    // 6 个二线工具 SVG 补齐 (Pen/Clone/Heal/Patch/RedEye/MaskBrush)
     //   跟 P5 9 个工具同款 16x16 + 蓝 #4A90E2 + 黑 #202020.
     ui->btnPen->setIcon(svgIcon("tool-pen.svg"));
     ui->btnClone->setIcon(svgIcon("tool-clone.svg"));
@@ -54,7 +54,7 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
         b->setToolButtonStyle(Qt::ToolButtonIconOnly);
     }
 
-    // F-L (2026-09-10): 8 工具 button 映射 (PS 风格 4 行 2 列)
+    // 8 工具 button 映射 (PS 风格 4 行 2 列)
     m_buttons[mediators::ToolId::Move]       = ui->btnMove;
     m_buttons[mediators::ToolId::RectSelect] = ui->btnRectSelect;
     m_buttons[mediators::ToolId::Lasso]      = ui->btnLasso;
@@ -63,18 +63,18 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     m_buttons[mediators::ToolId::Text]       = ui->btnText;
     m_buttons[mediators::ToolId::Brush]      = ui->btnBrush;
     m_buttons[mediators::ToolId::Eyedropper] = ui->btnEyedropper;
-    // P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 按钮
+    // 形状/矢量 + 修复工具 6 按钮
     m_buttons[mediators::ToolId::Shape]      = ui->btnShape;
     m_buttons[mediators::ToolId::Pen]        = ui->btnPen;
     m_buttons[mediators::ToolId::Clone]      = ui->btnClone;
     m_buttons[mediators::ToolId::Heal]       = ui->btnHeal;
     m_buttons[mediators::ToolId::Patch]      = ui->btnPatch;
     m_buttons[mediators::ToolId::RedEye]     = ui->btnRedEye;
-    // Q4.2.1 (2026-09-23): MaskBrush 按钮加到 ui (P1.3.4 之前只 switchTool
+    // MaskBrush 按钮加到 ui (之前只 switchTool
     //   路由没按钮 — Q4.2 拍板"不放注释",所以 MaskBrush 也必须有可见入口)
     m_buttons[mediators::ToolId::MaskBrush]  = ui->btnMaskBrush;
 
-    // P7.1 (2026-10-12): PS-style fg/bg swatch (50x50 fg + 10x50 bg).
+    // PS-style fg/bg swatch (50x50 fg + 10x50 bg)
     //   Initial paint + click handlers; double-click = swap. The swatches
     //   stay in lockstep with ColorDock via foregroundColorChanged /
     //   backgroundColorChanged signals.
@@ -102,7 +102,7 @@ LeftToolBar::~LeftToolBar()
     delete ui;
 }
 
-// P7.1 (2026-10-12): fg/bg setter / swatch paint / click handlers.
+// fg/bg setter / swatch paint / click handlers
 
 void LeftToolBar::setForegroundColor(const QColor& c)
 {
@@ -178,7 +178,7 @@ void LeftToolBar::paintColorSwatch(QWidget* w, const QColor& c)
     w->setAutoFillBackground(true);
 }
 
-// P7.1 (2026-10-12): PS-style fg/bg swatch double-click = swap.
+// PS-style fg/bg swatch double-click = swap
 //   Install event filter on fgSwatch + bgSwatch so we can intercept
 //   QEvent::MouseButtonDblClick and trigger swap (instead of opening
 //   picker like single-click does).
@@ -280,7 +280,7 @@ void LeftToolBar::onToolMediatorSwitched(mediators::ToolId id)
         case mediators::ToolId::Eyedropper:
             m_ctx->setState(std::unique_ptr<ToolState>(createEyedropperTool()));
             break;
-        // P0-9.4 (2026-09-15): 形状/矢量 + 修复工具 6 个 case
+        // 形状/矢量 + 修复工具 6 个 case
         case mediators::ToolId::Shape:
             m_ctx->setState(std::unique_ptr<ToolState>(createShapeTool()));
             break;
@@ -299,7 +299,7 @@ void LeftToolBar::onToolMediatorSwitched(mediators::ToolId id)
         case mediators::ToolId::RedEye:
             m_ctx->setState(std::unique_ptr<ToolState>(createRedEyeTool()));
             break;
-        // P1.3.4 (2026-09-17): MaskBrush (像素蒙版画笔)
+        // MaskBrush (像素蒙版画笔)
         case mediators::ToolId::MaskBrush:
             m_ctx->setState(std::unique_ptr<ToolState>(createMaskBrushTool()));
             break;

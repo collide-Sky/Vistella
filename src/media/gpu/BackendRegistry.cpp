@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BackendRegistry impl - P8.2 (2026-10-16)
+// BackendRegistry impl
 
 #include "BackendRegistry.h"
 

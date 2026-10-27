@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CurvesAdjustDialog implementation - P0-3.2 v2 (2026-09-18)
+// CurvesAdjustDialog implementation
 //
 #include "CurvesAdjustDialog.h"
 
@@ -65,7 +65,7 @@ CurvesAdjustDialog::CurvesAdjustDialog(const QVariantMap& args, QWidget* parent)
     : AdjustDialogBase(QString("Curves (P0-3.2 v2)"), parent)
 {
     setInitialArgs(args);
-    // F-K (2026-09-09): base ctor does not call setupUi (avoids pure-virtual link
+    // base ctor does not call setupUi (avoids pure-virtual link
     //   ordering), derived ctor triggers init() to populate the body layout.
     init();
 

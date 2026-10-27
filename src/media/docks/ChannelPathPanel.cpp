@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ChannelPathPanel implementation - F-M.3 (2026-09-10)
+// ChannelPathPanel implementation
 //
 #include "ChannelPathPanel.h"
 #include "ui_ChannelPathPanel.h"
@@ -39,7 +39,7 @@ ChannelPathPanel::ChannelPathPanel(QWidget* parent) : QWidget(parent)
             emit pathSelected(name);
         });
     }
-    // P6 (2026-10-09): wire selection action buttons.
+    // wire selection action buttons
     if (ui->saveSelBtn) {
         connect(ui->saveSelBtn, &QPushButton::clicked,
                 this, &ChannelPathPanel::onSaveSelectionClicked);
@@ -97,7 +97,7 @@ void ChannelPathPanel::setSelectedPath(const QString& name)
     }
 }
 
-// P6 (2026-10-09): Selection action handlers — emit signals for ImageWindow
+// Selection action handlers — emit signals for ImageWindow
 //   to route. Selection state itself stays in SelectionModel; this panel
 //   only surfaces the trigger.
 void ChannelPathPanel::onSaveSelectionClicked()
@@ -131,7 +131,7 @@ void ChannelPathPanel::setupChannels()
 {
     if (!ui || !ui->channelList) return;
     // PS standard channel list (composite + 3 color + alpha + quickmask)
-    // P2.4 (2026-09-22): all channel names go through QCoreApplication::translate
+    // all channel names go through QCoreApplication::translate
     //   (baselines are English, but Chinese localization will replace at runtime)
     struct ChannelEntry { const char* tag; const char* fallback; ChannelKind k; };
     static const ChannelEntry kChannels[] = {

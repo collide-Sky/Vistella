@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SolidCanvasNode impl - P8.1.1.y (2026-10-22)
+// SolidCanvasNode impl
 
 #include "SolidCanvasNode.h"
 

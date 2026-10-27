@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CameraRawLoader - P3.5 (2026-09-23) libraw-based RAW decoder interface
+// CameraRawLoader - libraw-based RAW decoder interface
 //
 //   Layer between ImageIOController and libraw (or stub).
 //   CMakeLists.txt conditionally defines MULTIDOC_HAVE_LIBRAW when

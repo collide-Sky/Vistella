@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ModeSelectorBar implementation - Q4.2.3 (2026-09-24)
+// ModeSelectorBar implementation
 //
 #include "ModeSelectorBar.h"
 
@@ -165,10 +165,10 @@ void ModeSelectorBar::rebuildPages()
     m_pageEyedropper.widget->setObjectName(QStringLiteral("pageEyedropper"));
 
     // ===== Page: Empty (fallback for tools we don't handle) =====
-    // P7.1 (2026-10-12): 之前放一个灰色 "(no secondary mode for current tool)"
-    //   占位 label; PS 风格下这种 hint 太抢眼, 跟左侧工具栏的紧凑风格冲突.
+    // 之前放一个灰色 "(no secondary mode for current tool)"
+    //   提示 label; PS 风格下这种 hint 太抢眼, 跟左侧工具栏的紧凑风格冲突
     //   改为纯空 page — user 切到没二级模式的工具 (Move/Text/Shape etc.) 时,
-    //   bar 自身依然显示高度但内部留白, 不放标签也不放占位.
+    //   bar 自身依然显示高度但内部留白, 不放标签
     m_pageEmpty.widget = new QWidget(this);
     auto* emptyLay = new QHBoxLayout(m_pageEmpty.widget);
     emptyLay->setContentsMargins(0, 0, 0, 0);

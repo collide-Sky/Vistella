@@ -62,7 +62,7 @@
 | `A-LOGGERAPI` | `logger/Logger.h:172-177` + `:200-202` | 简化版 `trace`/`debug`/`warn`/`critical` 与 `setLevelQt`/`setLogDirQt`/`setModuleNameQt` 全部零调用者（日志宏走的是 `::vistella::log()`，两套 API 并存）；`info`/`error` 因与 `spdlog::info`/`spdlog::error` 同名而无法静态区分 | 无直接用户影响，但**运行时改日志级别/日志目录**没有任何入口 | 日志配置 | P8.9 | 设置页能实时改日志级别与目录，且旧 API 删除或接线 | open |
 | `A-BRUSHCURSOR` | `media/imagewindow/ImageCanvas.h:52-53` | `setBrushCursorRadius()` / `moveBrushCursor()` 零调用者 —— 实际光标由 `ImageWindow::m_brushCursor` 直接操作（`imagewindow.cpp:333/2676`），`ImageCanvas` 这两个方法是**重复 owner**（违反 `INV-STATE-1`） | 画笔光标半径写死在 `imagewindow.cpp`，用户无法配置 | 画笔光标 | P8.5 | 光标半径可配置，且只剩一个 owner | open |
 | `A-TEXTCOLOR` | `media/imagewindow/TextOverlayController.h:87` | `onColorSelected()` 零调用者 —— 文字取色实际由 `ImageWindow::onColorClicked` 走 `QColorDialog` 完成（`imagewindow.cpp:2381`），`TextOverlayController` 这条是**重复链路** | 文字面板改颜色与文字对象改颜色可能不同步 | 文字颜色 | P8.5 | 文字颜色只有一个 owner，面板与画布同步 | open |
-| `A-STACKWIDGET` | `ui/dock/VDraggableTabWidget.cpp:156-157` | `insertPage()` 里**先** `m_tabBar->insertTab()` **后** `m_stack->insertWidget()`。空 tab bar 插入首个 tab 时 Qt 会自动 `setCurrentIndex(0)` 并 emit `currentChanged` → 此时 page 还没进 `m_stack` → `m_stack->setCurrentWidget(page)` 必然报 "widget not contained in stack"。每个 tab widget 只在加第一个页面时触发一次 → 右侧面板 3 个 sub-dock 正好 3 条。**根因是这两行的顺序，交换即可**。实测影响面不止 ImageWindow：`tst_ImageEditCommand` / `tst_P3_1_FilterDialog` / `tst_RightPanelDock` 的 XML 里也有同一条警告 | 每次构造带右侧面板的窗口都刷 Qt 警告；首个 tab 的页面在栈为空时被跳过显示 | 右侧面板切页 | P8.5 | 构造 ImageWindow 零 Qt 警告（`tst_Path_OpenEditUndoRedoSave::constructing_window_emits_no_unknown_qt_warning` 转绿） | open |
+| `A-STACKWIDGET` | `ui/dock/VDraggableTabWidget.cpp:156-158` | `insertPage()` 里**先** `m_tabBar->insertTab()` **后** `m_stack->insertWidget()`。空 tab bar 插入首个 tab 时 Qt 会自动 `setCurrentIndex(0)` 并 emit `currentChanged` → 此时 page 还没进 `m_stack` → `m_stack->setCurrentWidget(page)` 必然报 "widget not contained in stack"。每个 tab widget 只在加第一个页面时触发一次 → 右侧面板 3 个 sub-dock 正好 3 条。**根因是这两行的顺序** | 每次构造带右侧面板的窗口都刷 Qt 警告；首个 tab 的页面在栈为空时被跳过显示 | 右侧面板切页 | P8.5 | 构造 ImageWindow 零 Qt 警告（`tst_Path_OpenEditUndoRedoSave::constructing_window_emits_no_unknown_qt_warning` 转绿） | done |
 
 ### A.4　重复刷新逻辑（`CONTRACTS.md` 规则 3.5）
 
@@ -87,31 +87,41 @@
 | `A-SWATCH` | `docks/SwatchTab/GradientTab/PatternTab` | 15 色板/8 渐变/6 图案**全是硬编码假数据**；渐变/图案无对应工具（09-07） | 色板/渐变/图案面板是摆设 | P8.7 | 至少做到可读展示并标注未实装 | open |
 | `A-LIQUIFY` | `filters/liquify/LiquifyDialog.cpp:105` + `LiquifyEngine.h:48` + `LiquifyMesh.h:56` | 6 个液化工具只有 1 个可达；面板参数被 `Q_UNUSED`；ONNX 路径写死 `D:/Collide/...`；结果红蓝互换（LQ-01/05/12、CP-12）；`LiquifyEngine::samplePixel` 与 `LiquifyMesh::setVertexDisplacement` 零调用者 | 液化面板点了没反应 | P8.7 | 6 个工具可用 + 路径不写死 | open |
 | `A-AUTOSAVE` | `core/SessionManager` | 无自动保存；session 只存路径且只在干净退出时存（CI-07 / APP-16） | 崩溃后未保存的修图**全丢** | P8.6 | 崩溃恢复能找回未保存内容 | open |
+| `A-PLUGINMENU` | `app/mainwindow.cpp:544` | 「增效工具」菜单是空壳（`aPluginsMgr->setEnabled(false)`），插件管理入口不生效 | 菜单里第 9 项点不动，插件体系没有入口 | P8.9 | 菜单能加载真实插件，或整项删除 | open |
+| `A-FILTERMENU` | `app/mainwindow.cpp:1078/1090/1093/1096/1102` | 滤镜菜单 5 个入口（Neural Filters / 自适应广角 / Camera Raw / 镜头校正 / 消失点）全部 `setEnabled(false)` | 用户点这些滤镜没有任何反馈，看着像坏了 | P8.9 | 接通或移除这些入口 | open |
+| `A-THEME` | `ui/themegallerydialog.cpp:131` + `themegallerydialog.h:39` | 「应用」按钮只弹 QMessageBox，`ThemeManager::setAccentColor/setMode/persistToSettings` 三行是注释，主题画廊不接 ThemeManager | 选了颜色点了应用，界面完全不变 | P8.9 | 点应用后主题真的变并持久化 | open |
+| `A-TOOLICON` | `media/tools/LeftToolBar.cpp:28/31` | 9 个工具用自绘 SVG，剩下 6 个（Pen/Clone/Heal/Patch/RedEye/MaskBrush）仍用 QStyle 内置图标 | 工具栏图标一半是系统默认样式，和整体风格不一致 | P8.9 | 6 个工具补齐 SVG，或明确统一为同一套图标 | open |
+| `A-ICCTIFFTAG` | `media/icc/IccTiffEmbed.cpp:206` | TIFF 的 ICC tag 条目里 value offset 写死成常量，嵌入的 profile 实际读不出来 | 导出带 ICC 的 TIFF 后再打开，颜色管理失效 | P8.9 | 导出的 TIFF 能被其它软件正确读到 profile | open |
+| `A-HUESATLUT` | `media/imageprocessor.cpp:825` | `applyLut` 接受 hue/sat pairs 但只应用 lightness 的 1D LUT，色相/饱和度滑条**完全无效** | HSL 面板拖 Hue/Saturation 画面没反应 | P8.5 | Hue/Saturation 滑条真的改变画面 | open |
+| `A-MOSAICBACKUP` | `media/imagewindow/MosaicTool.cpp:227` | `ensureBackup()` 是空函数，快照实际在 `onSceneClicked` 里做 | 马赛克没有备份链路，撤销后无法恢复原图 | P8.4 | 马赛克前有真实备份且可恢复 | open |
+| `A-TEXTOVERLAYAPPLY` | `media/imagewindow/TextOverlayController.cpp:244` | `applyStyleToCurrent()` 空实现，保留接口没有调用者 | 文字样式改动没有统一的生效入口 | P8.5 | 文字样式通过该入口生效，或删除该接口 | open |
 | `A-PROJECTFORMAT` | `ImageIOController.cpp:68` | 保存写 `currentImage()`，**无任何工程格式** → 保存后重开只剩一张扁平图，图层/蒙版/智能对象/文字全丢（LYR-23 / §5.2） | 「非破坏修图」定位不成立 | P8.8 | 自定义 .vst 格式往返 | open |
 
 ### A.3　源码中的「以后会做」承诺（20 处散落注释，尚未登记）
 
 > 这些是**原始证据**：`grep -rn "wiring|will wire|未接线|后续 P|留接口|暂不|待接线" src/` 的全部命中。
-> 规则 2.3 要求把它们逐条转成上表条目并统一标记；在此之前，它们属于**未登记的占位**。
+> 规则 2.3 要求把它们逐条转成上表条目并统一标记；标「待定」的仍是**未登记的占位**。
 
 | 位置 | 承诺内容 | 归入 |
 |---|---|---|
 | `app/CMakeLists.txt:37` | ThreadPool v2 的 Backpressure/PoolStats 暂不 link | `A-THREADFACILITIES` |
 | `ui/dock/CMakeLists.txt:3` | GPU/CPU wiring 留在 P8.2/P8.4 | `A-RENDERBACKEND` |
-| `app/mainwindow.cpp:544` | 插件管理后续 P7.11 | 待定（插件体系） |
+| `app/mainwindow.cpp:544` | 插件管理后续 P7.11 | `A-PLUGINMENU` |
 | `core/IModule.h:68` | audioWorker 暂不支持 | `A-MEDIADISPATCH` |
-| `media/imageprocessor.cpp:914` | 参数为 API 完整性保留，P0-3.x 接 AdjustmentLayer 用 | 待定 |
+| `media/imageprocessor.cpp:914` | 参数为 API 完整性保留，P0-3.x 接 AdjustmentLayer 用 | `A-HUESATLUT` |
 | `media/imagewindow.cpp:1800` | `dpi=72` 硬编码，后续 P0-8 ICC embed 流程读 EXIF | 待定（色彩管理） |
 | `camera_raw/CameraRawLoader.h:8` | 接口齐全，wiring 未做 | `A-CAMERARAW` |
 | `compositor/nodes/LayerStackAdapter.cpp:245` | mask + blend wiring | `A-LAYERMASK` |
 | `imagewindow/ImageIOController.h:35-40` | signals mirror，MainWindow wiring | `A-IMAGESAVESIGNAL` |
-| `imagewindow/MosaicTool.cpp:227` | 占位：P0-1.2 后续轮次用 | 待定 |
-| `imagewindow/TextOverlayController.cpp:244` | 占位：保留接口 | 待定 |
+| `imagewindow/MosaicTool.cpp:227` | 占位：P0-1.2 后续轮次用 | `A-MOSAICBACKUP` |
+| `imagewindow/TextOverlayController.cpp:244` | 占位：保留接口 | `A-TEXTOVERLAYAPPLY` |
 | `media/texteditorframe.cpp:101` | 保留接口以便将来扩展 | `A-TEXTEDITORFRAME` |
 | `media/tools/Crop.h:10` | Full mouse press/move/release wiring + applyCrop | `A-CROP` |
 | `media/tools/LeftSidePanel.h:64` | accessors for downstream wiring | 待定 |
-| `media/tools/LeftToolBar.cpp:27` | 后续 P5 接 SVG 图标 | 待定（图标） |
-| `media/tools/LeftToolBar.cpp:31` | 6 个工具暂用 QStyle 占位图标 | 待定（图标） |
+| `media/tools/LeftToolBar.cpp:27` | 后续 P5 接 SVG 图标 | `A-TOOLICON` |
+| `media/tools/LeftToolBar.cpp:31` | 6 个工具暂用 QStyle 占位图标 | `A-TOOLICON` |
+| `media/icc/IccTiffEmbed.cpp:206` | ICC tag 的 value offset 写死 | `A-ICCTIFFTAG` |
+| `ui/themegallerydialog.cpp:131` | 主题画廊不接 ThemeManager | `A-THEME` |
 | `layers/BlendMode.cpp:307` | Phase 2 暂不支持，fallback Normal | 待定（混合模式） |
 | `media/tools/MagicWand.h:46` | P2.1 option UI hooks | 待定 |
 | `layers/LayerPanel.cpp:296` | 暂不用，Phase 1 UI 不显示 saved 标记 | 待定 |
@@ -169,13 +179,20 @@
 
 | ID | 范围 | 数量 | 违规类型 | 建议阶段 | 验收方式 | 状态 |
 |---|---|---|---|---|---|---|
-| `A-COMMENTDATE` | `src/app/mainwindow.cpp` / `src/media/docks/LayersDock.h` / `RightPanelDock.{h,cpp}` / `src/media/imagewindow/ImageCanvas.h` / `imagewindow.cpp` / `layers/LayerPanel.cpp` / `tools/ImageOptionBar.{h,cpp}` / `tools/LeftSidePanel.{h,cpp}` / `src/ui/dock/VDraggableTabWidget.h` / `VPages.cpp` | **26** | 日期戳注释（`P8.3.2 (2026-10-26): ...`），来自提交 `34030c1` | P8.5 | `check_contracts.py --base origin/dev` 不再报 ERROR | open |
-| `A-COMMENTSTAGE` | `src/ai/AIManager.{h,cpp}` / `src/network/AuthClient.{h,cpp}` / `src/user/UserManager.{h,cpp}` 等 | 约 200 | `阶段 N:` 式注释（"阶段 0 占位" / "阶段 5+ 才做"） | P8.6 | 对应文件内 `阶段 \d+` 命中归零 | open |
-| `A-COMMENTREST` | 其余 `src/` | 约 1050 | 变更日志式 / 自称已完成 / 默认值声明 / 未登记占位承诺 | P8.9 | `check_contracts.py --strict` 通过 | open |
+| `A-COMMENTDATE` | `src/app/mainwindow.cpp` / `src/media/docks/LayersDock.h` / `RightPanelDock.{h,cpp}` / `src/media/imagewindow/ImageCanvas.h` / `imagewindow.cpp` / `layers/LayerPanel.cpp` / `tools/ImageOptionBar.{h,cpp}` / `tools/LeftSidePanel.{h,cpp}` / `src/ui/dock/VDraggableTabWidget.h` / `VPages.cpp` | **26** | 日期戳注释（`P8.3.2 (2026-10-26): ...`），来自提交 `34030c1` | P8.5 | `check_contracts.py --base origin/dev` 不再报 ERROR | done |
+| `A-COMMENTSTAGE` | `src/ai/AIManager.{h,cpp}` / `src/network/AuthClient.{h,cpp}` / `src/user/UserManager.{h,cpp}` 等 | 约 200 | `阶段 N:` 式注释（"阶段 0 占位" / "阶段 5+ 才做"） | P8.6 | 对应文件内 `阶段 \d+` 命中归零 | done |
+| `A-COMMENTREST` | 其余 `src/` | 约 1050 | 变更日志式 / 自称已完成 / 默认值声明 / 未登记占位承诺 | P8.9 | `check_contracts.py --strict` 通过 | done |
 
-> **注意**：只要 `34030c1` 还没推到 `origin/dev`，用 `--base origin/dev` 跑门禁就会把
-> `A-COMMENTDATE` 那 26 条报成 ERROR（base 里没有它们）。这是门禁在正确工作，不是误报。
-> 推上去之后它们退化为存量 WARN。
+> **已清理**：R2 存量从 **1229 条**降到 **0 条**（2026-10-27）。做法是两条线：
+> 变更日志脚手架（日期戳 / 阶段号 / `P<ver> fix` 标签 / 裸工作项标签）机械剥离并保留正文；
+> 真正的「以后会做」承诺改写成契约要求的 `TODO(Px.y): ... -- see docs/DEBT.md#<ID>` 标记，
+> 原文只写现状（`mock` / `未实装` / `未接线`），承诺部分落到 §A.2 的登记项里。
+> 附带修掉 5 处泄漏到 UI 的字符串（状态栏 / 错误消息里出现「阶段 0 仅占位」）。
+
+> **仍未纳入 R2 的残留**：约 **700** 条注释带裸工作项标签（如 `P7.6.x v3:`、`Q4.1 INVARIANT:`）。
+> 当前 R2 规则只禁「带日期的」变更日志脚手架，裸标签不在禁词表里，因此门禁不报。
+> 其中一部分是**有意义的交叉引用**（如 `Q4.1 INVARIANT`），不能机械剥离 —— 需要先定义
+> 「引用」与「脚手架」的区分规则，再决定是否收进 R2。
 
 ---
 
@@ -184,3 +201,18 @@
 1. **R2 的自指豁免**：本文件与 `docs/CONTRACTS.md` 里的示例代码块**不参与** R2 扫描（R2 只扫 `src/`）。
 2. **豁免名单**：`tools/contract_allowlist.txt` 每行一个符号名 + `#` 原因。新增豁免必须写原因，否则视为无效。
 3. **门禁失效即失败**：拿不到 diff 范围时脚本以退出码 2 退出，**不允许**退化成"全部通过"。
+4. **增量判定以基点版本为准**：R1（零调用者）与 R4（重复刷新）的 ERROR 判定标准是
+   「本次改动是否**新引入**了这个问题」，而不是「这行被改过」。
+   R1 比对基点版本里该头文件已声明的 public 方法名；R4 比对基点版本里该文件的刷新调用次数。
+   早期实现用「改动行号是否命中」判定，导致**只改一行注释**就会把早已存在的历史欠债
+   重新判成新增违规 —— 门禁因为与本次改动无关的旧债挡住提交。这是误报，
+   误报会让门禁被整体忽略。
+5. **门禁必须能变红**：改完 `tools/check_contracts.py` 的规则后，必须跑
+   `python tools/break_test_contracts.py` —— 它会往真实文件里注入一条该规则的违规
+   （新加一个零调用者 public 方法 / 新写一条带日期戳的注释 / 新加一次重复刷新调用 /
+   指向未登记 DEBT 的 TODO 标记），确认门禁真的报 ERROR，再把文件还原。
+   没跑过这条自检不许提交。
+6. **纯注释改动必须有机器证据**：只改注释的提交必须跑
+   `python tools/verify_comment_only.py` —— 它把新旧版本都去掉注释后逐字节比较，
+   证明代码没被顺手改掉。故意要改代码的文件登记在 `tools/comment_only_allowlist.txt`
+   （每行必须写原因）。

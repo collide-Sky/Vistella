@@ -3,7 +3,7 @@
 // ImageCanvas — QGraphicsView 派生,接管 scene/zoom/wheel/eventFilter
 // (P0-1: 拆 imagewindow.cpp 上帝类的 6 大组件之一)
 //
-// P0-4.3 (2026-09-10): selection rendering
+// selection rendering
 //   - Owns MarchingAnts (200ms phase ticker)
 //   - drawForeground() paints selection mask border as 8px black/white dashed
 //     line, offset by m_ants->phase() * 0.5px
@@ -57,14 +57,14 @@ public:
     // P0-4.3: selection rendering
     void setSelectionModel(selection::SelectionModel* sel);
 
-    // P2.1 (2026-09-22): mask overlay visibility (PS-style "Show Selection Overlay")
+    // mask overlay visibility (PS-style "Show Selection Overlay")
     //   When true, drawForeground fills the mask region with 30% blue tint
     //   so users can see exactly what is selected without obscuring the image.
     //   Default off (PS default: "marching ants only").
     void setMaskOverlayVisible(bool v);
     bool isMaskOverlayVisible() const { return m_showMaskOverlay; }
 
-    // P0-6.10 (2026-09-14): 自由变换 box (10 handle 渲染)
+    // 自由变换 box (10 handle 渲染)
     //   m_box 是 weak ref, ImageWindow 持有所有权
     //   当 m_box != nullptr 时, drawForeground 画 8 handle + 1 center + 1 rotation handle
     void setTransformBox(transform::TransformBox* box);
@@ -72,7 +72,7 @@ public:
     selection::SelectionModel* selectionModel() const { return m_sel; }
     selection::MarchingAnts*   marchingAnts()   const { return m_ants; }
 
-    // P7.11 (2026-10-15): dirty-rect repaint.
+    // dirty-rect repaint
     //   invalidateRect(sceneRect) accumulates a scene-space rect and asks
     //   the viewport to repaint only the corresponding area. Subsequent
     //   calls before the next paint event are unioned. invalidateAll()
@@ -83,7 +83,7 @@ public:
     void invalidateRect(const QRectF& sceneRect);
     void invalidateAll();
 
-    // P7.11 (2026-10-15): test hooks. Exposed only for unit tests; do
+    // test hooks. Exposed only for unit tests; do
     // not call from production code.
     QRectF testAccDirtyRect()       const { return m_pendingDirtyRect; }
     bool   testAccDirtyRect_isNull() const { return m_pendingDirtyRect.isNull(); }
@@ -122,7 +122,7 @@ protected:
     void drawForeground(QPainter* p, const QRectF& rect) override;
 
 private:
-    // P8.3.1 (2026-10-26): true once QGraphicsView has actually stored a
+    // true once QGraphicsView has actually stored a
     //   mouse event of its own.
     //
     //   QGraphicsView keeps "the last mouse event" in a QEventStorage, and
@@ -160,12 +160,12 @@ private:
     // P0-6.10: 自由变换 box (weak ref, ImageWindow::m_box 持所有权)
     transform::TransformBox*   m_box  = nullptr;
 
-    // P2.1 (2026-09-22): mask overlay visibility (PS-style "Show Selection Overlay"
+    // mask overlay visibility (PS-style "Show Selection Overlay"
     //   default off; flip on via menu / keyboard shortcut). When enabled,
     //   drawForeground fills the inverse mask region with 30% blue tint.
     bool                       m_showMaskOverlay = false;
 
-    // P7.11 (2026-10-15): dirty-rect accumulator (scene space). QRectF()
+    // dirty-rect accumulator (scene space). QRectF
     // means "no pending update"; a non-empty rect is unioned across
     // invalidateRect() calls until the next paint event consumes it via
     // flushDirtyRect(). m_dirtyAll is set by invalidateAll() to force a

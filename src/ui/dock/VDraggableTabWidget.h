@@ -27,7 +27,6 @@
 //     connection from VTabPageBase.preferredRenderPath() to actual
 //     behaviour is wired in commit 3).
 //
-//   P7.6.x v3 commit 2 (2026-10-14).
 #pragma once
 
 #include <QWidget>
@@ -60,7 +59,7 @@ public:
     explicit VDraggableTabWidget(QWidget* parent = nullptr);
     ~VDraggableTabWidget();
 
-    // P8.3.2 (2026-10-26): the group's preferred size follows the CURRENT
+    // the group's preferred size follows the CURRENT
     //   page, not the tallest of all pages.
     //
     //   QStackedWidget::sizeHint() returns the maximum over every page, so a

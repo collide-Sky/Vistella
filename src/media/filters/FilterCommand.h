@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// FilterCommand - P0-5.8 (2026-09-10), P3.1.1 (2026-09-22)
+// FilterCommand
 //
 // QUndoCommand for filter operations.
 //   Stores before/after image as cv::Mat (clone) + filter name for text.
@@ -10,7 +10,6 @@
 //   QUndoStack *stack = m_undoStack;
 //   stack->push(new filter::FilterCommand(m_current, kind, filterName(kind)));
 //
-// P3.1.1 (2026-09-22):
 //   - New ctor that takes a pre-built FilterStrategy. Used by FilterDialog
 //     after the user adjusts parameter sliders — the dialog already owns a
 //     strategy with the user-edited params, no need to recreate with defaults.
@@ -42,7 +41,7 @@ public:
     FilterCommand(ImageWindow *host, const cv::Mat &before, FilterKind kind,
                   const QString &text, QUndoCommand *parent = nullptr);
 
-    // P3.1.1 (2026-09-22): ctor accepting a caller-provided strategy. Used by
+    // ctor accepting a caller-provided strategy. Used by
     //   FilterDialog so the user's slider/picker params are applied (instead
     //   of recreating a strategy with default values).
     //   strategy pointer is NOT owned by FilterCommand; it must outlive the

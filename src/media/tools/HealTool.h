@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 //
-// HealTool - P0-9.3 (2026-09-15) + P0-9.4 (2026-09-15) + P2.2 (2026-09-22)
+// HealTool
 //
 // PS-style Healing Brush (J):
 //   - Alt + click: sample
 //   - drag: inpaint destination region from surrounding pixels
 //
-// P0-9.4 (2026-09-15): cv::inpaint (Telea) integrates edge blending
+// cv::inpaint (Telea) integrates edge blending
 //   - unlike CloneTool pure copy, this preserves surrounding texture
 //
-// P2.2 (2026-09-22):
 //   - i18n title override ("Healing Brush")
 //   - Inherits ImageEditCommand undo + brush cursor from base
 //

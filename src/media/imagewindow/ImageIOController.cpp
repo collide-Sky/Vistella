@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ImageIOController - P0-1.4 (2026-09-07) full impl
+// ImageIOController - full impl
 //   接管 imagewindow.cpp 中所有"打开/保存/另存为/关闭"逻辑:
 //     - onOpen: QFileDialog -> m_host->loadFile + RecentManager::touchOpen
 //     - onSave: 委托 onSaveAs 如果 m_host->filePath() 空; flattenText + ImageProcessor::saveImage
@@ -120,7 +120,7 @@ void ImageIOController::onClose()
     m_host->emitCloseRequested();
 }
 
-// P0-8.2 (2026-09-15): 多格式导出 (PS 同款 Save For Web 风格)
+// 多格式导出 (PS 同款 Save For Web 风格)
 //   ExportDialog 让 user 选 format + quality + resize + ICC
 //   ImageProcessor::saveImage 走 QImageWriter 支持完整 quality/compression
 void ImageIOController::onExport()
@@ -176,7 +176,7 @@ void ImageIOController::onExport()
         return;
     }
 
-    // P0-8.3 (2026-09-15): 嵌入 ICC profile (PS 同款 Save For Web)
+    // 嵌入 ICC profile (PS 同款 Save For Web)
     //   - opts.embedIcc + iccProfilePath 有效
     //   - format 是 PNG -> embedIccToPng (iCCP chunk)
     //   - format 是 JPEG -> embedIccToJpeg (APP2 marker)
@@ -209,7 +209,7 @@ void ImageIOController::onExport()
                     LOG_WARN("[ImageIO] embedIccToJpeg failed: {}", err.toStdString());
                 }
             } else if (opts.format == dialogs::ExportDialog::Format::TIFF) {
-                // P0-8.4 (2026-09-15): TIFF ICCProfile tag embedder
+                // TIFF ICCProfile tag embedder
                 if (!media::icc::embedIccToTiff(path, iccData, &err)) {
                     LOG_WARN("[ImageIO] embedIccToTiff failed: {}", err.toStdString());
                 } else {
@@ -229,8 +229,8 @@ void ImageIOController::onExport()
 bool ImageIOController::loadFile(const QString& path, QString* err)
 {
     if (!m_host) return false;
-    // P3.5 (2026-09-23): RAW 拦截 — 调 CameraRawLoader 解码, 不走 cv::imread.
-    //   P3.5 follow-up (2026-09-23): 弹 CameraRawDialog 让用户调 exposure/wb
+    // RAW 拦截 — 调 CameraRawLoader 解码, 不走 cv::imread
+    //   follow-up 弹 CameraRawDialog 让用户调 exposure/wb
     //   等参数, 然后调 camera_raw::decodeRaw(path, settings). 真 libraw 解码结果
     //   走 cv::imwrite -> temp file -> m_host->loadFile (跟正常打开场景统一路径).
     if (!camera_raw::supportedRawExtensions().contains(
@@ -270,7 +270,7 @@ bool ImageIOController::loadFile(const QString& path, QString* err)
 }
 
 // ---- 以下是 P0-1.1 拍板的占位接口, 实际未使用, 保持空实现 ----
-//   P0-1.4 (2026-09-07): 实际 IO 逻辑都在 onOpen / onSave / onSaveAs / onClose / loadFile 里
+//   实际 IO 逻辑都在 onOpen / onSave / onSaveAs / onClose / loadFile 里
 //   saveAs / save 不暴露给外部用, 这里保留签名以兼容 P0-1.1 接口
 QString ImageIOController::saveAs()  { return QString(); }
 bool    ImageIOController::save()    { return false; }

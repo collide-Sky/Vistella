@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 //
-// Crop - F-L (2026-09-10) + P2.3 (2026-09-22)
+// Crop
 //
 // PS-style Crop tool (C):
 //   - drag rectangle on canvas: live preview overlay
 //   - release: apply crop (cv::Mat roi + adjust size + push ImageEditCommand)
 //
-// P2.3 (2026-09-22):
 //   - Full mouse press/move/release wiring + applyCrop
 //   - optionPage: Width / Height / Aspect Ratio (Free / 1:1 / 4:3 / 16:9)
 //   - ImageEditCommand undo integration (MosaicTool pattern)

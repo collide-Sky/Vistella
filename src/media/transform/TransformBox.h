@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TransformBox - P0-6.1 (2026-09-14)
+// TransformBox
 //
 // 自由变换包围盒: PS 风格的 8 控制点 + 1 中心 + 1 旋转手柄
 //   - 4 角 (TopLeft / TopRight / BottomRight / BottomLeft): 缩放或 Distort 自由拖动
@@ -63,7 +63,7 @@ public:
     // ===== 初始 / 重置 =====
     void setRect(const QRectF& r);   // 重设 4 角 (跟 boundingRect 同步)
     QRectF rect() const { return m_rect; }
-    // P3.2.5 (2026-09-23): 拖动开始前的 origRect (Scale/Skew only).
+    // 拖动开始前的 origRect (Scale/Skew only)
     //   拖动中 (m_dragging=true) 返 m_dragOrigRect; 否则返 m_rect (跟 rect() 等价).
     //   commitTransform 用 origRect + newPos 算非平凡矩阵, 不退化成 identity.
     QRectF origRect() const { return m_dragging ? m_dragOrigRect : m_rect; }
@@ -120,7 +120,7 @@ private:
     qreal  m_rotationDeg = 0.0;  // 旋转角度 (度, 顺时针为正)
     QPointF m_corners[4];        // TL, TR, BR, BL — Distort 模式独立位置
 
-    // P3.2.5 (2026-09-23): Scale/Skew 拖动开始时记录的 origRect + dragging 标志.
+    // Scale/Skew 拖动开始时记录的 origRect + dragging 标志
     //   dragHandle Scale/Skew mode 第一次进入会 snapshot m_rect 到 m_dragOrigRect
     //   (m_dragging=true), 后续 m_rect 一直被更新到 newPos 后状态. commit
     //   时 caller 调 origRect() 拿 pre-drag state 算非 identity 矩阵.

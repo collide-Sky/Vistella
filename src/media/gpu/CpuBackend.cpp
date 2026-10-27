@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CpuBackend impl - P8.2 (2026-10-16)
+// CpuBackend impl
 
 #include "CpuBackend.h"
 

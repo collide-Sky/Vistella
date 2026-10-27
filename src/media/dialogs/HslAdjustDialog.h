@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// HslAdjustDialog - F-K (2026-09-09) / P0 leftover review (2026-09-21)
+// HslAdjustDialog - /
 //
 // PS-style HSL adjust dialog. 8 hue bands + 8 saturation bands + 1
 // lightness, matching AdjustmentPanel::m_hsl structure (master + R, Y, G, C, B, M).
@@ -9,7 +9,7 @@
 //   "satShifts": QList<int> (8 ints, -100..100)
 //   "lightness": int (-100..100)
 //
-// P0 leftover review (2026-09-21): previous single-channel (1 hue + 1 sat
+// previous single-channel (1 hue + 1 sat
 // + 1 light) was a stub incompatible with AdjustmentPanel::m_hsl
 // array structure, leaving AdjustmentPanel::setStandaloneParams("HSL", ...)
 // as a no-op. Now uses the PS-compatible 8-band layout so the dialog

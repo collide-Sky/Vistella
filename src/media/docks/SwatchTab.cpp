@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SwatchTab implementation - P7.7 (2026-10-14) + P7.8 (2026-10-14)
+// SwatchTab implementation
 //
 //   QTreeView with 3 categories. Each swatch is a QStandardItem whose
 //   background brush is the swatch color; the QStandardItem also stores
@@ -21,7 +21,7 @@
 
 namespace docks {
 
-// P7.8 (2026-10-14): 3 categories with 4-6 themed swatches each.
+// 3 categories with 4-6 themed swatches each
 //   树 (Tree):     browns / leaf greens (forest, bark, leaf)
 //   草 (Grass):    greens (light, dark, olive, lime, mint)
 //   水滴 (Water):  blues / cyans (sky, ocean, ice, deep, lagoon)

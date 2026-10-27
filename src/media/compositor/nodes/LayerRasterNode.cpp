@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerRasterNode impl - P8.1.1.x (2026-10-20)
+// LayerRasterNode impl
 
 #include "LayerRasterNode.h"
 

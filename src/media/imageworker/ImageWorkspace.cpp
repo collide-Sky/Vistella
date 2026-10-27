@@ -1,6 +1,6 @@
 // =============================================================
 // ImageWorkspace 实现
-// 阶段 1 W1 骨架 (2026-09-03) — 详见 ImageWorkspace.h 注释
+//  骨架 — 详见 ImageWorkspace.h 注释
 // =============================================================
 
 #include "ImageWorkspace.h"
@@ -51,7 +51,7 @@ ImageWorkspace::~ImageWorkspace()
 
 QString ImageWorkspace::filePath() const
 {
-    // P0-1.3 (2026-09-07): QString(m_imageWindow->filePath()) 强拷贝, ref count +1
+    // QString(m_imageWindow->filePath) 强拷贝, ref count +1
     // 避免直接返回 inline accessor 的 QString 引用, 导致 m_imageWindow 还在
     // 但 QString 内部 d 指针被覆盖时的 use-after-free.
     return m_imageWindow ? QString(m_imageWindow->filePath()) : QString();

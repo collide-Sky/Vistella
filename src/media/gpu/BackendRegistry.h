@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 //
-// BackendRegistry - P8.2 (2026-10-16) per-tile backend selection
+// BackendRegistry - per-tile backend selection
 //   pick(brushKind, sharedState) consults kindNeedsGpu() (P7.9.2) +
 //   the active BackendCapabilities + the optional user override and
 //   returns a RenderBackend* (always non-null: the registry owns
 //   CpuBackend and GpuBackend and returns one of them).
 //
-//   Routing rules (user拍板 2026-10-16):
+//   Routing rules (user拍板)
 //     - Wet 3 (Watercolor/Oil/Acrylic)         -> Gpu if available, else Cpu
 //     - Special 2 (Smudge/Eraser)             -> Cpu (always)
 //     - Basic 8                               -> defers to sharedState.needsGpu()
@@ -28,7 +28,7 @@ namespace gpu {
 
 class RenderBackend;
 
-// P8.3 (2026-10-16): 3-state mode for user control. Replaces P8.2's
+// 3-state mode for user control. Replaces 's
 // binary setForceCpu(bool). P8.3 wires this to the status bar menu
 // and the settings dialog GPU page.
 enum class RenderMode {
@@ -39,7 +39,7 @@ enum class RenderMode {
 
 class BackendRegistry {
 public:
-    // P8.3 (2026-10-16): global registry instance + static accessors.
+    // global registry instance + static accessors
     // The main status bar / settings dialog use the global instance
     // because there's only ever one process-wide backend choice.
     static BackendRegistry& instance();
@@ -57,7 +57,7 @@ public:
     RenderBackend* pick(brushes::BrushKind brushKind,
                         const tools::BrushSharedState& sharedState) const;
 
-    // P8.3 (2026-10-16): 3-state mode. Auto = registry decides.
+    // 3-state mode. Auto = registry decides
     // ForceGpu = override kind decisions, always prefer GPU.
     // ForceCpu = override kind decisions, always CPU.
     void setMode(RenderMode m);

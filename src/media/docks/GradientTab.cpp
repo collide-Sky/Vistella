@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// GradientTab implementation - P7.7 (2026-10-14)
+// GradientTab implementation
 //
 #include "GradientTab.h"
 #include "logger.h"

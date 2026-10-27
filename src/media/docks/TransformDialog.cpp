@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TransformDialog implementation - P1.4.6 (2026-09-17)
+// TransformDialog implementation
 //
 // See TransformDialog.h for the design contract.
 

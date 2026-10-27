@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// AdjustmentPanel - P0-3.2 (2026-09-08) 完整实装
+// AdjustmentPanel - 完整实装
 //
 // 5 tab UI 完整接 P0-2 异步 + 5 tab 切换不丢参数 + 接 ImageEditCommand 撤销栈
 // P0-3.3 才升级为 LayerCommand
@@ -9,7 +9,7 @@
 #include "logger.h"
 
 #include "imageprocessor.h"
-#include "../imageworker/layers/LayerCommand.h"   // P0-3.3 (2026-09-08): LayerCommand::SetAdjustmentLut
+#include "../imageworker/layers/LayerCommand.h"   // LayerCommand::SetAdjustmentLut
 #include "../imageworker/layers/LayerStack.h"     // P0-3.3: LayerStack* + selection()
 
 #include <QtWidgets>  // 一次性 include 所有 QtWidgets (QSlider/QLabel/QPushButton/QGridLayout/etc)
@@ -239,7 +239,7 @@ AdjustmentPanel::AdjustmentPanel(QWidget* parent) : QWidget(parent)
 
     // tab 切换
     connect(m_tabWidget, &QTabWidget::currentChanged, this, [this](int idx) {
-        // P0-3.3 (2026-09-08): 切 tab 立即 commit pending undo
+        // 切 tab 立即 commit pending undo
         //   用户在 tab A 调了一堆后切到 tab B, debounce 200ms 可能还没到
         //   立即 push 之前 tab A 的 undo, 避免 tab B 的 adjust 把"before"覆盖
         //   设计原则: 切 tab = "完成当前 tab 调整", 强制 commit
@@ -252,7 +252,7 @@ AdjustmentPanel::AdjustmentPanel(QWidget* parent) : QWidget(parent)
         switchToTab(idx);
     });
 
-    // P0-3.3 (2026-09-08): debounce commit timer
+    // debounce commit timer
     //   200ms 静默期到就 push 一条 LayerCommand, 避免拖动时撤销栈爆炸
     m_commitTimer = new QTimer(this);
     m_commitTimer->setSingleShot(true);
@@ -676,7 +676,7 @@ cv::Mat AdjustmentPanel::buildCurrentTabLut() const
 //   跟 P0-2 ImageAdjustmentPanel::asyncApplyCurrentParams 同样的取消语义:
 //     - 每次 apply 分配新 task id, 旧 in-flight task 完成后主线程发现 id 变了, 直接 return
 //     - 完成后切主线程: setCurrentImage (不再立即 push undo, 改由 debounce commit 处理)
-// P0-3.3 (2026-09-08): undo 集成 LayerCommand::SetAdjustmentLut
+// undo 集成 LayerCommand::SetAdjustmentLut
 //   - 拖动过程中多次 applyCurrentTab 只 push 一条 undo (debounce 200ms)
 //   - debounce timeout 后 commitUndoDebounced() push 一条 LayerCommand
 //   - m_pendingBefore: debounce 窗口起始时的"before" image (首次 valueChanged 时 snapshot)
@@ -686,7 +686,7 @@ void AdjustmentPanel::applyCurrentTab()
     if (!m_host) return;
     if (m_host->originalImage().empty()) return;
 
-    // P0-3.3 (2026-09-08): 首次 valueChanged 在 debounce 窗口内, snapshot "before" image
+    // 首次 valueChanged 在 debounce 窗口内, snapshot "before" image
     //   后续 valueChanged 在同一窗口内只刷新 m_pendingAfter (timer fire 时取 m_current)
     //   切 tab / 200ms 静默 → commitUndoDebounced → push LayerCommand
     if (m_pendingBefore.empty() && m_host->undoStack()) {
@@ -738,7 +738,7 @@ void AdjustmentPanel::applyCurrentTab()
                 [host, myTaskId, out = std::move(out)]() -> void {
                     if (host->currentTaskId().load() != myTaskId) return;  // 已被新 task 取代, 丢弃
                     if (out.empty()) return;
-                    // P0-3.3 (2026-09-08): setCurrentImage 完就 OK, undo 由 debounce timer 推
+                    // setCurrentImage 完就 OK, undo 由 debounce timer 推
                     host->setCurrentImage(out);
                 },
                 Qt::QueuedConnection);
@@ -764,7 +764,7 @@ void AdjustmentPanel::applyCurrentTab()
     }
 }
 
-// P0-3.3 (2026-09-08): debounce commit - timer 触发时 push 一条 LayerCommand::SetAdjustmentLut
+// debounce commit - timer 触发时 push 一条 LayerCommand::SetAdjustmentLut
 //   m_pendingBefore = debounce 窗口起始时的 image
 //   m_current = 当前 image (debounce 结束时的 image, 即调值后结果)
 //   如果两者相同 (用户没动), 不 push
@@ -801,7 +801,7 @@ void AdjustmentPanel::commitUndoDebounced()
 
 void AdjustmentPanel::pushUndoCommand()
 {
-    // P0-3.3 (2026-09-08): 改 commitUndoDebounced 实现, pushUndoCommand 是它的公开别名
+    // 改 commitUndoDebounced 实现, pushUndoCommand 是它的公开别名
     //   让外部 (对话框 / 拖动结束) 能强制立即 commit, 不等 200ms debounce
     if (m_commitTimer && m_commitTimer->isActive()) {
         m_commitTimer->stop();
@@ -810,7 +810,7 @@ void AdjustmentPanel::pushUndoCommand()
 }
 
 // =============================================================
-// P1.5.1 (2026-09-18): Standalone DialogFactory dispatcher
+// Standalone DialogFactory dispatcher
 //   CurvesAdjustDialog::applied(args) -> setStandaloneParams("Curves", args)
 //   路由到对应 applyXxxFromArgs, 更新 m_* struct + 刷 UI + applyCurrentTab
 // =============================================================
@@ -825,7 +825,7 @@ void AdjustmentPanel::setStandaloneParams(const QString& dialogId, const QVarian
     } else if (dialogId == "ChannelMixer") {
         applyChannelMixerFromArgs(args);
     } else if (dialogId == "HSL") {
-        // P0 leftover review (2026-09-21): HslAdjustDialog rewritten to use
+        // HslAdjustDialog rewritten to use
         //   8 hue + 8 sat + 1 lightness (PS-compatible). Args land here.
         applyHslFromArgs(args);
     } else {
@@ -927,7 +927,7 @@ void AdjustmentPanel::applyChannelMixerFromArgs(const QVariantMap& args)
     applyCurrentTab();
 }
 
-// P0 leftover review (2026-09-21): HSL standalone dialog args land
+// HSL standalone dialog args land
 //   here. 8 hue + 8 sat + 1 lightness (PS-compatible band layout:
 //   master + R, Y, G, C, B, M).
 void AdjustmentPanel::applyHslFromArgs(const QVariantMap& args)

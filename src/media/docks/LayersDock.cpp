@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayersDock implementation - F-G.2 (2026-09-09)
+// LayersDock implementation
 //
 #include "LayersDock.h"
 #include "logger.h"

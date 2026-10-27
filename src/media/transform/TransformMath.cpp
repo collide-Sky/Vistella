@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TransformMath implementation - P0-6.3 (2026-09-14)
+// TransformMath implementation
 //
 #include "TransformMath.h"
 
@@ -39,7 +39,7 @@ QTransform TransformMath::computeTransform(const TransformBox& box,
     return QTransform();
 }
 
-// P3.2.4 (2026-09-22): 用 origRect 算 Scale/Skew. Rotate/Distort 跟 origRect 无关.
+// 用 origRect 算 Scale/Skew. Rotate/Distort 跟 origRect 无关
 QTransform TransformMath::computeTransformWithOrigin(const TransformBox& box,
                                                       TransformBox::Handle handle,
                                                       const QPointF& newPos,
@@ -150,7 +150,7 @@ QTransform TransformMath::skewMatrix(const QRectF& rect, TransformBox::Handle ha
 QTransform TransformMath::distortMatrix(const QRectF& origRect, const QPointF* corners)
 {
     if (!corners) return QTransform();
-    // P3.2.1 (2026-09-22): src = origRect 4 角 (TL/TR/BR/BL), dst = 扭曲后 corners.
+    // src = origRect 4 角 (TL/TR/BR/BL), dst = 扭曲后 corners
     //   旧实现 quadToQuad(src, src) 两边相同, 数学上退化成 identity (src == dst),
     //   4 角拖动后根本没产生透视/仿射变换 — Distort 模式视觉无变化.
     QPolygonF src;

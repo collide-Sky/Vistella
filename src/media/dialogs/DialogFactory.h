@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// DialogFactory - F-K (2026-09-09)
+// DialogFactory
 //
 // 5 个色彩调整 dialog 工厂. dialogId:
 //   - "HSL"          (F-K 实装)

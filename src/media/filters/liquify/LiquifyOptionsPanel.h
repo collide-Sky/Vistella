@@ -58,7 +58,7 @@ signals:
     void showFrozenChanged(bool show);
     void resetRequested();
 
-    // P1.2.7 (2026-09-16): Face-aware Liquify.
+    // Face-aware Liquify
     // Emitted when the user clicks "Detect Faces" -- the dialog should run
     // the FaceDetector and populate the face combobox via setFaces().
     void detectFacesRequested();

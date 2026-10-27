@@ -240,17 +240,17 @@ void tst_Path_OpenEditUndoRedoSave::save_overwrites_source_and_survives_reopen()
 }
 
 // ---------------------------------------------------------------------------
-//  Known defect guard.
+//  A capability path must not produce Qt warnings.
 //
-//  Constructing ImageWindow currently emits three
-//  "QStackedWidget::setCurrentWidget: widget not contained in stack"
-//  warnings: a V*Page is parented into two different tab widgets, so the
-//  second one steals it from the first stack.
-//  See docs/DEBT.md#A-STACKWIDGET.
+//  Regression guard for docs/DEBT.md#A-STACKWIDGET: VDraggableTabWidget used to
+//  insert the tab into the tab bar before the page reached the stack, so the
+//  first tab of every stack made QStackedWidget warn "widget not contained in
+//  stack". Three of those warnings were emitted on every ImageWindow
+//  construction.
 //
-//  QEXPECT_FAIL means: the assertion is expected to fail for now. The day
-//  the defect is fixed the assertion passes and this test FAILS, which is
-//  the signal to drop the QEXPECT_FAIL line. Nothing is hidden.
+//  The guard asserts the warnings are gone. If a new one appears, this test
+//  goes red and the defect is found by the build instead of by a human
+//  scrolling a log.
 // ---------------------------------------------------------------------------
 void tst_Path_OpenEditUndoRedoSave::constructing_window_emits_no_unknown_qt_warning()
 {
@@ -261,19 +261,11 @@ void tst_Path_OpenEditUndoRedoSave::constructing_window_emits_no_unknown_qt_warn
     }
 
     for (const QString& m : rec.messages()) {
-        if (m.contains(QStringLiteral("not contained in stack"))) {
-            continue;   // known defect, counted by the assertion below
-        }
         qWarning() << "unexpected Qt message:" << m;
     }
 
-    // QEXPECT_FAIL(dataIndex, comment, mode): the mode is passed unqualified,
-    // the macro already prefixes it with QTest::. A non data-driven test uses
-    // an empty dataIndex (same pattern as Qt's own testlib tests).
-    QEXPECT_FAIL("",
-                 "known defect: see docs/DEBT.md#A-STACKWIDGET",
-                 Continue);
     QCOMPARE(rec.warningCount(), 0);
+    QCOMPARE(rec.criticalCount(), 0);
 }
 
 QTEST_MAIN(tst_Path_OpenEditUndoRedoSave)

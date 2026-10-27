@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TextOptionPanel implementation - Q4.2.2 (2026-09-24)
+// TextOptionPanel implementation
 //
 #include "TextOptionPanel.h"
 #include "TextOverlayController.h"

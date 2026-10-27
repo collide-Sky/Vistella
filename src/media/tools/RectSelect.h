@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// RectSelect - F-L (2026-09-10) + P0-4.5 (2026-09-10)
+// RectSelect
 //
 // PS-style RectSelect tool. P0-4 stage: drag rectangle -> SelectionModel mask.
 //   - Strategy pattern: holds RectSelectionStrategy instance

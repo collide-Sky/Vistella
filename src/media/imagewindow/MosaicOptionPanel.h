@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// MosaicOptionPanel - Q4.2.2 (2026-09-24)
+// MosaicOptionPanel
 //
 // PS-style options panel for MosaicTool. Migrated from imagewindow.ui
 // hardcoded groupMosaic (slider size + mode button + 4-type combo +

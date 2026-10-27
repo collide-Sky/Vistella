@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushPickerDialog - P1.1 (2026-09-15) Brush full implementation
+// BrushPickerDialog - Brush full implementation
 //   PS-style preset browser. Modal dialog with grid of preset thumbnails.
 //   Double-click selects a preset and emits presetSelected().
 //   "Load ABR..." button imports .abr brushes (parsing in P1.1 follow-up).

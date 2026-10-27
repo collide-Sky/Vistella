@@ -2,7 +2,7 @@
 #define BLENDMODE_H
 
 // =============================================================
-// BlendMode — 阶段 1 W4.3 Phase 2 11 种 PS 混合模式 (2026-09-04)
+// BlendMode — 11 种 PS 混合模式
 //
 // PS 15 种混合模式; Phase 2 实现 11 种基础 + 4 种 HSV 复合 (Hue/Sat/Color/Luminosity):
 //   基础 (11):

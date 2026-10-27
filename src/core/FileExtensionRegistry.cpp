@@ -6,7 +6,7 @@ namespace FileExtensionRegistry {
 
 namespace {
 
-// 决策 5 扩展名清单 (2026-09-02 跟用户确认, 阶段 1 扩展图形处理, 3D 模型相关全删)
+// 决策 5 扩展名清单 (跟用户确认, 扩展图形处理, 3D 模型相关全删)
 struct ModuleExt {
     const char *id;
     QStringList exts;
@@ -15,7 +15,7 @@ struct ModuleExt {
 const QHash<QString, QStringList> &buildTable()
 {
     static const QHash<QString, QStringList> kTable = {
-        // imageWorker - 图像处理 (PS+Lr 风格, 阶段 1 主战场)
+        // imageWorker - 图像处理 (PS+Lr 风格, 主战场)
         { QStringLiteral("imageWorker"), {
             QStringLiteral(".png"),
             QStringLiteral(".jpg"),
@@ -24,7 +24,7 @@ const QHash<QString, QStringList> &buildTable()
             QStringLiteral(".webp"),
             QStringLiteral(".tif"),
             QStringLiteral(".tiff"),
-            // P3.5 (2026-09-23): Camera Raw 扩展名 (libraw 解码).
+            // Camera Raw 扩展名 (libraw 解码)
             //   不依赖 libraw 编译 (CameraRawLoader 提供 stub 接口); 用户
             //   启动后调 onOpenRawFile 自动拦截这些扩展名, 没 libraw 时返错误.
             QStringLiteral(".cr2"),
@@ -40,7 +40,7 @@ const QHash<QString, QStringList> &buildTable()
             QStringLiteral(".x3f"),
             QStringLiteral(".nrw"),
         }},
-        // audioWorker - 音频处理 (Audition+ffmpeg, 阶段 2 扩展)
+        // audioWorker - 音频处理 (Audition+ffmpeg, 扩展)
         { QStringLiteral("audioWorker"), {
             QStringLiteral(".wav"),
             QStringLiteral(".mp3"),
@@ -48,7 +48,7 @@ const QHash<QString, QStringList> &buildTable()
             QStringLiteral(".aac"),
             QStringLiteral(".ogg"),
         }},
-        // videoWorker - 视频处理 (PR+剪映, 阶段 3 扩展)
+        // videoWorker - 视频处理 (PR+剪映, 扩展)
         { QStringLiteral("videoWorker"), {
             QStringLiteral(".mp4"),
             QStringLiteral(".mkv"),
@@ -56,7 +56,7 @@ const QHash<QString, QStringList> &buildTable()
             QStringLiteral(".mov"),
             QStringLiteral(".webm"),
         }},
-        // visionWorker - 视觉处理 (YOLO 工业检测, 阶段 1 扩展图形处理)
+        // visionWorker - 视觉处理 (YOLO 工业检测, 扩展图形处理)
         //   跟 imageWorker 共享扩展名 (vision 跑在图像上)
         { QStringLiteral("visionWorker"), {
             QStringLiteral(".png"),
@@ -98,7 +98,7 @@ QStringList extensionsFor(const QString &moduleId)
     return buildTable().value(moduleId);
 }
 
-// 阶段 1 前置优化 (2026-09-03): 优先返回通用模块 (imageWorker / audioWorker / videoWorker),
+//  前置优化 优先返回通用模块 (imageWorker / audioWorker / videoWorker)
 //   visionWorker (工业检测/YOLO) 作为兜底.
 //   决策 5 中 visionWorker 跟 imageWorker 共享扩展名, QHash 遍历顺序未定义,
 //   默认走通用 imageWorker 更符合用户期望 (用户拖普通照片不应自动走 YOLO).

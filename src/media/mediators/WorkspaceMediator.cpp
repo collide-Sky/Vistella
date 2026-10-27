@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// WorkspaceMediator 实现 - F-B2 (2026-09-08)
+// WorkspaceMediator 实现
 //
 #include "WorkspaceMediator.h"
 #include "logger.h"
@@ -10,7 +10,7 @@ namespace mediators {
 WorkspaceMediator::WorkspaceMediator(QObject* parent) : QObject(parent)
 {
     buildDefaultWorkspaces();
-    // F-B2 (2026-09-08) 修正: 从当前工作区 DockConfig.visible 初始化
+    // 修正: 从当前工作区 DockConfig.visible 初始化
     //   之前全部填 true → Photo/Paint 的 dock 2 (visible=false) 被强制覆盖为 true
     //   现在按 DockConfig 显隐配置填, 切工作区时也按这个重置
     const auto docks = m_workspaces.value(m_current);
@@ -91,7 +91,7 @@ void WorkspaceMediator::switchWorkspace(WorkspaceId id)
     if (m_current == id) return;
     LOG_INFO("[WorkspaceMed] switchWorkspace: {} -> {}", static_cast<int>(m_current), static_cast<int>(id));
     m_current = id;
-    // F-B2 (2026-09-08) 修正: 从新工作区 DockConfig.visible 重置
+    // 修正: 从新工作区 DockConfig.visible 重置
     //   之前全填 true → Photo dock 2 visible=false 被覆盖
     const auto docks = m_workspaces.value(m_current);
     m_dockVisible.resize(docks.size());

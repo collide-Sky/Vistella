@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// RenderGraph impl - P8.1 (2026-10-16) + P8.4 (2026-10-16)
+// RenderGraph impl
 
 #include "RenderGraph.h"
 
@@ -224,7 +224,7 @@ cv::Mat RenderGraph::requestNodeTile(CompositorNode::NodeId n,
     // call ctx.requestNodeTile() on its upstream nodes if needed.
     cv::Mat tile = node->compute(tileX, tileY, *m_grid, ctx);
 
-    // P8.4.x (2026-10-19): per-tile backend dispatch. When a registry
+    // per-tile backend dispatch. When a registry
     // is set, run the freshly-computed tile through the picked backend
     // before caching. The cache key stays the same so repeat renders
     // still hit (no double-dispatch).

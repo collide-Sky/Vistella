@@ -8,7 +8,7 @@
 #include <QFrame>
 #include <QLabel>
 
-// 8 套预设 accent 颜色 (阶段 0 占位, 阶段 5+ 由 ThemeManager 注册表提供)
+// 8 套预设 accent 颜色 (未接 ThemeManager 注册表, 见 docs/DEBT.md#A-THEME)
 struct AccentPreset {
     QString name;   // 内部 id
     QString hex;    // #RRGGBB
@@ -46,7 +46,7 @@ ThemeGalleryDialog::~ThemeGalleryDialog()
 void ThemeGalleryDialog::setupAccentPalette()
 {
     // 把 .ui 里预留的 8 个 toolButton (accent01..accent08) 绑成互斥组,
-    // 点哪个就更新预览 (阶段 0 不发信号也不持久化)
+    // 点哪个就更新预览 (不发信号也不持久化)
     if (!ui->accentGrid) return;
 
     QButtonGroup *group = new QButtonGroup(this);
@@ -59,7 +59,7 @@ void ThemeGalleryDialog::setupAccentPalette()
         QToolButton *btn = findChild<QToolButton *>(btnName);
         if (!btn) continue;
 
-        // 用 setStyleSheet 给按钮填色 (阶段 0 简单做法, 阶段 5+ 用 theme-aware qproperty)
+        // 用 setStyleSheet 给按钮填色 (简单做法; 计划改用 theme-aware qproperty)
         QString qss = QString("QToolButton { background-color: %1; border: 1px solid #80808080; border-radius: 4px; }"
                               "QToolButton:hover { border: 1px solid %1; }"
                               "QToolButton:checked { border: 2px solid #ffffff; outline: 2px solid %1; }")
@@ -80,7 +80,7 @@ void ThemeGalleryDialog::setupAccentPalette()
         connect(btn, &QToolButton::clicked, this, &ThemeGalleryDialog::onAccentClicked);
     }
 
-    // 模式 radio (light / dark) 阶段 0 占位
+    // 模式 radio (light / dark) 未接 ThemeManager
     if (ui->lightRadio) {
         ui->lightRadio->setChecked(true);
         connect(ui->lightRadio, &QRadioButton::toggled, this, &ThemeGalleryDialog::onModeToggled);
@@ -128,13 +128,14 @@ void ThemeGalleryDialog::updatePreview()
 
 void ThemeGalleryDialog::onApplyClicked()
 {
-    // 阶段 0 占位: 不真调 ThemeManager
-    // 阶段 5+: ThemeManager::instance().setAccentColor(m_currentAccent);
+    //  未实装: 不调 ThemeManager (见 docs/DEBT.md#A-THEME)
+    // ThemeManager::instance.setAccentColor(m_currentAccent)  // 未实装, 见 docs/DEBT.md#A-THEME
     //           ThemeManager::instance().setMode(m_currentMode == 0 ? Light : Dark);
     //           ThemeManager::instance().persistToSettings();
+    // TODO(P8.9): the gallery never reaches ThemeManager, so the accent and mode choices are thrown away -- see docs/DEBT.md#A-THEME
     QMessageBox::information(this,
                              tr("主题画廊"),
-                             tr("已选中 accent=%1, mode=%2\n阶段 0 仅占位, 阶段 5+ 真正接入 ThemeManager.")
+                             tr("已选中 accent=%1, mode=%2\n尚未接入主题管理器.")
                                  .arg(m_currentAccent)
                                  .arg(m_currentMode == 0 ? tr("亮色") : tr("暗色")));
     accept();

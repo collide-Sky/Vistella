@@ -2,7 +2,7 @@
 #define USERMANAGER_H
 
 // =============================================================
-// UserManager — 用户管理单例 (阶段 0 第 4 步)
+// UserManager — 用户管理单例
 //
 // 状态机:
 //   Guest            未登录
@@ -10,11 +10,11 @@
 //   Authenticated    登录成功, 有 user / token
 //   Offline          离线模式 (本地有缓存 user, 但 token 过期, 自动登录失败)
 //
-// 阶段 0 占位:
+//mock 实现
 //   - login / registerLocal / logout 都是 NoOp + emit 状态变化
-//   - 网络层 (AuthClient) 留阶段 5
+//   网络层 (AuthClient) 留给接真 OAuth 时用
 //   - 自动登录 (tryAutoLogin) 只读本地 SQLite, 找到 user 就切到 Authenticated
-// 阶段 5+:
+//  接真 OAuth 时 (未实装, 见 docs/DEBT.md#A-AUTH):
 //   - 接 AuthClient (QQ/微信/手机号/GitHub OAuth)
 //   - token 加密存数据库
 // =============================================================
@@ -50,20 +50,20 @@ public:
     User currentUser() const { return m_currentUser; }
     bool isLoggedIn() const { return m_state == Authenticated; }
 
-    // ----- 网络登录 (阶段 5 接 OAuth, 阶段 0 占位 NoOp) -----
-    //   阶段 0: emit Authenticating → Authenticated/Failed (模拟, 不真发网络请求)
-    //   阶段 5: 调 AuthClient, 成功后 saveUser + saveToken + emit loginSucceeded
+    // 网络登录 (接 OAuth; mock 实现是 NoOp)
+    //   emit Authenticating → Authenticated/Failed (模拟, 不真发网络请求)
+    //   调 AuthClient, 成功后 saveUser + saveToken + emit loginSucceeded
     void login(const QString &username, const QString &password);
     void loginWithToken(const QString &accessToken);
     void logout();
 
     // ----- 本地注册 (offline-first) -----
-    //   阶段 0: 直接 create User + saveUser + emit Authenticated
+    //   直接 create User + saveUser + emit Authenticated
     void registerLocal(const QString &username, const QString &password);
 
     // ----- 自动登录 (启动时调) -----
-    //   从本地 SQLite 读最近 user + token, 阶段 0 直接 emit Authenticated
-    //   阶段 5: 调 AuthClient.refreshToken 验证 token 是否有效, 失败回 Offline
+    //   从本地 SQLite 读最近 user + token, 直接 emit Authenticated
+    //   调 AuthClient.refreshToken 验证 token 是否有效, 失败回 Offline
     void tryAutoLogin();
 
     // ----- 调试 / 查询 -----
@@ -76,7 +76,7 @@ signals:
     void loginSucceeded(const User &user);
     void loginFailed(const QString &reason);
     void userInfoUpdated(const User &user);
-    void networkError(const QString &err);   // 阶段 5+
+    void networkError(const QString &err);   
 
 private:
     explicit UserManager(QObject *parent = nullptr);

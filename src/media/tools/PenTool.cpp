@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// PenTool implementation - P0-9.2 (2026-09-15)
+// PenTool implementation
 //
 // 详见 PenTool.h 头注释
 //

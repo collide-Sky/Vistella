@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// IccPngEmbed implementation - P0-8.3 (2026-09-15)
+// IccPngEmbed implementation
 //
 // PNG iCCP chunk 嵌入
 //   不依赖 libpng, 直接用 Qt + LCMS2 (zlib 压缩)

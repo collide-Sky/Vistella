@@ -5,74 +5,74 @@
 #include "mediators/ToolMediator.h"
 
 #include "imageprocessor.h"
-// P0-1.4 (2026-09-07): recentmanager.h 移到 ImageIOController.cpp (open/save 段搬走)
+// recentmanager.h 移到 ImageIOController.cpp (open/save 段搬走)
 #include "../core/ThemeManager.h"
 
-// P0-1.2 (2026-09-07): 组件 include
+// 组件 include
 #include "imagewindow/TextOverlayController.h"
 #include "imagewindow/MosaicTool.h"
 #include "imagewindow/ImageIOController.h"
 #include "imagewindow/ImageCanvas.h"
-// Q4.2.1 (2026-09-23): LeftToolBar + ImageOptionBar 接入左侧 dock
-//   之前 F-D/F-E (2026-09-09) 写完 cpp/h/ui 但 ctor 从没创建 — 真实接入, 不放占位
+// LeftToolBar + ImageOptionBar 接入左侧 dock
+//   之前写完 cpp/h/ui 但 ctor 从没创建 — 真实接入, 不做假控件
 #include "tools/LeftToolBar.h"
 #include "tools/ImageOptionBar.h"
-#include "tools/BrushOptionsPanel.h"  // P7.6.x (2026-10-14): m_brushOpt member
-#include "tools/LeftSidePanel.h"     // P7.6.x v2 (2026-10-14): 单容器装 4 左侧 widget
-// P0-3.2 (2026-09-08): 新组件 AdjustmentPanel (5 tab 色彩调整)
+#include "tools/BrushOptionsPanel.h"  // m_brushOpt member
+#include "tools/LeftSidePanel.h"     // 单容器装 4 左侧 widget
+// 新组件 AdjustmentPanel (5 tab 色彩调整)
 #include "imagewindow/AdjustmentPanel.h"
 #include "mediators/DialogMediator.h"
 #include "dialogs/AdjustDialogBase.h"
-// F-G.3 (2026-09-09): RightPanelStack 3 dock (颜色/属性/图层) — 浮动在 imagewindow 右上角
+// RightPanelStack 3 dock (颜色/属性/图层) — 浮动在 imagewindow 右上角
 #include "docks/RightPanelStack.h"
 #include "docks/RightPanelDock.h"
 #include "docks/LayersDock.h"
 #include "docks/ChannelPathPanel.h"
 #include "docks/PropertiesDock.h"
 #include "docks/HistoryDock.h"
-#include "docks/ColorDock.h"  // P6 (2026-10-09): RightPanelDock connectors
+#include "docks/ColorDock.h"  // RightPanelDock connectors
 #include "tools/Brush.h"      // P6: dynamic_cast to setPaintColor
-// P1.4.3 (2026-09-17): LayerPanel 实例化 + 注入 LayersDock tab 0
+// LayerPanel 实例化 + 注入 LayersDock tab 0
 //   LayerPanel 信号接通需要完整 LayerPanel.h + LayerCommand.h 定义
 #include "imageworker/layers/LayerPanel.h"
 #include "imageworker/layers/LayerCommand.h"
-// P1.4.6 (2026-09-17): Unified transform dialog replaces chained QInputDialog.
+// Unified transform dialog replaces chained QInputDialog
 #include "docks/TransformDialog.h"
 #include "../media/mediators/WorkspaceMediator.h"
-// P0-4 (2026-09-10): selection system
+// selection system
 #include "selection/SelectionModel.h"
 #include "selection/SelectionStrategy.h"
 #include "selection/SelectionCommand.h"
-// P0-5 (2026-09-10): filter system
+// filter system
 #include "filters/FilterStrategy.h"
 #include <QMutex>        // P3.1.3 preview registry mutex
 #include <QMutexLocker>  // P3.1.3 preview registry lock guard
 #include <QHash>         // P3.1.3 preview registry map
 #include "filters/FilterFactory.h"
 #include "filters/FilterCommand.h"
-// F-N (2026-09-10): ToolContext (state machine) for 8 tools event forwarding
+// ToolContext (state machine) for 8 tools event forwarding
 #include "tools/ToolContext.h"
-// P0-6.9 (2026-09-14): TransformTool 接入 (Ctrl+T 自由变换)
+// TransformTool 接入 (Ctrl+T 自由变换)
 #include "tools/TransformTool.h"
-// P0-6.6 (2026-09-14): transform system (6 menu action + 8 handle 自由变换)
+// transform system (6 menu action + 8 handle 自由变换)
 #include "transform/TransformBox.h"
 #include "transform/TransformCommand.h"
 
-// P0-1.4 (2026-09-07): QFileDialog / QDir / QMessageBox moved to
+// QFileDialog / QDir / QMessageBox moved to
 //   ImageIOController.cpp (open / save / saveAs segments relocated;
 //   no longer used in imagewindow.cpp).
-// P1.4.6 (2026-09-17): SmartObject source-changed prompt upgraded to
+// SmartObject source-changed prompt upgraded to
 //   QMessageBox (Yes / No so user can decide whether to refresh).
 #include <QFileInfo>
 #include <QMessageBox>
-// P5.5+ (2026-10-09): AppBar onCaptureRequested uses QPixmap + QStandardPaths + QDir + QDateTime.
+// AppBar onCaptureRequested uses QPixmap + QStandardPaths + QDir + QDateTime
 #include <QPixmap>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QStandardPaths>
 #include <QDir>
 #include <QDateTime>
-// P1.4.3 (2026-09-17): LayerPanel 信号接通需要 (EditSource 打开源 / Relink 选源 / URL 包装)
+// LayerPanel 信号接通需要 (EditSource 打开源 / Relink 选源 / URL 包装)
 #include <QDesktopServices>
 #include <QUrl>
 #include <QFileDialog>
@@ -140,7 +140,7 @@ void TextItemCommand::undo()
         // Add undo: 移除 item
         if (m_item.isNull()) return;
         win->unregisterTextItem(m_item.data());
-        // P0-1.3 (2026-09-07): m_scene 搬到 m_canvas
+        // m_scene 搬到 m_canvas
         win->m_canvas->scene()->removeItem(m_item.data());
         delete m_item.data();
         m_item = nullptr;
@@ -150,7 +150,7 @@ void TextItemCommand::undo()
         item->setPosition(m_oldPos);
         item->setRotationDeg(m_oldRot);
         item->restoreFromText(m_oldText);
-        // P0-1.3 (2026-09-07): m_scene 搬到 m_canvas
+        // m_scene 搬到 m_canvas
         win->m_canvas->scene()->addItem(item);
         win->registerTextItem(item);
         m_item = item;
@@ -182,7 +182,7 @@ void TextItemCommand::redo()
         item->setPosition(m_oldPos);
         item->setRotationDeg(m_oldRot);
         item->restoreFromText(m_oldText);
-        // P0-1.3 (2026-09-07): m_scene 搬到 m_canvas
+        // m_scene 搬到 m_canvas
         win->m_canvas->scene()->addItem(item);
         win->registerTextItem(item);
         // 关键: 重新 connect editingFinished + transformFinished, 否则 redo 后的 item
@@ -197,7 +197,7 @@ void TextItemCommand::redo()
         }
         if (!m_item.isNull()) {
             win->unregisterTextItem(m_item.data());
-            // P0-1.3 (2026-09-07): m_scene 搬到 m_canvas
+            // m_scene 搬到 m_canvas
             win->m_canvas->scene()->removeItem(m_item.data());
             delete m_item.data();
             m_item = nullptr;
@@ -258,7 +258,7 @@ void ImageEditCommand::redo()
 {
     if (m_w.isNull()) return;
     if (m_useImage) {
-        // P2.5 bug fix (2026-09-22): redo is a no-op for the m_useImage
+        // redo is a no-op for the m_useImage
         //   path. Callers (MosaicTool/CloneTool/PatchTool/Crop/Brush/
         //   RedEyeTool/MainWindow::resizeImage) have already applied the
         //   "after" image (either via setCurrentImage or in-place m_current
@@ -290,7 +290,7 @@ ImageWindow::ImageWindow(QWidget *parent)
     // 否则 QMainWindow 内部会创建隐藏的 native window, 关闭时留下残影
     setWindowFlags(Qt::Widget);
 
-    // P0-2 (2026-09-08): EngineContext 实例化
+    // EngineContext 实例化
     //   Profile::ImageEditor = 5 池预设 (interactive / background / io / ai / offline)
     //   显式传 hw=2 限 2 线程 - 跟开发机 4 核环境下 background 池开 4 线程的默认行为相比,
     //   减少一些上下文切换开销, 也避免某些 CI 机器 (1-2 核) 起 4 线程池被 OOM
@@ -299,17 +299,17 @@ ImageWindow::ImageWindow(QWidget *parent)
             vistella::tp::EngineContext::Profile::ImageEditor, 2));
     m_currentTaskId.store(0);
 
-    // P0-1.3 (2026-09-07): 画布搬到 ImageCanvas 组件
-    //   Stage E (2026-09-15): m_canvas 替换 ui->graphicsView 实际进入 verticalLayout
+    // 画布搬到 ImageCanvas 组件
+    //   m_canvas 替换 ui->graphicsView 实际进入 verticalLayout
     //   之前: m_canvas 创建后 parent = this (顶层), 没进 layout, 跑到 (0,0) 显示成小方块
-    //         ui->graphicsView 是空 QGraphicsView 占位, 显示空白
+    //         ui->graphicsView 是空 QGraphicsView 容器, 显示空白
     //   现在: 拿掉 ui->graphicsView, 把 m_canvas 加进 verticalLayout, canvas 占满中央
     //   P7.6.x: raw pointer — parent = this 暂时, verticalLayout->addWidget 会 reparent
     m_canvas = new ImageCanvas(this);
     m_canvas->setHost(this);
-    // 用 m_canvas 替换 verticalLayout 里的 ui->graphicsView 占位 (Qt 转移所有权)
+    // 用 m_canvas 替换 verticalLayout 里的 ui->graphicsView 容器 (Qt 转移所有权)
     if (ui->graphicsView) {
-        // 1. 隐藏/脱离原 ui->graphicsView (空占位)
+        // 1. 隐藏/脱离原 ui->graphicsView (空容器)
         ui->graphicsView->setParent(nullptr);
         ui->graphicsView->hide();
         // 2. m_canvas 重新 parent 到 centralWidget (verticalLayout 跟 centralWidget 同 owner)
@@ -327,7 +327,7 @@ ImageWindow::ImageWindow(QWidget *parent)
     // 笔刷光标 (默认隐藏, 鼠标移进 viewport 才显示)
     //   P0-1.3: m_brushCursor 加到 m_canvas->scene() (原 m_scene)
     {
-        // Q4.2.2 (2026-09-24): 默认 30 px (跟 MosaicOptionPanel slider 默认一致)
+        // 默认 30 px (跟 MosaicOptionPanel slider 默认一致)
         const int initialSize = 30;
         const int r0 = initialSize / 2;
         m_brushCursor = m_canvas->scene()->addEllipse(-r0, -r0,
@@ -342,14 +342,14 @@ ImageWindow::ImageWindow(QWidget *parent)
     }
 
     buildActions();
-    // P5.5 (2026-10-09): applyPanelTheme() removed — applied dead stylesheet
+    // applyPanelTheme removed — applied dead stylesheet
     //   to the now-deleted imagewindow.ui leftPanel. Dock widgets pick up
     //   their visuals from Qt theming instead. ThemeManager::themeChanged
     //   signal connect below also removed.
 
-    // P0-1.2 (2026-09-07): 实例化 5 个组件
+    // 实例化 5 个组件
     //   这一轮 P0-1.2 只用 m_textCtrl + m_mosaicTool, 其他 nullptr 占位等下一轮
-    // Q4.2.2 (2026-09-24): 默认值硬编码 (之前从 ui 占位控件读)
+    // 默认值硬编码 (之前从 ui 占位控件读)
     //   - 字体 Microsoft YaHei UI (跟 TextOverlayController::m_textFont 默认一致)
     //   - 字号 24 (跟 P0-7 默认一致)
     //   - 涂抹 size 30 (跟 .ui sliderMosaicSize 默认一致)
@@ -365,16 +365,16 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_mosaicTool->setSize(30);
     m_mosaicTool->setType(MosaicTool::Pixelate);
 
-    // P0-1.4 (2026-09-07): IO 控制器 (open / save / saveAs / close) 实例化
+    // IO 控制器 (open / save / saveAs / close) 实例化
     //   接管原 ImageWindow::onOpen / onSave / onSaveAs / onClose 4 个 slot
     //   m_io 持有 m_host (this) 引用, 通过 friend class + 代理方法触发
     //   markSaved / setFilePath / emitEditTimeShouldUpdate / emitCloseRequested
     m_io = std::make_unique<ImageIOController>(this);
     m_io->setHost(this);
 
-    // F-G.3 Fix (2026-09-10): PS 风格右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
+    // PS 风格右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
     //   撤销原 3 个分离 dock (RightPanelStack + adjDock + infoDock) + addDockWidget 抢画布位置
-    // Stage C (2026-09-15): 走 Qt 原生 addDockWidget + resizeDocks (替代 setGeometry 浮动)
+    // 走 Qt 原生 addDockWidget + resizeDocks (替代 setGeometry 浮动)
     //   之前: RightPanelDock 直接 setGeometry 浮动在右上角, 跟 centralWidget 抢画布位置,
     //         resize 不联动 (imagewindow 缩小后 dock 还停在原位置)
     //   现在: 包到 QDockWidget 走 RightDockWidgetArea, Qt 自动管理 dock 与 canvas 边界,
@@ -382,8 +382,8 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   P7.6.x: raw pointer — Qt takes ownership via setWidget() later.
     m_rightDock = new docks::RightPanelDock(this);
 
-    // P0-3.2 (2026-09-08): PS 风格色彩调整 UI (5 tab Curves/Levels/HSL/B&W/ChannelMixer)
-    //   P8.3.2 (2026-10-26): 直接用右侧面板自带的那个 AdjustmentPanel (属性组的
+    // PS 风格色彩调整 UI (5 tab Curves/Levels/HSL/B&W/ChannelMixer)
+    //   直接用右侧面板自带的那个 AdjustmentPanel (属性组的
     //   "Adjustments" 页), 不再单独 new 一个.
     //   之前 ImageWindow 自己 new 了一个 AdjustmentPanel(parent = this), 而
     //   setAdjustmentPanel() 早已是 deprecated 空壳 —— 那个面板从没进过任何
@@ -393,7 +393,7 @@ ImageWindow::ImageWindow(QWidget *parent)
     m_adjustmentPanel = m_rightDock->adjustmentPage()->inner();
     m_adjustmentPanel->setHost(this);
 
-    // P0 leftover 5 (2026-09-21): Per-window DialogMediator. Hosts the
+    // Per-window DialogMediator. Hosts the
     //   standalone Curves / Levels / B&W / ChannelMixer dialogs. The
     //   mediator self-wires to DialogFactory (P0 leftover 4); we add
     //   the applied() -> AdjustmentPanel::setStandaloneParams routing
@@ -411,22 +411,22 @@ ImageWindow::ImageWindow(QWidget *parent)
         });
     });
 
-    // P6 (2026-10-09): wire RightPanelDock connectors that were dangling before.
+    // wire RightPanelDock connectors that were dangling before
     //   Color fg/bg -> current Brush paint color; ChannelPathPanel selection
     //   save/load + Quick Mask three-way sync (AppBar / ChannelPathPanel / tool).
-    // P7.1 (2026-10-12): extend ColorDock fg/bg to also push into LeftToolBar
+    // extend ColorDock fg/bg to also push into LeftToolBar
     //   so the swatches at the bottom of the left toolbar stay in lockstep
     //   with the right-side Color dock (PS 风格 one swatch, two docks).
     //   Echo loops are guarded by the `if (m_xxx == c) return;` early-out in
     //   both setters, so the chain terminates after the first round.
-    // P7.6.x v3 commit 4 (2026-10-15): ColorDock moved into VColorPage ->
+    // ColorDock moved into VColorPage ->
     //   access via colorPage()->inner() (the underlying ColorTab widget).
     if (auto* colorPage = m_rightDock->colorPage()) {
         if (auto* colorTab = colorPage->inner()) {
             connect(colorTab, &docks::ColorTab::foregroundColorChanged,
                     this, &ImageWindow::onForegroundColorChanged);
         }
-        // P7.6.x v3 (2026-10-14): ColorDock fg/bg → LeftToolBar 同步搬到 MainWindow
+        // ColorDock fg/bg → LeftToolBar 同步搬到 MainWindow
         //   (MainWindow::bindLeftDockWidgets 在 active image 切换时连). 避免 ImageWindow
         //   仍然持有 m_leftToolBar 指针.
     }
@@ -455,24 +455,24 @@ ImageWindow::ImageWindow(QWidget *parent)
 
     addDockWidget(Qt::RightDockWidgetArea, m_rightDockContainer);
     resizeDocks({m_rightDockContainer}, {340}, Qt::Horizontal);
-    // P8.3.2 (2026-10-26): resizeDocks() only sets the initial width. Without
+    // resizeDocks only sets the initial width. Without
     //   a range the user could drag the panel to any width, including widths
     //   that squeeze the layer list and the colour swatches into nothing.
     m_rightDockContainer->setMinimumWidth(280);
     m_rightDockContainer->setMaximumWidth(560);
 
-    // P1.3.4 (2026-09-17): ToolMediator per-ImageWindow (parent = this)
+    // ToolMediator per-ImageWindow (parent = this)
     //   Owns Mediator, hands raw pointer to ToolContext; both LeftToolBar and
     //   MainWindow's menu actions can now reach it through toolMediator().
     m_toolMed = std::make_unique<mediators::ToolMediator>(this);
 
-    // F-N (2026-09-10): ToolContext 实例化 (state machine for 8 tools)
+    // ToolContext 实例化 (state machine for 8 tools)
     //   m_ctx 在 ctor 创建, eventFilter 通过 m_ctx->onMouseXxx 转发给 current ToolState
     //   attach 后 LeftToolBar/ImageOptionBar 可以通过 toolContext() 拿到
     m_ctx = std::make_unique<tools::ToolContext>(this);
     m_ctx->attach(this, m_toolMed.get());
 
-    // P7.6.x v3 (2026-10-14): LeftSidePanel + 4 子 widget + m_brushOpt + 左 dock 容器
+    // LeftSidePanel + 4 子 widget + m_brushOpt + 左 dock 容器
     //   全部搬到 MainWindow (P7.6.x v3 commit 1). ImageWindow 只剩画布 + 业务数据 +
     //   右侧 dock (P7.6.x v3 commit 5+ 处理).
     //
@@ -486,7 +486,7 @@ ImageWindow::ImageWindow(QWidget *parent)
     //     - toolMediator() / toolContext() / mosaicTool() / textOverlay()
     //   都还在, MainWindow 直接拿.
 
-    // P7.6.x (2026-10-14): TopOptionBar 删除. 6 控件 (mode/opacity/flow/smoothing/
+    // TopOptionBar 删除. 6 控件 (mode/opacity/flow/smoothing/
     //   angle/size) 搬到 ImageOptionBar 内的 BrushOptionsPanel (idx=7).
     //   顶部工具栏 (QToolBar + addToolBar) 不再有, 中央画布上方就是 image 区域.
     //   顶部菜单栏 (QMenuBar) 仍然在 MainWindow 提供 视图→放大/缩小 入口.
@@ -494,13 +494,13 @@ ImageWindow::ImageWindow(QWidget *parent)
     // P5.5+ AppBar 初值: 标准屏幕模式 (启动时默认). 现在由 MainWindow 触发
     //   (AppBar 在 MainWindow 顶层, 不再跟 ImageWindow 挂钩).
 
-    // P7.6.x (2026-10-14): TopOptionBar 删除. 6 控件 (mode/opacity/flow/smoothing/
+    // TopOptionBar 删除. 6 控件 (mode/opacity/flow/smoothing/
     //   angle/size) 搬到 ImageOptionBar 内的 BrushOptionsPanel (idx=7).
     //   撮合在 ImageOptionBar::attach() 第 4 参数 brushOpt 里 (上面已经传入 m_brushOpt).
     //   顶部工具栏 (QToolBar + addToolBar) 不再有, 中央画布上方就是 image 区域.
     //   顶部菜单栏 (QMenuBar) 仍然在 MainWindow 提供 视图→放大/缩小 入口.
 
-    // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel no longer hosted
+    // MosaicOptionPanel + TextOptionPanel no longer hosted
     //   here. ImageOptionBar owns both and routes them per active tool
     //   (Brush -> Mosaic, Text -> Text). The Q4.2.2.1 leftPanel gridLayout_4
     //   hosting left them always visible (~200 + ~200 px blank chrome) which
@@ -509,7 +509,7 @@ ImageWindow::ImageWindow(QWidget *parent)
     // (imagewindow.ui gridLayout_4 stays empty for now as a reserved slot;
     //  it can host other widgets later, e.g. quick mask / screen mode.)
 
-    // P0-4 (2026-09-10): SelectionModel 实例化
+    // SelectionModel 实例化
     //   ImageCanvas 拿 selection 引用, drawForeground 画 marching ants 边界
     //   setSize 在 loadFile 后调, 跟 image 像素对齐
     m_selection = std::make_unique<selection::SelectionModel>(this);
@@ -523,7 +523,7 @@ ImageWindow::ImageWindow(QWidget *parent)
                     [this, props]() {
                 if (m_selection) props->setSelectionBbox(m_selection->boundingRect());
             });
-            // P0-7.4 (2026-09-14): PropertiesDock 同步 text item 选中状态
+            // PropertiesDock 同步 text item 选中状态
             //   TextOverlayController::currentChanged -> setTextProperties / clearTextProperties
             //   走 QPointer 防 item delete 后 dangling
             if (m_textCtrl) {
@@ -548,13 +548,13 @@ ImageWindow::ImageWindow(QWidget *parent)
         }
     }
 
-    // F-G.3 Fix (2026-09-10): ChannelPathPanel 现在是 RightPanelDock 第 4 tab
+    // ChannelPathPanel 现在是 RightPanelDock 第 4 tab
     //   (之前是 LayersDock tab 1, 拆出来独立 tab 更 PS 风格)
     //   LayersDock 现在是第 3 tab, 只装 LayerPanel (F-G.3 集成)
     //   ChannelPathPanel 已经在 RightPanelDock ctor 创建
 
     // 兜底: 显式关闭马赛克按钮, 避免启动就进入涂抹
-    //   Q4.2.2 (2026-09-24): 删 ui->btnMosaicMode 引用, MosaicOptionPanel 默认 unchecked
+    //   删 ui->btnMosaicMode 引用, MosaicOptionPanel 默认 unchecked
     m_mosaicTool->setEnabled(false);
     // 兜底: 文字 item 都不锁双击 (启动时非涂抹模式)
     for (auto *ti : m_textCtrl->textItems()) { if (ti) ti->setBlockDoubleClickEdit(false); }
@@ -567,8 +567,8 @@ ImageWindow::ImageWindow(QWidget *parent)
     // 同步主窗口的 撤销/重做 action: 用 undoStack 的 canUndo/canRedo 状态
     // 主窗口在 onUndo/onRedo 里直接调 m_undoStack->undo/redo
 
-    // P0-8.1 (2026-09-15): 绑定 HistoryDock -> undoStack
-    //   P7.6.x v3 commit 4 (2026-10-15): forward via RightPanelDock::setUndoStack
+    // 绑定 HistoryDock -> undoStack
+    //   forward via RightPanelDock::setUndoStack
     //   which routes to the VHistoryPage adapter.
     if (m_rightDock) {
         m_rightDock->setUndoStack(m_undoStack);
@@ -578,7 +578,7 @@ ImageWindow::ImageWindow(QWidget *parent)
 
 ImageWindow::~ImageWindow()
 {
-    // P2.5 bug fix (2026-09-22): reset m_brushCursor FIRST, before delete ui.
+    // reset m_brushCursor FIRST, before delete ui
     //   delete ui destroys m_canvas (a child widget), whose scene owns the
     //   ellipse item and deletes it in ~QGraphicsScene. If m_brushCursor is
     //   not reset before that, any subsequent access (especially
@@ -594,20 +594,20 @@ ImageWindow::~ImageWindow()
         m_undoStack->clear();
     }
 
-    // P0-1.2 (2026-09-07): 清空文字 item 列表 (避免 scene 析构时 item 还在 scene 里)
+    // 清空文字 item 列表 (避免 scene 析构时 item 还在 scene 里)
     //   委托给 m_textCtrl (TextOverlayController)
     if (m_textCtrl) {
         m_textCtrl->removeAllFromSceneAndDelete();
     }
-    // P0-2 (2026-09-08): EngineContext 析构会 ~ThreadPool -> shutdown(false)
+    // EngineContext 析构会 ~ThreadPool -> shutdown(false)
     //   等所有 worker 退出后再删, 避免后台 task 跑一半 ImageWindow 已经销毁
     m_engine.reset();
-    // P0-4 (2026-09-10): m_selection 析构时 ImageCanvas::m_sel 弱引用自动失效
+    // m_selection 析构时 ImageCanvas::m_sel 弱引用自动失效
     m_selection.reset();
     delete ui;
 }
 
-// P2.5 (2026-09-22): selectedLayerIndex public getter
+// selectedLayerIndex public getter
 //
 //   Returns the visible row index of LayerPanel's QTreeWidget current item.
 //   Matches LayerStack index 1:1 (m_tree is flat-ordered). Group child items
@@ -622,7 +622,7 @@ int ImageWindow::selectedLayerIndex() const
     return m_layerPanel->selectedRowForTest();
 }
 
-// P2.5 (2026-09-22): applyLayerOp — MainWindow menu action dispatcher.
+// applyLayerOp — MainWindow menu action dispatcher
 //
 //   Wraps the layerStack + undoStack + invalidateCurrentCache + renderToView
 //   sequence so MainWindow menu handlers don't need to know ImageWindow's
@@ -699,7 +699,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
     case LayerOp::MoveUp: {
         if (sel < 0 || sel >= totalLayers) return false;
         if (m_undoStack) {
-            // P2.5 (2026-09-22): makeMoveUp factory applies the move
+            // makeMoveUp factory applies the move
             //   itself; caller no longer needs an explicit moveUp call.
             //   The old push+moveUp pattern double-moved.
             m_undoStack->push(layers::LayerCommand::makeMoveUp(
@@ -715,7 +715,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
     case LayerOp::MoveDown: {
         if (sel < 0 || sel >= totalLayers) return false;
         if (m_undoStack) {
-            // P2.5 (2026-09-22): makeMoveDown factory applies the move
+            // makeMoveDown factory applies the move
             //   itself; caller no longer needs an explicit moveDown call.
             m_undoStack->push(layers::LayerCommand::makeMoveDown(
                 m_layerStack.get(), sel));
@@ -770,7 +770,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
     return false;
 }
 
-// P0-4 (2026-09-10): cv::Mat -> QImage (BGRA8888 / BGR888 / Gray) for selection strategies
+// cv::Mat -> QImage (BGRA8888 / BGR888 / Gray) for selection strategies
 QImage ImageWindow::currentImageAsQImage() const
 {
     if (m_current.empty()) return QImage();
@@ -799,7 +799,7 @@ QImage ImageWindow::currentImageAsQImage() const
     }
 }
 
-// P1.3.7 (2026-09-17): Layer-as-QImage accessor
+// Layer-as-QImage accessor
 //   BGR cv::Mat -> QImage::Format_RGB888 (ColorRange consumes QImage).
 //   .copy() is required because QImage does not ref-count the borrowed
 //   buffer; without .copy() the temp Mat goes out of scope and the
@@ -831,7 +831,7 @@ QImage ImageWindow::layerStackAsQImage(int index) const
 void ImageWindow::replaceCurrentImage(const cv::Mat &img)
 {
     if (img.empty()) return;
-    // 阶段 1 W4.3 Phase 1: 同步更新 base layer image + invalidate cache
+    //  同步更新 base layer image + invalidate cache
     if (m_layerStack && m_layerStack->count() > 0) {
         auto base = m_layerStack->baseLayer();
         if (base) base->image = img.clone();
@@ -839,7 +839,7 @@ void ImageWindow::replaceCurrentImage(const cv::Mat &img)
     invalidateCurrentCache();
     m_current = img.clone();   // 兼容: 旧引用直接 m_current
     renderToView();
-    // P0-4 (2026-09-10): sync selection mask size with image size
+    // sync selection mask size with image size
     if (m_selection) {
         m_selection->setSize(QSize(m_current.cols, m_current.rows));
     }
@@ -861,17 +861,17 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     }
     m_original = img.clone();
     m_filePath = path;
-    // P0-1.3 (2026-09-07): m_zoom 搬到 m_canvas
+    // m_zoom 搬到 m_canvas
     m_canvas->setZoom(1.0);
 
     // 默认参数 (clean 状态)
-    // Stage B (2026-09-15): 旧 m_adjustment 已删除, ParamSet 在 P1 阶段重新设计
+    // 旧 m_adjustment 已删除, ParamSet 在 阶段重新设计
 
     // 清空撤销栈
     m_undoStack->clear();
     m_savedIndex = 0;
 
-    // 阶段 1 W4.3 Phase 1: 初始化 layerStack, 把加载的图片作为 base layer
+    //  初始化 layerStack, 把加载的图片作为 base layer
     //   LayerStack 是 QObject, parent = this (生命周期跟随 ImageWindow)
     m_layerStack = std::make_unique<layers::LayerStack>(this);
     m_layerStack->setBaseLayer(img);
@@ -882,11 +882,11 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             this, [this](int){ invalidateCurrentCache(); });
     connect(m_layerStack.get(), &layers::LayerStack::layerRemoved,
             this, [this](int){ invalidateCurrentCache(); });
-    // P1.4.2 (2026-09-17): 智能对象文件监听器
+    // 智能对象文件监听器
     //   监听每个 SmartObject layer 的源文件 mtime, 触发源变化时弹 statusBar 提示
     //   layerAdded/Removed/Changed 后 rewatchAll 同步 watch 列表 (MainWindow 4 slot
     //   也会显式调 rewatchAll, 这是兜底)
-    // P1.4.6 (2026-09-17): Upgraded from the 5-second statusBar hint to
+    // Upgraded from the 5-second statusBar hint to
     //   a QMessageBox dialog.
     //   Yes -> refreshSmartObject + invalidateCurrentCache + statusBar
     //   confirmation.
@@ -927,11 +927,11 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     connect(m_layerStack.get(), &layers::LayerStack::layerRemoved, this, resyncWatcher);
     connect(m_layerStack.get(), &layers::LayerStack::layerChanged, this, resyncWatcher);
     resyncWatcher();
-    // 阶段 1 Step A Bug 1 (2026-09-04): 监听 selection 变化
+    //  监听 selection 变化
     //   切 layer 不改像素, 但要让画布知道, 触发重绘 + 通知 MainWindow
     connect(m_layerStack.get(), &layers::LayerStack::selectionChanged,
             this, &ImageWindow::onLayerSelectionChanged);
-    // P7.10 (2026-10-15): active layer 切换 → 右侧 panel V*Page 标脏.
+    // active layer 切换 → 右侧 panel V*Page 标脏
     //   VPropertyPage 显示当前 layer 的属性 (color/blend/opacity/lock/link),
     //   必须跟 selection 同步刷新. 走 RightPanelDock::invalidateAllPageCaches
     //   fan-out, 其他 V*Page (color/swatch/...) 的 invalidateCache 是 no-op 默认.
@@ -941,7 +941,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             });
     invalidateCurrentCache();   // 强制重算 m_current
 
-    // P1.4.3 (2026-09-17): 实例化 LayerPanel, 注入 LayersDock tab 0
+    // 实例化 LayerPanel, 注入 LayersDock tab 0
     //   P1.4.2 留了 LayerPanel 类定义完整但没 new 的 bug, 这一轮补上.
     //   LayerPanel::ctor 需要 raw LayerStack*, parent = this (QObject parent-child 关系
     //   保证 unique_ptr 释放前 LayerPanel 不会被 Qt 析构). 注入 LayersDock tab 0 用
@@ -949,13 +949,13 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     //   P7.6.x: raw pointer — setContentWidget below takes ownership.
     m_layerPanel = new layers::LayerPanel(m_layerStack.get());
     if (m_rightDock) {
-        // P7.6.x v3 commit 4 (2026-10-15): rightDock->layersDock() is now a
+        // rightDock->layersDock is now a
         // deprecated shim returning nullptr. Use setLayerPanel() which
         // forwards to VLayerPage->inner() (LayersDock).
         m_rightDock->setLayerPanel(m_layerPanel);
     }
 
-    // P1.4.3 (2026-09-17): LayerPanel 用户操作信号 → ImageWindow API (数据层)
+    // LayerPanel 用户操作信号 → ImageWindow API (数据层)
     //   P7.6.x: m_layerPanel is a raw pointer that survives setContentWidget.
     if (m_layerPanel) {
         connect(m_layerPanel, &layers::LayerPanel::selectionChangedFromPanel,
@@ -1047,7 +1047,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             invalidateCurrentCache();
             statusBar()->showMessage(tr("已重新链接源文件"), 3000);
         });
-        // P1.4.4 (2026-09-17): SmartFilter chain entry (PS-style smart filter).
+        // SmartFilter chain entry (PS-style smart filter)
         //   Right-click on a SmartObject layer -> apply filter dialog -> append.
         connect(m_layerPanel, &layers::LayerPanel::applySmartFilterRequested,
                 this, [this](int smartIdx) {
@@ -1082,10 +1082,10 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             renderToView();
             statusBar()->showMessage(tr("已应用智能滤镜: %1").arg(picked), 3000);
         });
-        // P1.4.5 (2026-09-17): SmartObject scale + rotate non-destructive transform
+        // SmartObject scale + rotate non-destructive transform
         //   from LayerPanel right-click menu. Pops scale + rotation prompts
         //   then routes through applySmartObjectTransform to apply + push undo.
-        // P1.4.6 (2026-09-17): chained QInputDialog upgraded to a single
+        // chained QInputDialog upgraded to a single
         //   TransformDialog (Scale
         //   + Rotate + Translate + Link + Reset - 5 fields in one shot).
         connect(m_layerPanel, &layers::LayerPanel::transformSmartObjectRequested,
@@ -1110,7 +1110,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         });
 
         // ================================================================
-        //  P1.4.6 (2026-09-17): wire the remaining 26 LayerPanel signals.
+        //  wire the remaining 26 LayerPanel signals
         //    Each lambda validates the index, calls the LayerStack API,
         //    pushes the matching LayerCommand, then invalidateCurrentCache
         //    + renderToView + statusBar hint. Complex operations (group /
@@ -1239,7 +1239,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
         // moveUpRequested: index is the position of the layer that should
         //   be moved up.
-        //   P2.5 (2026-09-22): use makeMoveUp factory (it applies moveUp
+        //   use makeMoveUp factory (it applies moveUp
         //   itself, undo reverses). The old push+moveUp double-moved.
         connect(m_layerPanel, &layers::LayerPanel::moveUpRequested,
                 this, [this](int index) {
@@ -1319,7 +1319,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                 tr("已合并所有可见图层到 base (仅 base 保留)"), 3000);
         });
 
-        // P0 leftover review (2026-09-21): wire group/ungroup tool buttons
+        // wire group/ungroup tool buttons
         //   to the P1.5.2 LayerCommand factories (mergeIntoGroup /
         //   flattenGroup). Previously emitted "TBD" statusBar hint.
         // groupRequested: caller passes [first, last] range (toolbar emits
@@ -1785,10 +1785,10 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     }
 
     emit filePathChanged(m_filePath);
-    // Q4.3 (2026-10-08): PropertiesDock.setImageInfo 接入.
+    // PropertiesDock.setImageInfo 接入
     //   之前 loadFile 完全没调 setImageInfo, PropertiesDock 始终显示 "(无)".
     //   现在从 m_filePath (QFileInfo 取后缀得 format, 默认 dpi=72) + img.size 注入.
-    // P7.6.x v3 commit 4 (2026-10-15): forward via RightPanelDock::setPropertyImageInfo
+    // forward via RightPanelDock::setPropertyImageInfo
     //   which routes to VPropertyPage->inner() (PropertiesDock).
     if (m_rightDock) {
         docks::PropertiesDock::ImageInfo info;
@@ -1800,7 +1800,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         info.dpi      = 72;  // 默认 dpi, 后续 P0-8 ICC embed 流程可读 EXIF
         m_rightDock->setPropertyImageInfo(info);
     }
-    // Stage F (2026-09-15): 补回 renderToView 触发
+    // 补回 renderToView 触发
     //   Stage B 删 m_adjustment->syncApplyCurrentParams(true) 时连带漏了渲染触发
     //     旧: syncApplyCurrentParams -> setCurrentImage -> renderToView
     //     新: 删了中间人, 直接调 renderToView
@@ -1809,7 +1809,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
     return true;
 }
 
-// P0-1.2 fix (2026-09-08): filePath() 防御式实现
+// filePath 防御式实现
 //   之前 inline return m_filePath; 在调用方拿到 QString& 跟 m_filePath 同生命周期,
 //   m_filePath 字段被踩时调用方 use-after-free
 //   修法: .cpp 实现 + QString() 强拷贝隔离, 跟 P0-1.3 ImageWorkspace::filePath 同样策略
@@ -1825,7 +1825,7 @@ bool ImageWindow::isDirty() const
 
 QString ImageWindow::displayTitle() const
 {
-    // P0-1.2 fix (2026-09-08): tst_ImageWorker SEGFAULT 真因修复
+    // tst_ImageWorker SEGFAULT 真因修复
     //   之前 QFileInfo(m_filePath).fileName() 直接调, m_filePath 在 loadFile 流程中
     //   某处被破坏时 (7 层 QFileInfo::filePath 递归栈顶异常), 崩在 Qt 6.11.1 内部
     //   修法: 业务级 early return — m_filePath 为空 (loadFile 之前) 直接返, 不进 QFileInfo
@@ -1851,7 +1851,7 @@ void ImageWindow::setCurrentImage(const cv::Mat &img)
 {
     m_current = img.clone();
     m_original = img.clone();
-    // 阶段 1 W4.3 Phase 1: 同步 base layer image (适用 setCurrentImage 流程)
+    //  同步 base layer image (适用 setCurrentImage 流程)
     if (m_layerStack && m_layerStack->count() > 0) {
         auto base = m_layerStack->baseLayer();
         if (base) base->image = img.clone();
@@ -1865,7 +1865,7 @@ void ImageWindow::refreshAll()
     renderToView();
 }
 
-// P3.1.3 (2026-09-22) ROOT-CAUSE FIX: filter Apply 预览 — 不放 ImageWindow 成员!
+// ROOT-CAUSE FIX: filter Apply 预览 — 不放 ImageWindow 成员!
 //   调试 1+ 小时定位到的根因: 在 ImageWindow 里加 cv::Mat 字段 (144 字节)
 //   会让 tst_ImageWorker::test_routePng 在 ImageWindow() 构造期 segfault.
 //   崩溃栈: Ui_ImageWindow::setupUi → QFileInfo::filePath 递归 (QString d-pointer
@@ -1891,15 +1891,15 @@ namespace {
 // TODO(P8.4): renderToView and invalidateCurrentCache are called 95 times in this file, so one missed pair is a silent stale frame -- see docs/DEBT.md#A-REFRESHDUP
 void ImageWindow::renderToView()
 {
-    // 阶段 1 W4.3 Phase 1: m_current 来自 layerStack.render() 缓存
+    //  m_current 来自 layerStack.render 缓存
     if (m_currentDirty) rebuildCurrentCache();
-    // P3.1.3 (2026-09-22): 滤镜预览优先 — 如果 registry 里有 m_previewImage 非空, 用它显示
+    // 滤镜预览优先 — 如果 registry 里有 m_previewImage 非空, 用它显示
     //   临时预览层不动 m_current, Apply 每次都从 m_current 重新生成
     //   clearPreview (OK/Cancel) 把控制权交回 m_current
     auto preview = lookupPreview(this);
     const cv::Mat* display = preview ? preview.get() : &m_current;
     if (display->empty()) {
-        // P0-1.3 (2026-09-07): m_item 搬到 m_canvas
+        // m_item 搬到 m_canvas
         m_canvas->pixmapItem()->setPixmap(QPixmap());
         return;
     }
@@ -1911,8 +1911,8 @@ void ImageWindow::renderToView()
     m_canvas->scale(m_canvas->zoom(), m_canvas->zoom());
 }
 
-// 阶段 1 W4.3 Phase 1: 从 layerStack.render() 重算 m_current 缓存
-// P0-2.5 (2026-09-08): 大图走 LayerStack::renderAsync 走 background pool,
+//  从 layerStack.render 重算 m_current 缓存
+// 大图走 LayerStack::renderAsync 走 background pool
 //   小图 (<= 1024x1024) 走 sync render 避免线程切换开销.
 //   保留 sync 行为给 loadFile / onStackChanged 等调用方 (它们依赖同步语义)
 //
@@ -1972,7 +1972,7 @@ void ImageWindow::rebuildCurrentCache()
         });
 }
 
-// 阶段 1 Step A Bug 1 (2026-09-04): LayerPanel 切图层
+//  LayerPanel 切图层
 //   当前不直接改渲染 (切 layer 不改像素), 但触发重绘让画布激活层指示器更新
 //   也方便 MainWindow 挂钩 (e.g. 切到 Adjustment 时自动展开属性面板)
 void ImageWindow::onLayerSelectionChanged(int /*index*/)
@@ -1981,10 +1981,10 @@ void ImageWindow::onLayerSelectionChanged(int /*index*/)
     update();
 }
 
-// P0-5 (2026-09-10): 滤镜应用 (主菜单 4 action 接真)
+// 滤镜应用 (主菜单 4 action 接真)
 //   流程: FilterFactory::createFilter + strategy->apply + push FilterCommand
 //   FilterCommand 内部 ctor 时 apply 一次, undo/redo 复用
-// P0 leftover 5 (2026-09-21): pop a standalone adjust dialog via the
+// pop a standalone adjust dialog via the
 //   per-window DialogMediator. dialogId is one of {"Curves","Levels",
 //   "B&W","ChannelMixer"}. DialogMediator (P0 leftover 4) self-wires
 //   to DialogFactory. dialog->applied is routed to
@@ -2024,7 +2024,7 @@ void ImageWindow::applyFilter(filter::FilterKind kind)
         this, m_current, kind, filterName));
 }
 
-// P3.1.3 (2026-09-22): 滤镜 Apply 实时预览 — FilterDialog::onApplyClicked 调
+// 滤镜 Apply 实时预览 — FilterDialog::onApplyClicked 调
 //   preview cv::Mat 存文件作用域 static registry (不进 ImageWindow class layout,
 //   调试 1+ 小时定位到的关键 root cause fix, 见 renderToView 上面注释)
 //   关键: 每次 Apply 都从当前 m_current 重新生成, 不在旧预览基础上叠加
@@ -2083,7 +2083,7 @@ void ImageWindow::applyFilterWithStrategy(filter::FilterStrategy* strategy, cons
         return;
     }
     LOG_INFO("[ImageWindow] applyFilterWithStrategy: text={}", text.toStdString());
-    // P3.1.1 (2026-09-22): 走新 ctor (strategy-based), 用 dialog 提供的 strategy (含 slider 当前值)
+    // 走新 ctor (strategy-based), 用 dialog 提供的 strategy (含 slider 当前值)
     m_undoStack->push(new filter::FilterCommand(this, m_current, strategy, text));
 }
 
@@ -2100,7 +2100,7 @@ void ImageWindow::onStackChanged()
     emit dirtyChanged(isDirty());
 }
 
-// Stage B (2026-09-15): 撤销 P0-1.2 ImageAdjustmentPanel (5 toggle + 10 slider 旧 UI)
+// 撤销 ImageAdjustmentPanel (5 toggle + 10 slider 旧 UI)
 //   UI 元素 (groupAdjust 块 + 5 toggle + 10 slider) 全部从 imagewindow.ui 删除
 //   UI 操作入口没了, ParamSet 路径变成 no-op. ImageEditCommand::undo/redo 的
 //   m_useImage=false 分支还会调到本方法, 保留 API (tests 用 ParamSet 类型) 但不做事.
@@ -2122,14 +2122,14 @@ void ImageWindow::onRedo()
     if (m_undoStack) m_undoStack->redo();
 }
 
-// P7.3 (2026-10-12): 当前活动图层 idx. 没图 -> -1.
+// 当前活动图层 idx. 没图 -> -1
 int ImageWindow::currentLayerIndex() const
 {
     if (!m_layerStack) return -1;
     return m_layerStack->selection();
 }
 
-// P7.3 (2026-10-12): 滤镜 → 转换为智能滤镜 实现.
+// 滤镜 → 转换为智能滤镜 实现
 //   1) 拿当前图层 idx + 当前 cached image (m_current) 作为 imageBefore
 //   2) 把图层 idx 转 SmartObject (in-place convertToSmartObject)
 //   3) append 目标 filter kind 作为 SmartFilter sub-layer
@@ -2173,12 +2173,12 @@ bool ImageWindow::convertCurrentLayerToSmartObjectWithFilter(filter::FilterKind 
         stack->push(sfCmd);
     }
 
-    rebuildCurrentCache();   // P6 (2026-10-09) 缓存层
+    rebuildCurrentCache();   // 缓存层
     renderToView();
     return true;
 }
 
-// P7.4 (2026-10-12): 图层 → 蒙版 submenu — 4 helper + 1 query.
+// 图层 → 蒙版 submenu — 4 helper + 1 query
 //   内部已有对应 lambda (setMaskEnabled/clearMaskFull/setMaskInvert 等, ~1715 行)
 //   这里暴露成 public method 给 MainWindow 主菜单 submenu 调用.
 //   所有 helper 失败都返 false (无 stack / 无活动图层 / 该图层无 mask).
@@ -2285,7 +2285,7 @@ bool ImageWindow::applyLayerMask()
     return false;
 }
 
-// Q4.2.2 (2026-09-24): 4 个占位 slot 已删, 由 MosaicOptionPanel / TextOptionPanel
+// 4 个空 slot 已删, 由 MosaicOptionPanel / TextOptionPanel
 //   自己接管信号 (panel 直接 connect MosaicTool / TextOverlayController).
 //   onMosaicSizeChanged / onMosaicModeToggled / onTextSizeChanged /
 //   onTextColorClicked / onTextFontChanged 全在 imagewindow.h/.cpp 删除.
@@ -2315,14 +2315,14 @@ void ImageWindow::onMosaicModeToggled(bool on)
 // 连接文字 item 的信号 (editingFinished + transformFinished) - 撤销栈用
 //   抽成 helper, 让 createTextItem 和 Add.redo 重建 item 时都调, 避免 redo 后的 item 没 connect
 //   关键: lambda 用 QPointer 捕获, 防止 item 被 delete 后 dangling raw ptr
-//   P0-1.2 (2026-09-07): 委托给 m_textCtrl (TextOverlayController)
+//   委托给 m_textCtrl (TextOverlayController)
 void ImageWindow::connectTextItemSignals(GraphicsTextItem *item)
 {
     if (m_textCtrl) m_textCtrl->connectItemSignals(item);
 }
 
-// P0-1.2 (2026-09-07): 委托给 m_textCtrl
-//   Q4.2.2 (2026-09-24): 字体/字号从 TextOptionPanel 同步过来 (createTextItem
+// 委托给 m_textCtrl
+//   字体/字号从 TextOptionPanel 同步过来 (createTextItem
 //   用 m_textFont/m_textSize, TextOptionPanel 在 font/size 变化时调
 //   setTextFont/setTextSize. 这里只调 createTextItem 即可.
 GraphicsTextItem *ImageWindow::createTextItem(const QPointF &scenePos)
@@ -2348,15 +2348,15 @@ void ImageWindow::unregisterTextItem(GraphicsTextItem *item)
 
 // 扁平化: 把所有文字 item 用 QPainter 渲染到 QImage, 转 cv::Mat, 烧到 m_current
 // 烧图后 m_textItems 清空 (字变成图片像素, 不可再编辑/撤销)
-//   P0-1.2 (2026-09-07): 委托给 m_textCtrl
+//   委托给 m_textCtrl
 void ImageWindow::flattenText()
 {
     if (m_textCtrl) m_textCtrl->flattenText();
 }
 
 // 字体变化 -> 应用到 m_currentTextItem
-//   P0-1.2 (2026-09-07): 委托给 m_textCtrl
-// Q4.2.2 (2026-09-24): TextOptionPanel 接管字体/字号/颜色变化, 这里 no-op
+//   委托给 m_textCtrl
+// TextOptionPanel 接管字体/字号/颜色变化, 这里 no-op
 void ImageWindow::onTextFontChanged()
 {
     // TextOptionPanel 接管: comboTextFont currentFontChanged -> onFontComboChanged
@@ -2364,8 +2364,8 @@ void ImageWindow::onTextFontChanged()
 }
 
 // 字号变化 -> 应用到 m_currentTextItem
-//   P0-1.2 (2026-09-07): 委托给 m_textCtrl
-// Q4.2.2 (2026-09-24): TextOptionPanel 接管字号变化, 这里 no-op
+//   委托给 m_textCtrl
+// TextOptionPanel 接管字号变化, 这里 no-op
 void ImageWindow::onTextSizeChanged(int v)
 {
     // TextOptionPanel 接管: spinTextSize valueChanged -> onSizeSpinChanged
@@ -2374,8 +2374,8 @@ void ImageWindow::onTextSizeChanged(int v)
 }
 
 // 文字颜色按钮 -> 应用到 m_currentTextItem
-//   P0-1.2 (2026-09-07): 调 QColorDialog 拿颜色, 委托给 m_textCtrl
-// Q4.2.2 (2026-09-24): TextOptionPanel 接管颜色 button + dialog, 这里 no-op
+//   调 QColorDialog 拿颜色, 委托给 m_textCtrl
+// TextOptionPanel 接管颜色 button + dialog, 这里 no-op
 void ImageWindow::onTextColorClicked()
 {
     // TextOptionPanel 接管: btnTextColor clicked -> onColorClicked -> QColorDialog
@@ -2389,17 +2389,17 @@ void ImageWindow::onTextColorClicked()
 
 void ImageWindow::buildActions()
 {
-    // P7.6.x (2026-10-14): 4 zoom actions (actZoomIn / actZoomOut / actFit / actResetZoom)
+    // 4 zoom actions (actZoomIn / actZoomOut / actFit / actResetZoom)
     //   removed from imagewindow.ui toolbar (P7.6.x UI layout fix: 4 zoom buttons
     //   不应该出现在中央画布上方 — PS 没有这些. MainWindow 自己拥有 m_actZoomIn/ZoomOut
     //   并 forward 到 active ImageWindow, 这里不再需要 connect).
     //
-    // P5.1 (2026-10-08): MosaicOptionPanel + TextOptionPanel connect 全部移到各自 panel
-    //   内部, buildActions 不再管 imagewindow.ui 占位 group.
+    // MosaicOptionPanel + TextOptionPanel connect 全部移到各自 panel
+    //   内部, buildActions 不再管 imagewindow.ui 的空 group
 }
 
 // ---------------- 缩放 ----------------
-// P0-1.3 (2026-09-07): 薄包装, 实际逻辑在 m_canvas (ImageCanvas) 组件里
+// 薄包装, 实际逻辑在 m_canvas (ImageCanvas) 组件里
 
 void ImageWindow::onZoomIn()    { m_canvas->onZoomIn(); }
 void ImageWindow::onZoomOut()   { m_canvas->onZoomOut(); }
@@ -2428,7 +2428,7 @@ void ImageWindow::onQuickMaskToggled(bool on)
         m_quickMaskSavedToolId = mediators::ToolId::None;
         statusBar()->showMessage(tr("快速蒙版: 关闭"), 2000);
     }
-    // P6 (2026-10-09): keep AppBar btn + ChannelPathPanel btn + tool state in
+    // keep AppBar btn + ChannelPathPanel btn + tool state in
     //   lockstep so any of the three sources the user clicks drives the same
     //   composite mask mode toggle.
     syncQuickMaskUi(on);
@@ -2443,12 +2443,12 @@ void ImageWindow::onChannelPathQuickMaskToggled(bool on)
 
 void ImageWindow::syncQuickMaskUi(bool on)
 {
-    // P7.6.x v3 (2026-10-14): AppBar 在 MainWindow 顶层, ImageWindow 不再持有 m_appBar.
+    // AppBar 在 MainWindow 顶层, ImageWindow 不再持有 m_appBar
     //   通过 quickMaskUiSync 信号通知 MainWindow, MainWindow 接到 AppBar 的 btnQuickMask.
     //   ChannelPathPanel 仍在 m_rightDock (ImageWindow 内的右侧 dock) 内, 保留同步.
     emit quickMaskUiSync(on);
     if (m_rightDock) {
-        // P7.6.x v3 commit 4 (2026-10-15): forward via setChannelPathQuickMask
+        // forward via setChannelPathQuickMask
         m_rightDock->setChannelPathQuickMask(on);
     }
 }
@@ -2529,7 +2529,7 @@ void ImageWindow::onCaptureRequested(int kind)
     }
 }
 
-// ---------------- P6 (2026-10-09): RightPanelDock connectors ----------------
+// RightPanelDock connectors
 
 void ImageWindow::onForegroundColorChanged(const QColor& c)
 {
@@ -2629,7 +2629,7 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
         default: return QMainWindow::eventFilter(watched, event);
     }
     auto *me = static_cast<QMouseEvent*>(event);
-    // P0-1.3 (2026-09-07): ui->graphicsView -> m_canvas (画布搬到 ImageCanvas 组件)
+    // ui->graphicsView -> m_canvas (画布搬到 ImageCanvas 组件)
     QPointF sp = m_canvas->mapToScene(me->pos());
     QGraphicsItem *hit = m_canvas->scene()->itemAt(sp, m_canvas->transform());
     QString hitName = "null";
@@ -2646,7 +2646,7 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
     // 注: 旧版本的"m_textEdit Escape 取消" 已废弃 - QGraphicsTextItem 自带 focusOut 处理
     // (GraphicsTextItem::focusOutEvent 自动调 endEditing)
 
-    // P0-1.3 (2026-09-07): eventFilter 现在装在 m_canvas->viewport() (原 ui->graphicsView->viewport())
+    // eventFilter 现在装在 m_canvas->viewport (原 ui->graphicsView->viewport)
     if (watched == m_canvas->viewport()) {
         auto scenePt = [this](const QMouseEvent *me) -> QPointF {
             return m_canvas->mapToScene(me->pos());
@@ -2657,7 +2657,7 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
         };
 
         // 滚轮缩放
-        // P0-1.3 (2026-09-07): Ctrl+wheel 缩放逻辑搬到 m_canvas->wheelEvent
+        // Ctrl+wheel 缩放逻辑搬到 m_canvas->wheelEvent
         //   这里不再处理 Wheel, 让事件自然传到 m_canvas::wheelEvent
         // 鼠标移动 - 笔刷光标位置 + 涂抹
         if (event->type() == QEvent::MouseMove) {
@@ -2665,7 +2665,7 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
             const QPointF sp = scenePt(me);
 
             // Plan B: handle 拖动中 -> 路由到 item (绕开 Qt itemAt)
-            //   P0-1.2 (2026-09-07): m_handleDragItem 搬到 m_textCtrl
+            //   m_handleDragItem 搬到 m_textCtrl
             if (m_textCtrl && m_textCtrl->handleDragItem()) {
                 m_textCtrl->handleDragItem()->continueHandleDragFromView(sp);
                 return true;
@@ -2677,12 +2677,12 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
                 m_brushCursor->setVisible(m_mosaicTool && m_mosaicTool->isEnabled());
             }
             // 涂抹: 必须左键按下 (用 me->buttons() 实时判断, 不依赖 m_mosaicDragging 状态)
-            //   P0-1.2 (2026-09-07): 委托给 m_mosaicTool
+            //   委托给 m_mosaicTool
             if (m_mosaicTool && m_mosaicTool->isEnabled() && !m_current.empty()
                 && (me->buttons() & Qt::LeftButton)) {
                 m_mosaicTool->onSceneDragMove(sp);
             }
-            // F-N (2026-09-10): forward to current ToolState (default no-op, harmless)
+            // forward to current ToolState (default no-op, harmless)
             //   放在最后: handle drag / mosaic 优先级高于 tool (已经 return true 的不进入这里)
             if (m_ctx) m_ctx->onMouseMove(me, sp);
         }
@@ -2698,7 +2698,7 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
                 // 关键: handle 拖动 / 单击空白 unselect 始终可用 (不受文字模式控制, 文字模式已经废除)
                 {
                     GraphicsTextItem::Handle hh = GraphicsTextItem::None;
-                    // P0-1.2 (2026-09-07): m_textItems -> m_textCtrl->textItems()
+                    // m_textItems -> m_textCtrl->textItems
                     const auto items = m_textCtrl ? m_textCtrl->textItems() : QList<GraphicsTextItem*>{};
                     GraphicsTextItem *hit = GraphicsTextItem::hitTestHandle(items, sp, &hh);
                     if (hit) {
@@ -2720,7 +2720,7 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
                     }
                     auto *ti = qgraphicsitem_cast<GraphicsTextItem*>(hit);
                     if (!ti) {
-                        // P0-1.2 (2026-09-07): m_textItems / m_currentTextItem -> m_textCtrl
+                        // m_textItems / m_currentTextItem -> m_textCtrl
                         if (m_textCtrl) {
                             for (auto *item : m_textCtrl->textItems()) {
                                 if (item) item->setSelected2(false);
@@ -2735,13 +2735,13 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
                     // 注意: 这里不 return, 让 graphicsView 正常处理 (例如拖动 view)
                 }
                 // 涂抹模式: 委托给 m_mosaicTool (snapshot + 立即应用一次)
-                //   P0-1.2 (2026-09-07): 整体搬过去
+                //   整体搬过去
                 if (m_mosaicTool && m_mosaicTool->isEnabled() && !m_current.empty()) {
                     m_mosaicTool->onSceneClicked(sp);
                     return true;  // 拦截, 不让 graphicsView 启动拖动
                 }
                 // 文字模式 + 普通模式 单击 -> 忽略 (让 graphicsView 处理 pan)
-                // F-N (2026-09-10): forward to current ToolState (放在左键分支末尾, 让 graphicsView 仍能 pan)
+                // forward to current ToolState (放在左键分支末尾, 让 graphicsView 仍能 pan)
                 if (m_ctx) m_ctx->onMousePress(me, sp);
             } else if (me->button() == Qt::RightButton) {
                 // 右键: 如果击中文字 item 则删除, 否则清空当前编辑
@@ -2756,7 +2756,7 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
                     auto *ti = qgraphicsitem_cast<GraphicsTextItem*>(hit);
                     if (ti) {
                         // 删除击中的文字 item, 入 Remove 栈
-                        //   P0-1.2 (2026-09-07): TextItemCommand::undo 会调 m_textCtrl->unregisterTextItem
+                        //   TextItemCommand::undo 会调 m_textCtrl->unregisterTextItem
                         m_undoStack->push(new TextItemCommand(
                             this, ti, TextItemCommand::Remove, ti->serializedText()));
                     } else if (m_textCtrl && m_textCtrl->current()) {
@@ -2805,7 +2805,7 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
             }
         }
         // 鼠标松开 - 涂抹结束, push 图像快照 command (支持 Ctrl+Z 撤销)
-        //   P0-1.2 (2026-09-07): 涂抹相关委托给 m_mosaicTool
+        //   涂抹相关委托给 m_mosaicTool
         if (event->type() == QEvent::MouseButtonRelease) {
             auto *me = static_cast<QMouseEvent *>(event);
             // Plan B: handle 拖动释放 (绕开 Qt itemAt)
@@ -2819,7 +2819,7 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
                 m_mosaicTool->onSceneDragEnd();
                 return true;
             }
-            // F-N (2026-09-10): forward to current ToolState (default no-op, harmless)
+            // forward to current ToolState (default no-op, harmless)
             //   放在最后: handle drag / mosaic 已经 return true 的不进入这里
             if (m_ctx) m_ctx->onMouseRelease(me, m_canvas->mapToScene(me->pos()));
         }
@@ -2836,14 +2836,14 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
 }
 
 // ---------------- 打开 / 存 ----------------
-// P0-1.4 (2026-09-07): 4 个 IO slot (onOpen / onSave / onSaveAs / onClose) 全部搬到
+// 4 个 IO slot (onOpen / onSave / onSaveAs / onClose) 全部搬到
 //   src/media/imagewindow/ImageIOController.cpp 实现, 这里不再保留.
 
 // 字体/字号/颜色变化应用到当前选中/正在编辑的 item
 // (已拆成 onTextFontChanged / onTextSizeChanged / onTextColorClicked 三个函数)
 void ImageWindow::applyTextStyleToCurrent() {}
 
-// F-G.3 (2026-09-09): 注入 WorkspaceMediator
+// 注入 WorkspaceMediator
 void ImageWindow::attachWorkspaceMed(mediators::WorkspaceMediator* wsMed)
 {
     if (m_rightDock) {
@@ -2851,7 +2851,7 @@ void ImageWindow::attachWorkspaceMed(mediators::WorkspaceMediator* wsMed)
     }
 }
 
-// Stage D (2026-09-15): 右侧 panel 显隐 (给 mainwindow 视图菜单 toggle 用)
+// 右侧 panel 显隐 (给 mainwindow 视图菜单 toggle 用)
 void ImageWindow::setRightPanelVisible(bool visible)
 {
     if (m_rightDockContainer) {
@@ -2865,7 +2865,7 @@ bool ImageWindow::isRightPanelVisible() const
 }
 
 // ============================================================================
-// P0-6.6 (2026-09-14): 图像变换 6 槽 + applyTransformImage
+// 图像变换 6 槽 + applyTransformImage
 //   6 menu action (MainWindow::onXxx) 通过 ImageWindow::onXxx 调到下面
 //   实现: cv::flip / cv::rotate / cv::warpAffine + 推 TransformCommand 到 m_undoStack
 // ============================================================================
@@ -2884,7 +2884,7 @@ void ImageWindow::applyTransformImage(const cv::Mat& img, const transform::Trans
     if (m_canvas) m_canvas->update();
 }
 
-// P0-6.6 (2026-09-14): 应用 QTransform 矩阵入口 (4 mode 自由变换主路径)
+// 应用 QTransform 矩阵入口 (4 mode 自由变换主路径)
 //   内部: cv::warpAffine 应用变换 + 推 TransformCommand 推 undoStack
 void ImageWindow::applyImageTransform(const QTransform& t, const QString& text)
 {
@@ -2908,7 +2908,7 @@ void ImageWindow::applyImageTransform(const QTransform& t, const QString& text)
     }
 }
 
-// P1.4.5 (2026-09-17): apply non-destructive transform to a SmartObject layer.
+// apply non-destructive transform to a SmartObject layer
 //   Used by MainWindow menu actions and LayerPanel right-click "Transform..."
 //   entry to drive LayerStack::setSmartObjectTransform + LayerCommand undo.
 //
@@ -2949,7 +2949,7 @@ void ImageWindow::applySmartObjectTransform(int idx, const QTransform& newTransf
 
 void ImageWindow::onFreeTransform()
 {
-    // P0-6.9 (2026-09-14): 切到 TransformTool (Ctrl+T), ToolContext 接管鼠标事件转发
+    // 切到 TransformTool (Ctrl+T), ToolContext 接管鼠标事件转发
     if (!m_ctx) {
         statusBar()->showMessage(tr("ToolContext 未初始化"), 2000);
         return;
@@ -3051,6 +3051,6 @@ void ImageWindow::onImageRotate180()
         setCurrentImage(after);
     }
 }
-// P0-1.4 (2026-09-07): onOpen / onSave / onSaveAs / onClose 4 个 IO slot 已搬到
+// onOpen / onSave / onSaveAs / onClose 4 个 IO slot 已搬到
 //   src/media/imagewindow/ImageIOController.cpp 实现, 这里不再保留.
 

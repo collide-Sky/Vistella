@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// AppBar implementation - P5.5+ (2026-10-09)
+// AppBar implementation
 //
 #include "AppBar.h"
 #include "ui_AppBar.h"

@@ -8,7 +8,6 @@
 //
 // The indicator is a child of the target widget (set via setHost()); the
 // caller positions the indicator with move()/resize()/raise() before showing.
-//   P7.6.x v3 commit 2 (2026-10-14).
 #pragma once
 
 #include <QWidget>

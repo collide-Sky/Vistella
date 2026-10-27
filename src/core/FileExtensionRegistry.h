@@ -12,7 +12,7 @@
 // 设计原则:
 //   - 纯静态 + namespace, 不需要单例, 不需要 new
 //   - 放在 src/core, src/ui 和 src/app 都能 include
-//   - 阶段 0: 写死. 阶段 1+ IModule 注册时, MediaDispatcher 用 union (注册 ∪ 内置默认)
+//   写死. IModule 注册后, MediaDispatcher 用 union (注册 ∪ 内置默认)
 //     避免注册空 module 时所有文件都"无法路由"
 // =============================================================
 
@@ -22,7 +22,7 @@
 
 namespace FileExtensionRegistry {
 
-// 模块 id (跟 IModule::info().id 一致, 阶段 0 IModule 还没注册时 MediaDispatcher 用这个)
+// 模块 id (跟 IModule::info.id 一致, IModule 还没注册时 MediaDispatcher 用这个)
 namespace ModuleId {
 inline constexpr const char *ImageWorker  = "imageWorker";
 inline constexpr const char *AudioWorker  = "audioWorker";
@@ -35,7 +35,7 @@ inline constexpr const char *VisionWorker = "visionWorker";
 //   - visionWorker 跟 imageWorker 共享 (vision 跑在图像上)
 QStringList extensionsFor(const QString &moduleId);
 
-// 反查: 扩展名 -> 模块 id (阶段 0 默认表; IModule 注册后取并集)
+// 反查: 扩展名 -> 模块 id (默认表; IModule 注册后取并集)
 //   "image.png" -> "imageWorker"
 //   ".png"      -> "imageWorker"
 //   找不到 -> 空 QString

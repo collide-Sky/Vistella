@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// PatternTab - P7.7 (2026-10-14)
+// PatternTab
 //
 //   Sub-page 4 of ColorDock. PS-style "Pattern" tab:
 //     - 6 PS-style pattern preset cells (3 cols x 2 rows)

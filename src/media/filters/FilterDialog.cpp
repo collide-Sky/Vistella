@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// FilterDialog implementation - P0-5.9 (2026-09-10), P3.1.1 (2026-09-22)
+// FilterDialog implementation
 //
 #include "FilterDialog.h"
 #include "FilterFactory.h"
@@ -118,7 +118,7 @@ FilterDialog::FilterDialog(ImageWindow *host, FilterKind kind, QWidget *parent)
     refreshParamText();
     layout->addWidget(m_paramLabel);
 
-    // PS 风格 (2026-09-10): 状态提示
+    // PS 风格 状态提示
     auto *hint = new QLabel(
         QStringLiteral("Apply: 实时预览\nOK: 应用 + 入撤销栈\nCancel: 取消"), this);
     hint->setStyleSheet("color: gray; font-size: 10px;");
@@ -342,7 +342,7 @@ void FilterDialog::onApplyClicked()
     LOG_INFO("[FilterDialog] Apply: kind={}", static_cast<int>(m_kind));
     emit applyRequested();
     if (m_host && m_strategy) {
-        // P3.1.3 (2026-09-22): realtime preview through ImageWindow
+        // realtime preview through ImageWindow
         //   Apply 不动 m_current, 只通过 host->previewFilter(strategy) 触发
         //   临时预览层. OK/Cancel 各自负责 clearPreview.
         m_host->previewFilter(m_strategy.get());
@@ -356,7 +356,7 @@ void FilterDialog::onApplyClicked()
 void FilterDialog::onOkClicked()
 {
     LOG_INFO("[FilterDialog] OK: kind={}", static_cast<int>(m_kind));
-    // P3.1.3 (2026-09-22): clear preview first, then push FilterCommand via host
+    // clear preview first, then push FilterCommand via host
     //   host->applyFilterWithStrategy() 内部用 dialog 提供的 strategy
     //   (含用户在 slider/picker 上调好的当前参数) 走 FilterCommand 入撤销栈
     if (m_host && m_strategy) {

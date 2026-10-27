@@ -144,7 +144,7 @@ LOGGER_API void logImpl(LogLevel level, const char* file, int line,
                         fmt::string_view fmt, fmt::format_args args);
 }  // namespace detail
 
-// 模板版: fmt 风格, {} 占位 (推荐用这个, 编译期校验类型)
+// 模板版: fmt 风格, {} 是格式参数 (推荐用这个, 编译期校验类型)
 // 模板必须 inline 在头文件 (避免跨 dll 实例化)
 template <typename... Args>
 inline void log(LogLevel level, const char* file, int line,

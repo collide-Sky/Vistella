@@ -32,7 +32,7 @@ void LoginDialog::setupProviderButtons()
     struct Btn {
         const char   *name;
         Provider      id;
-        const char   *fallbackLabel;   // 阶段 0 没图标, 用文字
+        const char   *fallbackLabel;   //  没图标, 用文字
     };
     const Btn kBtns[] = {
         { "githubBtn",  ProviderGitHub, "GitHub"  },
@@ -45,7 +45,7 @@ void LoginDialog::setupProviderButtons()
     for (const auto &b : kBtns) {
         QPushButton *btn = findChild<QPushButton *>(QString::fromLatin1(b.name));
         if (!btn) continue;
-        // 阶段 0 占位: 按钮文字 (阶段 5+ 配图标 + 颜色)
+        //  mock: 按钮文字 (未配图标 + 颜色)
         if (btn->text().isEmpty()) {
             btn->setText(QString::fromUtf8(b.fallbackLabel));
         }
@@ -59,8 +59,8 @@ void LoginDialog::setupProviderButtons()
 
 void LoginDialog::onProviderClicked(int id)
 {
-    // 阶段 0: 直接 emit + accept (关闭)
-    // 阶段 5+: 先调 AuthClient::loginXxxAsync(...), 改按钮文字为"登录中...", disable
+    // 直接 emit + accept (关闭)
+    // 先调 AuthClient::loginXxxAsync(...), 改按钮文字为"登录中...", disable (未实装, 见 docs/DEBT.md#A-AUTH)
     //          等 AuthClient::loginFinished 再 accept/reject
     Provider p = static_cast<Provider>(id);
     emit providerChosen(p);

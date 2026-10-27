@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushShape - P1.1 (2026-09-15) Brush full implementation
+// BrushShape - Brush full implementation
 //   PS-style brush tip shape selector + sampled bitmap support.
 //   ShapeType enumerates the 9 built-in shapes (round/flat/fan/etc).
 //   For Sampled/Textured shapes, m_sampledBitmap holds the grayscale stamp

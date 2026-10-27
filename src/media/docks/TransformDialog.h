@@ -3,7 +3,7 @@
 
 // SPDX-License-Identifier: MIT
 //
-// TransformDialog - P1.4.6 (2026-09-17)
+// TransformDialog
 //
 // Unified one-shot transform dialog for SmartObject / Bitmap layers.
 //   Replaces the chained QInputDialog (scale X / scale Y / rotation) used by

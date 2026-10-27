@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// FilterStrategy - P0-5 (2026-09-10)
+// FilterStrategy
 //
 // 20 滤镜 Strategy 模式抽象 (PS 同款).
 //   - FilterKind enum: 20 个类型
@@ -55,16 +55,16 @@ enum class FilterKind {
     HighPass       = 17,
     Solarize       = 18,
     FilterGallery  = 19,
-    // Noise (3) — 20..22 (P3.3 2026-09-22)
+    // Noise (3) — 20..22
     AddNoise       = 20,    // 加 Gaussian 噪声 (cv::randn)
     ReduceNoise    = 21,    // bilateral 降噪 (PS Noise > Reduce Noise 简化)
     MedianNoise    = 22,    // Median 降噪 (复用 MedianBlurFilter,PS Noise > Median 别名)
-    // White Balance (1) — 23 (P3.4 2026-09-22)
+    // White Balance (1) — 23
     //   Temp (色温, 2000K..10000K): R/B 通道补偿 (蓝->红 / 红->蓝)
     //   Tint (-150..+150): 绿/品红通道补偿
     WhiteBalance   = 23,
 
-    // ===== P7.3 (2026-10-12) PS 2025 风格化菜单扩 =====
+    // ===== PS 2025 风格化菜单扩 =====
     // PS 把 11 个模糊全放"风格化"submenu, 24..31 共 8 项 (我们不少 alias 现有策略).
     SurfaceBlur    = 24,    // 表面模糊 — alias BilateralBlur
     MotionBlur     = 25,    // 动感模糊 — cv::blur + 方向核
@@ -310,7 +310,7 @@ public:
     QString paramText() const override;
 };
 
-// ===== Noise (3) — P3.3 (2026-09-22) =====
+// ===== Noise (3) — =====
 
 // AddNoise: 加 Gaussian 噪声. mean=0 (默认), stddev 控制强度
 class AddNoiseFilter : public FilterStrategy {
@@ -347,7 +347,7 @@ public:
     int ksize = 3;   // 1..31 odd
 };
 
-// WhiteBalanceFilter (P3.4 2026-09-22): PS Image > Adjustments > White Balance
+// WhiteBalanceFilter: PS Image > Adjustments > White Balance
 //   Temp (色温): 2000K..10000K, 默认 6500K
 //     - 低于 6500K (2000K) → 加暖 (R 通道乘 > 1, B 通道乘 < 1, 蓝色减)
 //     - 高于 6500K (10000K) → 加冷 (R 通道乘 < 1, B 通道乘 > 1, 蓝色加)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// Text - P0-7.1 (2026-09-14)
+// Text
 //
 // PS 风格文字工具 (T):
 //   - click 空白: createTextItem + startEditing (主流做法, 跟 PS/Word 一致)

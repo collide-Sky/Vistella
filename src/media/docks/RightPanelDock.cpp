@@ -18,7 +18,7 @@ namespace docks {
 
 namespace {
 
-// P8.3.2 (2026-10-26): the smallest height a panel group may take. Below
+// the smallest height a panel group may take. Below
 //   this the tab bar is all that is left and the group is useless.
 constexpr int kMinGroupHeight = 80;
 
@@ -46,7 +46,7 @@ RightPanelDock::RightPanelDock(QWidget* parent) : QWidget(parent)
     buildSubDockProperty();
     buildSubDockLayer();
 
-    // P8.3.2 (2026-10-26): the colour group and the property group size to
+    // the colour group and the property group size to
     //   their content; only the layer group absorbs the leftover height.
     //
     //   The old code asked for a fixed 1/3 split (200/200/200). Qt's
@@ -231,7 +231,7 @@ QSize RightPanelDock::sizeHint() const
 
 QSize RightPanelDock::minimumSizeHint() const
 {
-    // P8.3.2 (2026-10-26): 右侧面板是 dock, 它不能决定主窗口的高度.
+    // 右侧面板是 dock, 它不能决定主窗口的高度
     //
     //   Qt 会把 dock 的 minimumSizeHint 累加进 QMainWindow 的布局最小值:
     //   三个组的最小高度加起来 (颜色 ~110 + 属性 ~390 + 图层 ~240) 超过

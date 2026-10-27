@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// EyedropperTool - F-C (2026-09-09) + Q4.2.3 (2026-09-24)
+// EyedropperTool
 //
 // State pattern concrete class - Eyedropper (I)
 //   cursor: CrossCursor (+)

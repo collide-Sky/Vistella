@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// MosaicOptionPanel implementation - Q4.2.2 (2026-09-24)
+// MosaicOptionPanel implementation
 //
 //   NOTE: include order matters - MosaicTool.h uses QPointer<ImageWindow>
 //   which requires the full ImageWindow type (see qpointer.h:76

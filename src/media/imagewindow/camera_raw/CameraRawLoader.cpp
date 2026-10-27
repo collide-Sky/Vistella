@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CameraRawLoader implementation - P3.5 (2026-09-23) + P3.5 follow-up real path
+// CameraRawLoader implementation - + follow-up real path
 //
 #include "CameraRawLoader.h"
 

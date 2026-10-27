@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// IccJpegEmbed implementation - P0-8.3 (2026-09-15)
+// IccJpegEmbed implementation
 //
 #include "IccJpegEmbed.h"
 #include "logger.h"

@@ -27,7 +27,7 @@ DocWindow::~DocWindow()
 
 QString DocWindow::displayTitle() const
 {
-    // 阶段 0 第 5 步: 默认只新建 txt 文本, 未保存时显示 "未命名.txt" 明确语义
+    // 默认只新建 txt 文本, 未保存时显示 "未命名.txt" 明确语义
     QString base = m_filePath.isEmpty()
         ? tr("未命名.txt")
         : QFileInfo(m_filePath).fileName();

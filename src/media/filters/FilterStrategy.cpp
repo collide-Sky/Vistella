@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// FilterStrategy implementations - P0-5 (2026-09-10)
+// FilterStrategy implementations
 //
 // 20 滤镜实装. 复用 ImageProcessor 已有 gaussianBlur/medianBlur/bilateralFilter/sharpen,
 // 其他用 OpenCV primitive 实现 (Sobel/Laplacian/lookup table).
@@ -40,7 +40,7 @@ const char* filterName(FilterKind k)
     case FilterKind::ReduceNoise:   return "减少噪点";
     case FilterKind::MedianNoise:   return "中值降噪";
     case FilterKind::WhiteBalance:  return "白平衡";
-    // P7.3 (2026-10-12): PS 风格化菜单 (8 模糊 + 6 扭曲 + 4 像素化 + 3 渲染 + 1 杂色)
+    // PS 风格化菜单 (8 模糊 + 6 扭曲 + 4 像素化 + 3 渲染 + 1 杂色)
     case FilterKind::SurfaceBlur:    return "表面模糊";
     case FilterKind::MotionBlur:     return "动感模糊";
     case FilterKind::RadialBlur:     return "径向模糊";
@@ -362,9 +362,9 @@ void FilterGalleryFilter::apply(const cv::Mat& in, cv::Mat& out)
     if (in.empty()) return;
     in.copyTo(out);
 }
-QString FilterGalleryFilter::paramText() const { return QStringLiteral("P1 阶段实装"); }
+QString FilterGalleryFilter::paramText() const { return QStringLiteral("已实装"); }
 
-// ===== Noise (3) — P3.3 (2026-09-22) =====
+// ===== Noise (3) — =====
 
 // AddNoise: 加 Gaussian 噪声到原图 (PS Filter > Noise > Add Noise)
 //   mean=0 (默认), stddev 控制强度. cv::randn 产生 mean=0 stddev=1 噪声,
@@ -414,7 +414,7 @@ QString MedianNoiseFilter::paramText() const
     return QStringLiteral("ksize=%1").arg(ksize);
 }
 
-// WhiteBalanceFilter (P3.4 2026-09-22)
+// WhiteBalanceFilter
 //   拆分 in 通道 (b/r 通道重缩放), clamp 到 0..255 防止溢出.
 void WhiteBalanceFilter::apply(const cv::Mat& in, cv::Mat& out)
 {

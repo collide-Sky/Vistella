@@ -1,6 +1,6 @@
 // VPages.cpp
-//   P7.6.x v3 commit 3 (2026-10-14) + commit 4 (2026-10-15): +VHistoryPage
-//   P8.3.2 (2026-10-26): every page publishes its title as the widget's
+//   + commit 4 +VHistoryPage
+//   every page publishes its title as the widget's
 //     window title.
 //
 //     VDraggableTabWidget::addPage() takes the tab label from
@@ -64,7 +64,7 @@ VLayerPage::VLayerPage(QWidget* parent)
     , m_inner(embed(this, new docks::LayersDock(this)))
 {
     setWindowTitle(pageTitle());
-    // P8.3.2 (2026-10-26): the panel group provides the page switcher, so
+    // the panel group provides the page switcher, so
     //   the inner tab bar of the LayersDock would be a duplicate row of
     //   tabs (and its channel/path page was only ever a placeholder).
     m_inner->setEmbeddedInPanelGroup(true);

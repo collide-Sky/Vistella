@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushEngine impl - P1.1 (2026-09-15)
+// BrushEngine impl
 
 #include "BrushEngine.h"
 #include "BrushPreset.h"

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// GpuBackend - P8.2.x (2026-10-19) real Qt OpenGL shader pipeline.
+// GpuBackend - real Qt OpenGL shader pipeline
 //
 //   Pass-through fragment shader MVP. The backend owns a single
 //   QOpenGLContext + QOffscreenSurface + a QOpenGLShaderProgram that

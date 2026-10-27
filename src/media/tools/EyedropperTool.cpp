@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// EyedropperTool implementation - F-C (2026-09-09) + Q4.2.3 (2026-09-24)
+// EyedropperTool implementation
 //
 #include "EyedropperTool.h"
 
@@ -57,7 +57,7 @@ void EyedropperTool::onMousePress(QMouseEvent* /*e*/, ImageWindow* host, const Q
     }
 }
 
-// Q4.2.3 (2026-09-24): optionPage for ImageOptionBar page slot 7 (Eyedropper).
+// optionPage for ImageOptionBar page slot 7 (Eyedropper)
 //   PS standard sample sizes: 1=Point, 3=3x3 average, 5=5x5 average,
 //   11=11x11 average. Combo bound to m_sampleSize.
 QWidget* EyedropperTool::optionPage(QWidget* parent)

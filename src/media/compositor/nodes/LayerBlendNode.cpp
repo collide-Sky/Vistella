@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerBlendNode impl - P8.1.1 Phase B (2026-10-20)
+// LayerBlendNode impl
 //
 //   Delegates to layers::applyBlend() so compositor blend math is
 //   identical to the legacy LayerStack::render() path. The only

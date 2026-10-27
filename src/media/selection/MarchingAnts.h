@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// MarchingAnts - P0-4.3 (2026-09-10)
+// MarchingAnts
 //
 // 200ms tick timer that drives the marching ants animation offset.
 //   phase 0..15 (16 phases over 200ms*16 = 3.2s loop)

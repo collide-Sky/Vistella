@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// IccTiffEmbed - P0-8.4 (2026-09-15)
+// IccTiffEmbed
 //
 // TIFF ICCProfile tag embedder (PS 同款 ICC profile 嵌入)
 //

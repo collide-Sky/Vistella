@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TileCache impl - P8.1 (2026-10-16)
+// TileCache impl
 
 #include "TileCache.h"
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TransformTool implementation - P0-6.2 (2026-09-14)
+// TransformTool implementation
 //
 // 4 mode 矩阵数学 (P0-6.3 TransformMath) 完整版在 P0-6.3 实装, 本类基础版
 //   只实装 Scale 完整 + 其他 3 mode 接口, 4 mode 跟 TransformBox 配合
@@ -140,7 +140,7 @@ QCursor TransformTool::cursor() const
 
 QWidget* TransformTool::optionPage(QWidget* parent)
 {
-    // P0-6.11 (2026-09-14): ImageOptionBar 装 4 mode combo (Scale/Rotate/Skew/Distort)
+    // ImageOptionBar 装 4 mode combo (Scale/Rotate/Skew/Distort)
     //   + Shift = 等比 toggle
     //   每次 tool enter 都新建 widget (P0-6.7 简化: 不缓存)
     auto* page = new QWidget(parent);
@@ -188,7 +188,7 @@ void TransformTool::setMode(transform::TransformBox::Mode m)
 
 void TransformTool::commitTransform(ImageWindow* host)
 {
-    // P3.2.2 (2026-09-22): 真正 push TransformCommand (之前 P0-6.2 简化留的 no-op).
+    // 真正 push TransformCommand (之前 简化留的 no-op)
     //   流程:
     //     1) 计算最终矩阵 (Distort 用 perspective, 其他 3 mode 用 affine)
     //        - Scale/Skew 需要 (handle, newPos) — newPos 从 m_lastScenePos 拿
@@ -220,7 +220,7 @@ void TransformTool::commitTransform(ImageWindow* host)
     cv::Mat after;
 
     if (m_box->mode() == transform::TransformBox::Mode::Distort) {
-        // P3.2.3 (2026-09-22): Distort 走 4 corner 透视变换 (3x3 矩阵),
+        // Distort 走 4 corner 透视变换 (3x3 矩阵)
         //   因为 QTransform (2x3 affine) 不能表达非平行四边形映射.
         QPointF srcQuad[4];
         srcQuad[0] = m_box->rect().topLeft();
@@ -237,7 +237,7 @@ void TransformTool::commitTransform(ImageWindow* host)
         ImageProcessor::warpPerspective(before, after, srcQuad, dstQuad);
     } else {
         // Scale / Rotate / Skew 走 affine (2x3 矩阵).
-        //   P3.2.5 (2026-09-23): Scale/Skew 用 box.origRect() (拖动前 rect) 算非平凡矩阵.
+        //   Scale/Skew 用 box.origRect (拖动前 rect) 算非平凡矩阵
         //   旧实现传 m_box->rect() (dragHandle 已更新到 newPos 后状态) 退化 identity.
         //   现在 TransformBox::dragHandle 第一次进入时 snapshot 到 m_dragOrigRect,
         //   commit 时 box.origRect() 返 pre-drag state, scaleMatrix 用它算 sx/sy 正确.

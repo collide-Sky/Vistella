@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ToolContext implementation - F-C (2026-09-09)
+// ToolContext implementation
 //
 #include "ToolContext.h"
 #include "ToolState.h"
@@ -38,7 +38,7 @@ void ToolContext::attach(ImageWindow* host, mediators::ToolMediator* toolMed)
 {
     m_host = host;
     m_toolMed = toolMed;
-    // P1.3.4 (2026-09-17): ToolContext listens to Mediator::toolSwitched so
+    // ToolContext listens to Mediator::toolSwitched so
     //   menu / shortcut paths can switch tools without LeftToolBar being
     //   present in the UI. Both LeftToolBar and ToolContext now call
     //   setState; LeftToolBar keeps its button highlight sync.
@@ -114,8 +114,8 @@ void ToolContext::onKeyRelease(QKeyEvent* e)
     if (m_current) m_current->onKeyRelease(e, m_host.data());
 }
 
-// ===== P7.6 (2026-10-13) brushSharedState setters =====
-//   P7.6.x (2026-10-14): Single setter writes + emits brushSettingsChanged. UI:
+// ===== brushSharedState setters =====
+//   Single setter writes + emits brushSettingsChanged. UI
 //     BrushOptionsPanel (ImageOptionBar idx=7) value change goes through these 6
 //     setters via ImageOptionBar::onBrushSharedStateChangedFromPanel. Reverse
 //     direction: ToolContext set (load file / preset switch / future tools) ->
@@ -169,7 +169,7 @@ void ToolContext::setBrushSize(int px)
     emit brushSettingsChanged();
 }
 
-// P7.9.1 (2026-10-15): 3 new shared brush state setters
+// 3 new shared brush state setters
 //   (hardness / spacing / scatter). Same fuzzy-compare + signal pattern.
 void ToolContext::setHardness(double pct)
 {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ImageOptionBar implementation - F-E (2026-09-09) + P5.1 (2026-10-08)
+// ImageOptionBar implementation
 //
 // Include order: imagewindow.h MUST come before ImageOptionBar.h because
 //   MosaicTool.h declares a `QPointer<ImageWindow> m_host` member which
@@ -20,7 +20,7 @@
 #include "PatchTool.h"
 #include "RedEyeTool.h"
 #include "MaskBrushTool.h"
-#include "Brush.h"        // P7.6.x (2026-10-14): presetChanged -> brush->setPreset
+#include "Brush.h"        // presetChanged -> brush->setPreset
 #include "../brushes/BrushPickerDialog.h"  // P7.6.x: picker button -> modal dialog
 
 #include "../imagewindow/MosaicOptionPanel.h"
@@ -45,7 +45,7 @@ ImageOptionBar::ImageOptionBar(QWidget* parent) : QWidget(parent)
     // F-E stage: default page = None (0)
     ui->stackedWidget->setCurrentIndex(static_cast<int>(mediators::ToolId::None));
 
-    // P8.3.2 (2026-10-26): the "no tool selected" page gets a short hint.
+    // the "no tool selected" page gets a short hint
     //   The options column is ~300px wide; an empty box of that size reads
     //   as a broken panel rather than as "nothing is selected yet".
     if (QWidget* nonePage = ui->stackedWidget->widget(
@@ -73,7 +73,7 @@ void ImageOptionBar::attach(ToolContext* ctx,
     m_ctx = ctx;
     m_mosaic = mosaic;
     m_textCtrl = textCtrl;
-    m_brushOpt = brushOpt;  // P7.6.x (2026-10-14): weak ref, optional
+    m_brushOpt = brushOpt;  // weak ref, optional
 
     if (m_ctx) {
         connect(m_ctx, &ToolContext::toolChanged,
@@ -84,7 +84,7 @@ void ImageOptionBar::attach(ToolContext* ctx,
             connect(m_mosaic, &MosaicTool::modeChanged,
                     this, &ImageOptionBar::onMosaicModeChanged);
         }
-        // P7.6.x (2026-10-14): BrushOptionsPanel <-> ToolContext.brushSharedState
+        // BrushOptionsPanel <-> ToolContext.brushSharedState
         //   双向同步 (取代旧 TopOptionBar). 仅在 m_brushOpt 有效时撮合.
         if (m_brushOpt) {
             connect(m_brushOpt, &BrushOptionsPanel::sharedStateChanged,
@@ -189,8 +189,8 @@ void ImageOptionBar::onToolChanged(mediators::ToolId id)
 {
     const int idx = static_cast<int>(id);
     if (idx < 0 || idx >= ui->stackedWidget->count()) {
-        // P0-6.11 (2026-09-14): Transform tool (idx=9) dynamic addPage
-        // Q4.2.1 (2026-09-23): MaskBrush (idx=16) same dynamic path
+        // Transform tool (idx=9) dynamic addPage
+        // MaskBrush (idx=16) same dynamic path
         if (id == mediators::ToolId::Transform) {
             const int transformIdx = static_cast<int>(mediators::ToolId::Transform);
             if (transformIdx >= ui->stackedWidget->count()) {
@@ -239,9 +239,9 @@ void ImageOptionBar::onToolChanged(mediators::ToolId id)
         return;
     }
 
-    // P0-9.1 (2026-09-15): Shape tool (idx=10) dynamic load optionPage
+    // Shape tool (idx=10) dynamic load optionPage
     //   P0-9.2/9.3 same pattern (Pen/Clone/Heal/Patch/RedEye).
-    // P7.6.x (2026-10-14): Brush (idx=7) 走 m_brushOpt 持久 widget, 不再调
+    // Brush (idx=7) 走 m_brushOpt 持久 widget, 不再调
     //   Brush::optionPage() 每次新建 (老代码会换掉我们挂的 BrushOptionsPanel,
     //   导致撮合丢失). 重新接 presetChanged / pickerRequested 到当前 Brush 工具.
     if (m_ctx) {
@@ -311,7 +311,7 @@ void ImageOptionBar::onMosaicModeChanged(bool /*on*/)
     // Page stays on kMosaicPageIdx (17). MosaicOptionPanel reflects new mode.
 }
 
-// ---------------- P7.6.x (2026-10-14) BrushOptionsPanel 撮合 ----------------
+// BrushOptionsPanel 撮合
 //   取代旧 TopOptionBar (imagewindow.cpp 顶部 6 控件). 6 字段:
 //     blendMode / size / opacity / flow / angle / smoothing.
 //   已经在 BrushOptionsPanel 现有控件里的 5 项通过 sharedStateChanged 撮合,
@@ -328,7 +328,7 @@ void ImageOptionBar::onBrushSharedStateChangedFromPanel()
 {
     if (!m_ctx || !m_brushOpt) return;
     const auto s = m_brushOpt->sharedStatePulledIn();
-    // P7.9.1 (2026-10-15): bulk set (1 signal instead of 9). The 3 new
+    // bulk set (1 signal instead of 9). The 3 new
     // fields (hardness/spacing/scatter) flow through automatically.
     // Use named-aggregate-init to avoid double<->int narrowing (C2397).
     m_ctx->setBrushSharedState(tools::BrushSharedState{

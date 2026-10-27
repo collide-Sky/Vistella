@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SelectionStrategy - P0-4.2 (2026-09-10)
+// SelectionStrategy
 //
 // Strategy pattern: each selection tool delegates the actual mask computation
 // to a concrete SelectionStrategy. The tool drives begin/update/end; the
@@ -75,11 +75,11 @@ public:
     QImage end(const QImage& image) override;
     void cancel() override;
 
-    // P2.1 (2026-09-22): feathering radius (0 = none, max 50px)
+    // feathering radius (0 = none, max 50px)
     void setFeather(int r) { m_featherRadius = std::clamp(r, 0, 50); }
     int  feather() const { return m_featherRadius; }
 
-    // P2.1 (2026-09-22): anti-alias on path boundary
+    // anti-alias on path boundary
     void setAntiAlias(bool b) { m_antiAlias = b; }
     bool antiAlias() const { return m_antiAlias; }
 
@@ -102,7 +102,7 @@ public:
     void setTolerance(int t) { m_tolerance = std::clamp(t, 0, 255); }
     int  tolerance() const { return m_tolerance; }
 
-    // P2.1 (2026-09-22): contiguous switch (PS standard)
+    // contiguous switch (PS standard)
     //   true  (default): BFS 4-neighborhood, only connected same-color region
     //   false:           full image scan, all pixels within tolerance
     void setContiguous(bool c) { m_contiguous = c; }
@@ -126,7 +126,7 @@ class ColorRangeSelectionStrategy : public SelectionStrategy
 public:
     Kind kind() const override { return Kind::ColorRange; }
 
-    // P2.4 (2026-09-22): sample points (image-pixel coords), fuzziness (0..255),
+    // sample points (image-pixel coords), fuzziness (0..255)
     //   invert flag — all driven by optionPage UI.
     void setSamplePoints(const QVector<QPointF>& pts);
     void setFuzziness(int f) { m_fuzziness = std::clamp(f, 0, 255); }

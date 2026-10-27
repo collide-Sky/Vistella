@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushPickerDialog impl - P1.1 (2026-09-15)
+// BrushPickerDialog impl
 
 #include "BrushPickerDialog.h"
 #include "BrushEngine.h"

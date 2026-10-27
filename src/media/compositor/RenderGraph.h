@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// RenderGraph + RenderContext - P8.1 (2026-10-16) + P8.4 (2026-10-16)
+// RenderGraph + RenderContext
 //   RenderContext: per-render state (cache + the calling graph). A node's
 //     compute() pulls upstream tile outputs via ctx.cache.tryGet(key).
 //   RenderGraph:  main entry. execute() walks the graph in topological
@@ -62,7 +62,7 @@ public:
     int misses = 0;
 };
 
-// P8.4 (2026-10-16): composite strategy. P7.6.x v3 commit 2 already
+// composite strategy. already
 // defined VCompositeStrategy in the VDraggableTabWidget subsystem for
 // the dock-level pipeline; the equivalent here is per-render dispatch.
 // Sequential = main thread loops over tiles. Parallel = fan tiles
@@ -79,14 +79,14 @@ public:
                 TileGrid* grid)
         : m_graph(graph), m_output(outputNode), m_grid(grid) {}
 
-    // P8.4 (2026-10-16): composite strategy selection. Default
+    // composite strategy selection. Default
     // Sequential preserves the P8.1 behavior. Setting Parallel
     // routes the per-tile work to engine->background() when an
     // engine is passed to execute().
     void setCompositeStrategy(CompositeStrategy s) { m_strategy = s; }
     CompositeStrategy compositeStrategy() const { return m_strategy; }
 
-    // P8.4.x (2026-10-19): per-tile backend dispatch. When a registry
+    // per-tile backend dispatch. When a registry
     // is set, every freshly-computed tile is post-processed through
     //   registry->pick(m_sharedState.kind, m_sharedState)->processTile(...)
     // and the result is what gets cached. Default: nullptr = no

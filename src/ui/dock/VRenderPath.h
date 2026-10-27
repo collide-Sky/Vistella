@@ -1,7 +1,7 @@
 // VRenderPath.h
 //
 // Render path preference for a VTabPageBase.
-//   P7.6.x v3 (2026-10-14): placeholders for P8.2 GPU backend abstraction.
+//   placeholders for GPU backend abstraction
 //   Actual GPU/CPU switching lives in P8.2; here we only declare the enum so
 //   downstream code (VTabPageBase, RightPanelDock, status bar) can already
 //   report / query the preference without changing signatures later.

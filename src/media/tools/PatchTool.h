@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 //
-// PatchTool - P0-9.3 (2026-09-15) + P0-9.4 (2026-09-15) + P2.2 (2026-09-22)
+// PatchTool
 //
 // PS-style Patch tool:
 //   - drag rectangle for source area
 //   - release, then drag destination — source pixels applied to destination
 //
-// P0-9.4 (2026-09-15): cv::seamlessClone (NORMAL_CLONE) for content-aware fill
+// cv::seamlessClone (NORMAL_CLONE) for content-aware fill
 //
-// P2.2 (2026-09-22):
 //   - i18n title via QCoreApplication::translate
 //   - optionPage: Patch mode QComboBox (Normal / Mixed / Monochrome Transfer)
 //   - ImageEditCommand undo integration: snapshot m_current before applyPatch,

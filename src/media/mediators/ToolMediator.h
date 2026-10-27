@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ToolMediator - F-B1 (2026-09-08)
+// ToolMediator
 //
 // Mediator 模式, 1 个类只负责"工具切换 + 工具配置变更"一个方向
 //   转发: 调用方 → ToolMediator → 订阅方 (LeftToolBar / ImageOptionBar / ImageCanvas / DialogMediator)
@@ -42,18 +42,18 @@ enum class ToolId {
     Text        = 6,   // 文字 (T)
     Brush       = 7,   // 画笔 (B)
     Eyedropper  = 8,   // 吸管 (I)
-    // P0-6.9 (2026-09-14): 自由变换 (Ctrl+T, 不在 LeftToolBar, 由 onFreeTransform 触发)
+    // 自由变换 (Ctrl+T, 不在 LeftToolBar, 由 onFreeTransform 触发)
     Transform   = 9,
-    // P0-9.1 (2026-09-15): 形状工具 (Rectangle/Ellipse/Line/Polygon/Custom)
+    // 形状工具 (Rectangle/Ellipse/Line/Polygon/Custom)
     Shape       = 10,
-    // P0-9.2 (2026-09-15): Pen tool
+    // Pen tool
     Pen         = 11,
-    // P0-9.3 (2026-09-15): 修复工具 (Clone/Heal/Patch/RedEye 共用 placeholder)
+    // 修复工具 (Clone/Heal/Patch/RedEye 共用 placeholder)
     Clone       = 12,
     Heal        = 13,
     Patch       = 14,
     RedEye      = 15,
-    // P1.3.4 (2026-09-16): Mask edit brush (图层蒙版画笔)
+    // Mask edit brush (图层蒙版画笔)
     MaskBrush   = 16,
 };
 

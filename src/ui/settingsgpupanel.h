@@ -10,7 +10,7 @@ class QPushButton;
 class QLabel;
 class QButtonGroup;
 
-// P8.3.x (2026-10-19): GPU settings panel.
+// GPU settings panel
 //
 //   Self-contained QWidget that exposes the 3-state RenderMode (Auto /
 //   Force GPU / Force CPU) plus a "Probe OpenGL" button that runs a

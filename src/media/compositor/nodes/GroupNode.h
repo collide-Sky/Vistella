@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// GroupNode - P8.1.1 Phase B (2026-10-20) composite a LayerGroup.
+// GroupNode - composite a LayerGroup
 //
 //   Semantics mirror the legacy LayerStack::render() group branch
 //   (LayerStack.cpp ~line 1424):

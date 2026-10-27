@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// Brush tool - P1.1 (2026-09-15) Brush full implementation
+// Brush tool - Brush full implementation
 //   PS-style painting tool: stroke smoothing + pressure dynamics + stamp-based paint.
 //   Owns BrushPreset (current brush config) + StrokeSmoother + PressureCurve.
 //   Strokes are pushed as ImageEditCommand to m_undoStack for undo/redo.

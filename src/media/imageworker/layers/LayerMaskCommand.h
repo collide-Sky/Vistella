@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerMaskCommand - P1.3.8 (2026-09-16)
+// LayerMaskCommand
 //
 // QUndoCommand for LayerMask struct mutations on a Layer (P1.3.2+).
 // Stores before/after LayerMask snapshots; redo() reapplies the new mask

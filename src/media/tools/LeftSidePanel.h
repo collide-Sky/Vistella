@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LeftSidePanel - P7.6.x v2 (2026-10-14), P8.3.2 (2026-10-26)
+// LeftSidePanel
 //
 // PS-style left side panel: single container widget hosting LeftToolBar +
 // ImageOptionBar + ModeSelectorBar + AppBar.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SelectionCommand - P0-4.4 (2026-09-10)
+// SelectionCommand
 //
 // QUndoCommand for selection operations (Select All / Deselect / Inverse).
 //   Stores before/after mask as 1-channel QImage; redo applies the op, undo

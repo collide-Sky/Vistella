@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// GroupNode impl - P8.1.1 Phase B (2026-10-20)
+// GroupNode impl
 //
 //   Composites the group's content over the incoming canvas using
 //   the group's opacity with Normal blend. Mirrors the legacy

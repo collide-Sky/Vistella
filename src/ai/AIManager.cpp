@@ -6,12 +6,12 @@
 #include <QUrl>
 
 // =============================================================
-// AIManager 单例实现 (阶段 0 占位)
-// 阶段 4+ 才会真正实现:
+// AIManager 单例实现 (mock: 方法体全空, 只让上层能编译)
+//  计划中的能力 (见 docs/DEBT.md#A-AUTH):
 //   - registerModel 真正注册 YOLOv8 / SAM / ESRGAN 等模型
 //   - backendName 切换 (ONNX <-> TensorRT <-> OpenVINO)
 //   - resolveModelPath 走 SettingsDialog 配置
-// 阶段 0 只做骨架, 所有方法空实现, 让上层能编译通过 + 接口定型
+//  只做骨架, 所有方法空实现, 让上层能编译通过 + 接口定型
 // =============================================================
 
 AIManager &AIManager::instance()
@@ -75,8 +75,8 @@ void AIManager::setBackendName(const QString &name)
 
 QString AIManager::resolveModelPath(const QString &modelId) const
 {
-    // 阶段 0 占位: 拼 <AppLocalData>/models/<id>.onnx (跨平台, Qt 6 标准)
-    // 阶段 4+: 走 SettingsDialog 配置, 支持多目录 / 多设备 / 用户自定义
+    //  拼 <AppLocalData>/models/<id>.onnx (跨平台, Qt 6 标准)
+    // 接 SettingsDialog 配置 (未实装, 见 docs/DEBT.md#A-AUTH)
     //   用 AppLocalDataLocation (非漫游) 跟 logs/data 统一, 都在 %LOCALAPPDATA% 下
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
                        + QStringLiteral("/models");

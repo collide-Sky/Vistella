@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CompositorGraph - P8.1 (2026-10-16) DAG of CompositorNode
+// CompositorGraph - DAG of CompositorNode
 //   addNode / addEdge build the graph. topologicalOrder() returns the
 //   evaluation order (Kahn's algorithm) and throws on cycle. markDirty()
 //   bumps a node's version + cascades to all transitive downstream nodes

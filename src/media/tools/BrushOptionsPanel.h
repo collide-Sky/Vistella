@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushOptionsPanel - P1.1 (2026-09-15) Brush full implementation
+// BrushOptionsPanel - Brush full implementation
 //   PS-style dynamic options panel for the Brush tool.
 //   Two-way binds BrushSettings / BrushDynamics to UI sliders + checkboxes.
 //   On any UI change, emits presetChanged(BrushPreset) so the active Brush
@@ -10,7 +10,7 @@
 //   angle/roundness + Size Jitter + Scattering + Smoothing). Additional
 //   dynamics groups (Transfer / Texture / Dual) can be added in P1.1 follow-up.
 //
-// P7.6.x (2026-10-14): 增加 BlendMode combo + 6 字段跟 ToolContext.brushSharedState
+// 增加 BlendMode combo + 6 字段跟 ToolContext.brushSharedState
 //   的双向同步. 取代旧 TopOptionBar (P7.5) — TopOptionBar 整个 class 删除, 它的 6 控件
 //   拆分如下:
 //     - blendMode   -> 新增 cmbBlendMode (在 BrushPreset 里没有的图层混合模式)
@@ -57,7 +57,7 @@ public:
     // Bind to an existing BrushPreset's name (for header label).
     void setPresetName(const QString &name);
 
-    // P7.9.2 (2026-10-16): 13 brush kinds. The kind picker is a button next
+    // 13 brush kinds. The kind picker is a button next
     //   to a readonly label ("Kind: Basic - Hard Round"). When the user
     //   picks a kind, the preset combo switches to the first preset of
     //   that kind. setKind() programmatically switches both the label and
@@ -65,11 +65,11 @@ public:
     brushes::BrushKind currentKind() const { return m_kind; }
     void setKind(brushes::BrushKind k);
 
-    // P7.6.x (2026-10-14): 共享 brush state 撮合接口 — 取代 TopOptionBar.
+    // 共享 brush state 撮合接口 — 取代 TopOptionBar
     //   sharedStateChanged: 外部 (用户改 UI 后) 把字段同步到 ToolContext.brushSharedState.
     //   sharedStatePulledIn: ToolContext 状态变 (切 tool / load file / preset 选) 把字段
     //     拉回到 UI. ImageOptionBar 在 Brush page 显示时调一次.
-    //   P7.9.1 (2026-10-15): 6 -> 9 字段 (+ hardness/spacing/scatter). 字段跟
+    //   6 -> 9 字段 (+ hardness/spacing/scatter). 字段跟
     //   ToolContext::BrushSharedState 镜像, ImageOptionBar::onToolContextBrushStateChanged
     //   做双边 round-trip.
     struct SharedState {
@@ -90,7 +90,7 @@ public:
 signals:
     // Emitted on any UI change. Caller should call brush.setPreset(p).
     void presetChanged(const brushes::BrushPreset &p);
-    // P7.6.x (2026-10-14): any of 6 shared fields changed (cmbBlendMode 单独触发
+    // any of 6 shared fields changed (cmbBlendMode 单独触发
     //   不走 presetChanged). ImageOptionBar 撮合时 1 个 signal 就够.
     void sharedStateChanged();
     // Emitted when user clicks the "..." picker button (opens BrushPickerDialog).

@@ -10,7 +10,9 @@
 
 设计要点
 --------
-* 增量门禁: 只对**本次提交新增的行**报 ERROR; 存量违规报 WARN。
+* 增量门禁: 只对**本次改动新引入**的违规报 ERROR; 存量违规报 WARN。
+  R1/R4 的"新引入"以**基点版本**为准 (方法名 / 调用次数), 不是"这行被改过" ——
+  否则改一行注释就会把历史欠债重新判成新增违规, 门禁就挡不住无关的提交。
   这样存量可以逐步清理, 而新代码必须一次干净。
 * 白名单: tools/contract_allowlist.txt, 每行 "符号名  # 原因"。
   新增豁免必须写原因, 否则视为无效。
@@ -147,6 +149,19 @@ def git_added_lines(base: str = "HEAD") -> set[tuple[str, int]] | None:
     return added
 
 
+def base_file_text(base: str, rel_name: str) -> str | None:
+    """读取基点版本的文件内容; 文件在基点不存在时返回 None。"""
+    try:
+        raw = subprocess.run(["git", "show", f"{base}:{rel_name}"],
+                             cwd=REPO, capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if raw.returncode != 0:
+        return None
+    return raw.stdout
+
+
 def untracked_file_lines() -> set[tuple[str, int]]:
     """未被 .gitignore 忽略的未跟踪文件, 其每一行都算"新增行"。"""
     out: set[tuple[str, int]] = set()
@@ -268,7 +283,11 @@ def collect_public_decls(path: Path) -> list[tuple[int, str, str]]:
     `std::lock_guard<std::mutex> lk(mu);`) 会被误当成 public API,
     门禁一旦报噪音, 就会被整体忽略。
     """
-    text = read_text(path)
+    return collect_public_decls_text(read_text(path))
+
+
+def collect_public_decls_text(text: str) -> list[tuple[int, str, str]]:
+    """collect_public_decls 的文本版本 (基点版本比对时用)。"""
     if not text:
         return []
     code, _ = strip_code_and_comments(text)
@@ -366,7 +385,23 @@ def build_call_index(files: list[Path]) -> dict[str, list[tuple[Path, int, str]]
     return index
 
 
-def rule_zero_callers(report: Report, allow: dict[str, str], added: set[tuple[str, int]]) -> None:
+def base_public_names(base: str) -> dict[str, set[str]]:
+    """基点版本里每个头文件已经声明过的 public 方法名。"""
+    out: dict[str, set[str]] = {}
+    for path in source_files():
+        if path.suffix not in {".h", ".hpp"}:
+            continue
+        rel_name = rel(path)
+        text = base_file_text(base, rel_name)
+        if text is None:
+            continue
+        out[rel_name] = {name for _, name, _ in collect_public_decls_text(text)}
+    return out
+
+
+def rule_zero_callers(report: Report, allow: dict[str, str],
+                      added: set[tuple[str, int]],
+                      base_names: dict[str, set[str]] | None = None) -> None:
     files = source_files()
     # 只用**代码**统计调用点。
     # 注释里提到符号名**不算调用** —— 否则一条 TODO 标记或说明性注释
@@ -390,7 +425,15 @@ def rule_zero_callers(report: Report, allow: dict[str, str], added: set[tuple[st
             if hits:
                 continue
             where = f"{rel(path)}:{lineno}"
-            is_new = (rel(path), lineno) in added
+            # 增量语义: 只有**本次新引入**的零调用者 API 才阻塞。
+            # 判断依据是"基点版本里没有这个方法", 而不是"这一行被改过" ——
+            # 否则改一行注释就会把早已存在的零调用者 API 重新判成新增违规,
+            # 门禁就会因为与本次改动无关的历史欠债而挡住提交。
+            if base_names is not None:
+                known = base_names.get(rel(path))
+                is_new = known is None or name not in known
+            else:
+                is_new = (rel(path), lineno) in added
             report.add(
                 "R1", "ERROR" if is_new else "WARN", where,
                 f"public 方法 '{name}' 在 src/ 内没有任何调用点 (零调用者即不存在): {line[:90]}",
@@ -404,7 +447,11 @@ def rule_zero_callers(report: Report, allow: dict[str, str], added: set[tuple[st
 BANNED_COMMENT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bP\d+(\.\d+)*\s*[-:]?\s*(fix|Fix|FIX|修复)\b"), "变更日志式注释 (P0-x fix)"),
     (re.compile(r"阶段\s*\d+"), "变更日志式注释 (阶段 N)"),
-    (re.compile(r"\b20\d{2}[-/]\d{1,2}[-/]\d{1,2}\b"), "日期戳注释 (应写进 commit message)"),
+    # Date stamp: only a *changelog stamp* is a violation. A date used as data
+    # ("supports the 2026-10-26 EXIF format") must not be flagged, so the date
+    # has to sit in the changelog position: near the front of the comment and
+    # next to a version-ish token or a colon.
+    (re.compile(r"^.{0,48}?\b20\d{2}[-/]\d{1,2}[-/]\d{1,2}\b\s*[):：]"), "日期戳注释 (应写进 commit message)"),
     (re.compile(r"(已完成|已修复|已实现|已接入)"), "声称'已完成'的注释 (会随实现漂移)"),
     (re.compile(r"Default\s+is\s+(ON|OFF|on|off)\b"), "会漂移的默认值声明"),
     (re.compile(r"(占位|留接口|暂不实现|待接线|not\s+wired|will\s+wire)\b", re.I),
@@ -546,7 +593,32 @@ REFRESH_CALLS = [
 ]
 
 
-def rule_duplicate_refresh(report: Report, added: set[tuple[str, int]]) -> None:
+def refresh_counts(text: str) -> dict[str, int]:
+    """统计一段源码里每个刷新入口的调用次数。"""
+    counts: dict[str, int] = {}
+    code, _ = strip_code_and_comments(text)
+    for raw in code.splitlines():
+        for name in REFRESH_CALLS:
+            if re.search(r"\b" + name + r"\s*\(", raw):
+                counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def base_refresh_counts(base: str) -> dict[tuple[str, str], int]:
+    """基点版本里每个文件的刷新入口调用次数。"""
+    out: dict[tuple[str, str], int] = {}
+    for path in source_files():
+        rel_name = rel(path)
+        text = base_file_text(base, rel_name)
+        if text is None:
+            continue
+        for name, n in refresh_counts(text).items():
+            out[(rel_name, name)] = n
+    return out
+
+
+def rule_duplicate_refresh(report: Report, added: set[tuple[str, int]],
+                           base_counts: dict[tuple[str, str], int] | None = None) -> None:
     sites: dict[str, list[str]] = {name: [] for name in REFRESH_CALLS}
     site_lines: dict[str, list[tuple[str, int]]] = {name: [] for name in REFRESH_CALLS}
     for path in source_files():
@@ -569,9 +641,14 @@ def rule_duplicate_refresh(report: Report, added: set[tuple[str, int]]) -> None:
         for fname, flocs in by_file.items():
             if len(flocs) < 3:
                 continue
-            # 增量语义: 本次**新增**的调用行落在已重复的文件里 -> 阻塞;
-            # 纯存量重复 -> WARN, 逐步收敛。
-            is_new = any((p, i) in added for (p, i) in site_lines[name] if p == fname)
+            # 增量语义: 只有**本次新增**的刷新调用才阻塞。
+            # 判断依据是"调用次数比基点多了", 而不是"这一行被改过" ——
+            # 否则改一行注释就会把早已存在的重复刷新重新判成新增违规,
+            # 门禁就会因为与本次改动无关的历史欠债而挡住提交。
+            if base_counts is not None:
+                is_new = len(flocs) > base_counts.get((fname, name), 0)
+            else:
+                is_new = any((p, i) in added for (p, i) in site_lines[name] if p == fname)
             report.add("R4", "ERROR" if is_new else "WARN", fname,
                        f"'{name}' 在同一文件出现 {len(flocs)} 次, 应收敛到单一刷新入口: {', '.join(flocs[:6])}")
 
@@ -602,6 +679,8 @@ def main() -> int:
     if args.all or args.strict:
         added: set[tuple[str, int]] | None = set()   # 无增量范围: 存量只报 WARN
         strict = args.strict
+        base_names: dict[str, set[str]] | None = None
+        base_counts: dict[tuple[str, str], int] | None = None
     else:
         added = git_added_lines(args.base)
         strict = False
@@ -611,11 +690,15 @@ def main() -> int:
             print("[check_contracts] 门禁失效, 拒绝静默通过。", file=sys.stderr)
             print("[check_contracts] 提示: 用 --all 盘点, 或换用正确的 --base。", file=sys.stderr)
             return 2
+        # 增量判定必须跟**基点版本**比, 不能只看"这行被改过" ——
+        # 否则改一行注释就会让早已存在的历史欠债重新变成阻塞项。
+        base_names = base_public_names(args.base)
+        base_counts = base_refresh_counts(args.base)
 
-    rule_zero_callers(report, allow, added)
+    rule_zero_callers(report, allow, added, base_names)
     rule_banned_comments(report, added)
     rule_todo_registry(report)
-    rule_duplicate_refresh(report, added)
+    rule_duplicate_refresh(report, added, base_counts)
 
     if strict:
         for f in report.findings:

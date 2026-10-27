@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// DialogFactory implementation - F-K (2026-09-09) / P0-3.2 v2 (2026-09-18)
+// DialogFactory implementation - /
 //
 #include "DialogFactory.h"
 #include "AdjustDialogBase.h"

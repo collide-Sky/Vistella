@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerAdjustmentNode - P8.1.1.x (2026-10-20)
+// LayerAdjustmentNode
 //
 //   Filter node (one input) for LayerKind::Adjustment.
 //

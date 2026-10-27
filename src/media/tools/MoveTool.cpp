@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// MoveTool implementation - F-C (2026-09-09)
+// MoveTool implementation
 //
 #include "MoveTool.h"
 

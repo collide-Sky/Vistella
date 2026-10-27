@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// StrokeSmoother - P1.1 (2026-09-15) Brush full implementation
+// StrokeSmoother - Brush full implementation
 //   PS-style stroke stabilization for brush tool. Two algorithms:
 //     1) Simple running average (low-pass filter, 3-7 taps)
 //     2) Stroke stabilizer: keep last N points, return centroid (PS smoothing slider)

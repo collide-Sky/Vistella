@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// PenTool - P0-9.2 (2026-09-15)
+// PenTool
 //
 // PS 同款钢笔工具 (P):
 //   - 单击: 加 anchor point (起点自动 moveTo, 后续 lineTo)

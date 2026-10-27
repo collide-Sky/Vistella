@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TileCache - P8.1 (2026-10-16) QHash<TileKey, cv::Mat> cache
+// TileCache - QHash<TileKey, cv::Mat> cache
 //   Synchronous, single-threaded. P8.4 will wrap with a mutex if parallel
 //   executor is added. invalidateNode() drops all entries for a given
 //   nodeId (used during dirty propagation + manual flush).
@@ -43,7 +43,7 @@ public:
 
 private:
     QHash<TileKey, cv::Mat> m_tiles;
-    // P8.4 (2026-10-16): thread-safe cache. tryGet / put / invalidate
+    // thread-safe cache. tryGet / put / invalidate
     // are guarded by a QMutex so the parallel executor (P8.4) can fan
     // tiles across worker threads without races. Const methods take
     // a QMutexLocker via the `mutable` lock; non-const take it the

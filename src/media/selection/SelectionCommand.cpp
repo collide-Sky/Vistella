@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SelectionCommand implementation - P0-4.4 (2026-09-10)
+// SelectionCommand implementation
 //
 #include "SelectionCommand.h"
 #include "SelectionModel.h"

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ImageOptionBar - F-E (2026-09-09) + P5.1 (2026-10-08)
+// ImageOptionBar
 //
 // PS-style secondary toolbar above the canvas. Pages indexed by
 // mediators::ToolId (None=0..MaskBrush=16) plus two P5.1 dynamic pages:
@@ -54,10 +54,10 @@ public:
     explicit ImageOptionBar(QWidget* parent = nullptr);
     ~ImageOptionBar() override;
 
-    // P5.1 (2026-10-08): attach with Mosaic + TextOverlay deps.
+    // attach with Mosaic + TextOverlay deps
     //   Both are optional; nullptr disables the corresponding route.
     //   Without deps, Mosaic/Text pages never show (graceful no-op).
-    // P7.6.x (2026-10-14): attach 加 brushOpt 参数. BrushOptionsPanel 已经在
+    // attach 加 brushOpt 参数. BrushOptionsPanel 已经在
     //   stackedWidget idx=7 由 ui->stackedWidget 提供, 我们撮合它的
     //   sharedStateChanged signal <-> ToolContext.brushSharedState 6 字段.
     //   取代旧 TopOptionBar (P7.5) 走的 imagewindow.cpp 撮合.
@@ -67,7 +67,7 @@ public:
                 BrushOptionsPanel* brushOpt = nullptr);
     void detach();
 
-    // P8.3.2 (2026-10-26): install the persistent BrushOptionsPanel as the
+    // install the persistent BrushOptionsPanel as the
     //   Brush page (index = ToolId::Brush) of the stacked widget.
     //
     //   Why this is not done lazily on the first Brush selection: the panel
@@ -87,7 +87,7 @@ public:
 private slots:
     void onToolChanged(mediators::ToolId id);
     void onMosaicModeChanged(bool on);
-    // P7.6.x (2026-10-14): BrushOptionsPanel <-> ToolContext.brushSharedState 撮合.
+    // BrushOptionsPanel <-> ToolContext.brushSharedState 撮合
     void onBrushSharedStateChangedFromPanel();
     void onToolContextBrushStateChanged();
 

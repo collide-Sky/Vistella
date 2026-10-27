@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// DialogMediator 实现 - F-B3 (2026-09-08) / P0 leftover 4 (2026-09-21)
+// DialogMediator 实现 - /
 //
 #include "DialogMediator.h"
 #include "../dialogs/DialogFactory.h"
@@ -14,7 +14,7 @@ namespace mediators {
 
 DialogMediator::DialogMediator(QObject* parent) : QObject(parent)
 {
-    // P0 leftover 4 (2026-09-21): self-wire to DialogFactory. The mediator
+    // self-wire to DialogFactory. The mediator
     //   owns dialog lifecycle now: showDialog emits dialogShowRequested,
     //   which we listen to internally via onShowDialogRequested, which
     //   calls DialogFactory::create. This removes the F-B3 stub state
@@ -59,7 +59,7 @@ void DialogMediator::showDialog(const QString& dialogId, const QVariantMap& args
 void DialogMediator::onShowDialogRequested(const QString& dialogId,
                                             const QVariantMap& args)
 {
-    // P0 leftover 4 (2026-09-21): DialogFactory creates the dialog.
+    // DialogFactory creates the dialog
     //   Parent it to the QApplication's active window so dialogs center
     //   on the user's current ImageWindow. Store the pointer (QPointer
     //   handles dialog destruction automatically).
@@ -71,7 +71,7 @@ void DialogMediator::onShowDialogRequested(const QString& dialogId,
     }
     connect(dlg, &QObject::destroyed, this, &DialogMediator::onDialogDestroyed);
     m_dialogs.insert(dialogId, dlg);
-    // P0 leftover 5 (2026-09-21): notify subscribers (ImageWindow) so they
+    // notify subscribers (ImageWindow) so they
     //   can wire per-dialog signals (applied -> AdjustmentPanel). The
     //   signal fires before show() so subscribers can connect before the
     //   user interacts.
@@ -102,7 +102,7 @@ void DialogMediator::hideAllDialogs()
 
 void DialogMediator::onDialogDestroyed(QObject* obj)
 {
-    // P0 leftover 4 (2026-09-21): dialog 销毁时, 自动从 m_dialogs 移除
+    // dialog 销毁时, 自动从 m_dialogs 移除
     for (auto it = m_dialogs.begin(); it != m_dialogs.end(); ++it) {
         if (it.value().data() == obj) {
             LOG_DEBUG("[DialogMed] onDialogDestroyed: id={}", it.key().toStdString());

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// RectSelect implementation - F-L (2026-09-10) + P0-4.5 (2026-09-10)
+// RectSelect implementation
 //
 #include "RectSelect.h"
 #include "../imagewindow.h"
@@ -73,13 +73,13 @@ QString RectSelect::pageTitle() const { return QStringLiteral("RectSelect"); }
 
 QCursor RectSelect::cursor() const
 {
-    // F-N (2026-09-10): PS RectSelect uses crosshair (marching ants reserve)
+    // PS RectSelect uses crosshair (marching ants reserve)
     return Qt::CrossCursor;
 }
 
 QWidget* RectSelect::optionPage(QWidget* parent)
 {
-    // P0-4.8 (2026-09-10): Mode combo (Replace/Add/Subtract/Intersect)
+    // Mode combo (Replace/Add/Subtract/Intersect)
     //   Default mode is set on click, modified by Shift/Alt/Shift+Alt keys
     auto* page = new QWidget(parent);
     auto* layout = new QHBoxLayout(page);

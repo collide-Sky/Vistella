@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// RightPanelStack - F-G (2026-09-09)
+// RightPanelStack
 //
 // imagewindow 右侧 panel: 3 dock 上下排 (颜色/属性/图层)
 //   跟 WorkspaceMediator 联动: 切换工作区时, 重建 dock tab 列表 + 显隐

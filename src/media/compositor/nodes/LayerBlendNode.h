@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerBlendNode - P8.1.1 (2026-10-16) blend two layer tiles.
+// LayerBlendNode - blend two layer tiles
 //
 //   A node with two input ports (base, blend) that produces a single
 //   output tile = blend(base, blend_layer, mode, opacity).
 //
-//   P8.1.1 Phase B (2026-10-20): delegates to layers::applyBlend() so
+//   delegates to layers::applyBlend so
 //   the compositor uses EXACTLY the same math as the legacy
 //   LayerStack::render() path. Previously this node had its own
 //   hand-rolled per-pixel implementations for 6 modes, which meant

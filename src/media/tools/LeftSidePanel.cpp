@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LeftSidePanel impl - P7.6.x v2 (2026-10-14)
+// LeftSidePanel impl
 
 #include "LeftSidePanel.h"
 
@@ -25,7 +25,7 @@ namespace tools {
 LeftSidePanel::LeftSidePanel(QWidget* parent)
     : QWidget(parent)
 {
-    // P8.3.1 (2026-10-26): horizontal, not vertical.
+    // horizontal, not vertical
     //
     //   The v2 layout stacked [tool bar | options] in a QVBoxLayout, so the
     //   56px-wide tool column sat ON TOP of a ~320px-wide options form.
@@ -72,7 +72,7 @@ LeftSidePanel::LeftSidePanel(QWidget* parent)
     m_root->addWidget(m_imageOptionBar, /*stretch=*/1);
 
     // ModeSelectorBar: secondary mode selector (Blend/SampleSize/etc.).
-    //   Q4.2.3 (2026-09-24) — sits between LeftToolBar and ImageOptionBar in
+    //   sits between LeftToolBar and ImageOptionBar in
     //   v1; in v2 it goes BELOW ImageOptionBar (closer to status bar feel).
     m_modeSelectorBar = new ModeSelectorBar(this);
     m_modeSelectorBar->setFixedHeight(36);

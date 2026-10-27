@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// MosaicTool - P0-1.2 (2026-09-07) full impl
+// MosaicTool - full impl
 //   接管 imagewindow.cpp 中所有"涂抹"逻辑:
 //     - m_mosaicMode / m_mosaicDragging / m_mosaicBackup (状态迁过来)
 //     - 涂抹 enum MosaicType 改成 MosaicTool::Type
@@ -26,7 +26,7 @@
 
 MosaicTool::MosaicTool(QObject* parent) : QObject(parent) {}
 MosaicTool::~MosaicTool() {
-    // P0-1.2 fix (2026-09-08): dtor 显式 setHost(nullptr)
+    // dtor 显式 setHost(nullptr)
     //   跟 ImageWindow 析构顺序无关: QPointer 在 ImageWindow 析构时也会自动置 null
     //   显式置一次是为了让 owner 主动清, 便于静态分析 / 调试时一眼看到
     //   安全: m_host 析构后自己也会清, 这里不依赖它
@@ -73,7 +73,7 @@ void MosaicTool::setEnabled(bool on) {
 }
 
 void MosaicTool::setSize(int radius) {
-    // P0-1.2 fix (2026-09-08) 三重防御 (用户报告 "程序启动时死机中断" 修复):
+    // 三重防御 (用户报告 "程序启动时死机中断" 修复)
     //   1) m_size 永远先 set 成功 — 不依赖任何外部状态, 即使后续防御全部失败, 业务状态也正确
     //   2) sanity clamp: radius 限制在 [1, 200] (跟 .ui sliderMosaicSize 范围对齐)
     //      防止 -1 / 0 / 65535 这类野值导致 setRect 出负数 / 0 大小
@@ -93,7 +93,7 @@ void MosaicTool::setSize(int radius) {
     bc->setRect(-r, -r, m_size, m_size);
 }
 
-// P0-1.2 (2026-09-07): 不需要 installBrushCursor - brush cursor 在 ImageWindow ctor 创建
+// 不需要 installBrushCursor - brush cursor 在 ImageWindow ctor 创建
 //   保留这个接口给未来 P0-1.2 后续轮次用, 现在 stub
 void MosaicTool::installBrushCursor() {
     // P0-1.2 后续轮次: m_brushCursor 组件自己创建 + 拥有
@@ -224,7 +224,7 @@ void MosaicTool::applyMosaicAt(const QPointF& scenePos) {
     m_host->renderToViewPublic();
 }
 
-// 占位: P0-1.2 后续轮次用, 暂不实现
+// TODO(P8.4): ensureBackup() never snapshots, so the mosaic backup path is dead -- see docs/DEBT.md#A-MOSAICBACKUP
 void MosaicTool::ensureBackup() {
     // P0-1.2 当前: snapshot 在 onSceneClicked 里做, ensureBackup 留给 P0-1.2 后续
     if (m_backup.empty() && m_host && !m_host->currentImage().empty()) {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CameraRawDialog - P3.5 (2026-09-23) PS-style Camera Raw dialog interface.
+// CameraRawDialog - PS-style Camera Raw dialog interface
 //
 //   Non-modal dialog mirroring PS Camera Raw:
 //     - 5 sliders (exposure/wbTemp/wbTint/sharpness/noiseRedux)

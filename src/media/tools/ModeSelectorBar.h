@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ModeSelectorBar - Q4.2.3 (2026-09-24)
+// ModeSelectorBar
 //
 // PS-style secondary mode selector bar. Sits between LeftToolBar and
 // ImageOptionBar in left dock. Shows tool-specific mode buttons for

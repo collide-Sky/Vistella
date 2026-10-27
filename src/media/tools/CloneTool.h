@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// CloneTool - P0-9.3 (2026-09-15) + P2.2 (2026-09-22)
+// CloneTool
 //
 // PS-style Clone Stamp (S):
 //   - Alt + click: sample source point
@@ -11,7 +11,6 @@
 //   - cv::Mat + cv::Rect slice + paste
 //   - No edge blending (PS full version has hardness), simplified to pure copy
 //
-// P2.2 (2026-09-22):
 //   - i18n via QCoreApplication::translate("tools::CloneTool", ...) — ToolState
 //     is not QObject so tr() member is unavailable (see Lasso/MagicWand.cpp note)
 //   - Brush size UI upgraded from QSpinBox to QSlider + value label (consistent

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// LayerMaskNode - P8.1.1 (2026-10-19) apply a layer mask to a base tile.
+// LayerMaskNode - apply a layer mask to a base tile
 //
 //   Two input ports:
 //     - port 0 = base tile (the layer's color)

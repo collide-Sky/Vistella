@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// TextOptionPanel - Q4.2.2 (2026-09-24)
+// TextOptionPanel
 //
 // PS-style options panel for TextOverlayController. Migrated from
 // imagewindow.ui hardcoded groupText (font combo + size spin + color

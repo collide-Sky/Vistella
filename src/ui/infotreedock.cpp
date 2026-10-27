@@ -20,7 +20,7 @@ InfoTreeDock::InfoTreeDock(QWidget *parent)
                 QDockWidget::DockWidgetFloatable);
 
     // 树外观: 单列, 无 header, 行高 28px, 不双击展开 (双击 = 打开)
-    //   2026-09-02: 节点高度 28px (跟 VS Code / Qt Creator 接近), 浅绿悬停强调
+    //   节点高度 28px (跟 VS Code / Qt Creator 接近), 浅绿悬停强调
     //   图标由 FileTreeModel::data(DecorationRole) 直接返 QIcon (用 static QFileIconProvider)
     auto *tree = ui->tree;
     tree->setModel(m_model);

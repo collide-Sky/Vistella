@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// PropertiesDock - F-I (2026-09-09)
+// PropertiesDock
 //
 // 右侧 panel dock 2: 属性 (PS 风格, 显示当前图片信息)
 //   F-I 阶段:
@@ -45,16 +45,16 @@ public:
     void setImageInfo(const ImageInfo& info);
     void clear();
 
-    // P0-4.9 (2026-09-10): selection bounding box (QRect() = clear)
+    // selection bounding box (QRect = clear)
     void setSelectionBbox(const QRect& bbox);
     void clearSelectionBbox();
 
-    // P0-6.12 (2026-09-14): 自由变换 box 旋转角度 (TransformTool 在 drag 时调)
+    // 自由变换 box 旋转角度 (TransformTool 在 drag 时调)
     //   qreal deg 任意值 (负数也支持); qQNaN() 表示"无 transform"
     void setRotation(qreal deg);
     void clearRotation();
 
-    // P0-7.4 (2026-09-14): 文字图层属性 (跟当前 GraphicsTextItem 联动)
+    // 文字图层属性 (跟当前 GraphicsTextItem 联动)
     //   ImageWindow::ctor 里 connect m_textCtrl->currentChanged -> setTextProperties(item)
     //   text item 没选中或销毁时调 clearTextProperties()
     //   text = font family (e.g. "Microsoft YaHei UI")
@@ -70,7 +70,7 @@ public:
     void setTextProperties(const TextProperties& props);
     void clearTextProperties();
 
-    // F-O (2026-09-10) test accessors (read-only snapshot for QSignalSpy-style
+    // test accessors (read-only snapshot for QSignalSpy-style
     // verification in tst_F_O_Throttle). Cheap, no side effects. Defined in
     // .cpp so we don't drag <QLabel> into every PropertiesDock.h consumer.
     int     appliedCount() const;
@@ -79,7 +79,7 @@ public:
     QString formatLabelText() const;
     QString dpiLabelText() const;
 
-    // P0-7.5 (2026-09-14) text properties accessors (跟 F-O 同模式, 给 tst_P0_7_TextSystem 用)
+    // text properties accessors (跟 同模式, 给 tst_P0_7_TextSystem 用)
     QString textFontLabel() const;
     QString textSizeLabel() const;
     QString textColorLabel() const;
@@ -88,7 +88,7 @@ public:
     QString textPosLabel() const;
 
 private slots:
-    // F-O (2026-09-10): throttled apply slot, fired by m_setInfoThrottle.
+    // throttled apply slot, fired by m_setInfoThrottle
     void applyPendingInfo();
 
 private:
@@ -102,14 +102,14 @@ private:
     QLabel*      m_formatLabel = nullptr;
     QLabel*      m_dpiLabel    = nullptr;
 
-    // P0-4.9 (2026-09-10): selection bbox labels (x/y/w/h)
+    // selection bbox labels (x/y/w/h)
     QLabel*      m_selXLabel   = nullptr;
     QLabel*      m_selYLabel   = nullptr;
     QLabel*      m_selWLabel   = nullptr;
     QLabel*      m_selHLabel   = nullptr;
-    // P0-6.12 (2026-09-14): transform rotation label (1 行, 在 X/Y/W/H 之后)
+    // transform rotation label (1 行, 在 X/Y/W/H 之后)
     QLabel*      m_rotLabel    = nullptr;
-    // P0-7.4 (2026-09-14): text properties 6 行 (字体/字号/颜色/Bold/Italic/位置)
+    // text properties 6 行 (字体/字号/颜色/Bold/Italic/位置)
     //   在 rotation 之后追加, 跟 P0-6 一样模式
     QLabel*      m_textFontLabel  = nullptr;
     QLabel*      m_textSizeLabel  = nullptr;
@@ -118,7 +118,7 @@ private:
     QLabel*      m_textItalicLabel = nullptr;
     QLabel*      m_textPosLabel   = nullptr;
 
-    // F-O (2026-09-10): throttle state
+    // throttle state
     core::Throttle*        m_setInfoThrottle = nullptr;   // owned, parent=this
     ImageInfo              m_pendingInfo;                // last info passed to setImageInfo
     int                    m_appliedCount   = 0;         // how many times applyPendingInfo ran

@@ -15,16 +15,16 @@
 #include "../media/masks/RefineEdge.h"
 #include "../media/masks/ColorRange.h"
 #include "../media/mediators/ToolMediator.h"
-#include "../media/docks/ColorDock.h"  // P7.6.x v3 (2026-10-14): MainWindow docks 接管 LeftToolBar fg/bg sync
+#include "../media/docks/ColorDock.h"  // MainWindow docks 接管 LeftToolBar fg/bg sync
 #include "../media/docks/RightPanelDock.h"  // P7.6.x v3: image->colorDock()->colorDock() 完整类型
-#include "../ui/dock/VTabPageBase.h"        // P7.11 (2026-10-15): status bar GPU/CPU stats
+#include "../ui/dock/VTabPageBase.h"        // status bar GPU/CPU stats
 #include "../ui/dock/VDraggableTabWidget.h" // P7.11: iterate 3 sub-dock pages
 #include "../ui/dock/VRenderPath.h"         // P7.11: RenderPath enum
 #include "../media/imageworker/layers/LayerMask.h"
 #include "../media/imageworker/layers/Layer.h"
 #include "../media/imageworker/layers/LayerCommand.h"
 #include "../media/imageworker/layers/LayerMaskCommand.h"
-// P1.4.6 (2026-09-17): Unified transform dialog (replaces P1.4.5's chained
+// Unified transform dialog (replaces the chained
 //   QInputDialog).
 #include "../media/docks/TransformDialog.h"
 #include "../media/imagewindow/TextOverlayController.h"   // P2.3: bold/italic toggle via TextOverlayController
@@ -43,8 +43,8 @@
 
 #include <QTimer>
 #include "../media/mediators/WorkspaceMediator.h"
-#include "../media/brushes/BrushKind.h"        // P8.3 (2026-10-16): status bar currentKind
-#include "../media/gpu/BackendRegistry.h"      // P8.3 (2026-10-16): status bar mode + backend name
+#include "../media/brushes/BrushKind.h"        // status bar currentKind
+#include "../media/gpu/BackendRegistry.h"      // status bar mode + backend name
 
 #include <QActionGroup>
 #include <QApplication>
@@ -123,7 +123,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->setupUi(this);
 
-    // (3D 模块移除, 2026-09-02: 模式读取 + 模式按钮创建已删除)
+    // (3D 模块移除, 模式读取 + 模式按钮创建已删除)
     //   后续如果需要多模态切分 (图片/视频/音频), 在这里加回
 
     //m_btnTheme = new QToolButton(this);
@@ -135,16 +135,16 @@ MainWindow::MainWindow(QWidget *parent)
     buildActions();
     buildTitleBar();        // 替代 buildMenuCorner: 自绘标题栏 (3 段 + 窗控)
     buildInfoTree();
-    // PS/WPS/VS 风格主页切换 (2026-09-10): HomePage 装到 mainStack page 0 (homePageContainer)
+    // PS/WPS/VS 风格主页切换 HomePage 装到 mainStack page 0 (homePageContainer)
     installHomePage();
     buildThemeConnections();
 
-    // P7.6.x v3 (2026-10-14): 左侧 4 dock 全在 MainWindow 顶层创建 (PS 风格布局).
+    // 左侧 4 dock 全在 MainWindow 顶层创建 (PS 风格布局)
     //   LeftSidePanel 是单 QWidget 容器, 装 LeftToolBar + ImageOptionBar + ModeSelectorBar +
     //   AppBar 在 QVBoxLayout 里. m_leftDockContainer 是这个容器的 QDockWidget 包装.
     //   RightPanelDock 还在 ImageWindow 内 (下一 commit 处理).
     m_leftSidePanel = new tools::LeftSidePanel(this);
-    // P8.3.2 (2026-10-26): 共享笔刷面板直接装进 ImageOptionBar 的 Brush 页 (idx=7).
+    // 共享笔刷面板直接装进 ImageOptionBar 的 Brush 页 (idx=7)
     //   之前它是 MainWindow 的子控件, 只有在画笔工具被选中时才被 reparent 进
     //   stackedWidget. 在那之前它是一个"有父但无 layout"的控件, 会按默认几何
     //   (主窗口 0,0) 自己画出来 —— 主页左上角那个鬼影面板就是它.
@@ -159,12 +159,12 @@ MainWindow::MainWindow(QWidget *parent)
     m_leftDockContainer->setTitleBarWidget(leftEmptyTitle);
     m_leftDockContainer->setWidget(m_leftSidePanel);
     addDockWidget(Qt::LeftDockWidgetArea, m_leftDockContainer);
-    // P8.3.1 (2026-10-26): the dock holds the tool column (56) AND the
+    // the dock holds the tool column (56) AND the
     //   options form (300) side by side. The old value of 56 was sized
     //   for the tool column alone, so the options form overflowed the
     //   dock and painted over the title bar and the canvas.
     resizeDocks({m_leftDockContainer}, {356}, Qt::Horizontal);
-    // P8.3.1 (2026-10-26): the left panel belongs to the workspace, not to
+    // the left panel belongs to the workspace, not to
     //   the home page. It used to be added unconditionally in the ctor, so
     //   it covered the home page's left edge. Hidden here, shown by
     //   switchToWorkspace().
@@ -188,7 +188,7 @@ MainWindow::MainWindow(QWidget *parent)
         });
     }
 
-    // F-F (2026-09-09): 工作区 Mediator (临时 mainwindow 持有, F-G 改 imagewindow 共享)
+    // 工作区 Mediator (临时 mainwindow 持有, 改 imagewindow 共享)
     m_workspaceMed = std::make_unique<mediators::WorkspaceMediator>(this);
     LOG_INFO("[F-F] WorkspaceMediator created, current={}", static_cast<int>(m_workspaceMed->currentWorkspace()));
 
@@ -208,7 +208,7 @@ MainWindow::MainWindow(QWidget *parent)
     updateWindowTitle();
     statusBar()->showMessage(tr("就绪"));
 
-    // P7.11 (2026-10-15): 状态栏底部 GPU/CPU 状态按钮.
+    // 状态栏底部 GPU/CPU 状态按钮
     //   读 m_rightDock (active image 的) 3 sub-dock 内 V*Page
     //   preferredRenderPath() 统计. 显示 "GPU: 3 / 5" (GpuPreferred 3 个,
     //   CpuOnly 5 个). 实际切 GPU/CPU 在 P8.3 接, 现在只读.
@@ -246,7 +246,7 @@ void MainWindow::changeEvent(QEvent *e)
 void MainWindow::showEvent(QShowEvent *e)
 {
     QMainWindow::showEvent(e);
-    // F-G.4 (2026-09-09): 主页 tab 移除, 不再需要刷 home tab 文字
+    // 主页 tab 移除, 不再需要刷 home tab 文字
 }
 
 void MainWindow::closeEvent(QCloseEvent *e)
@@ -297,7 +297,7 @@ void MainWindow::closeEvent(QCloseEvent *e)
     SessionManager::instance().setLastExitClean(true);
     saveSession();
     // 只保存 mode (2026-09-09 user 拍板: m_normalSize 写死 1280x800, 不持久化)
-    // Q4.2.2.1 fix (2026-09-24): 如果用户关闭时是 Maximized, 存 Normal. 上次关窗 Maximized
+    // 如果用户关闭时是 Maximized, 存 Normal. 上次关窗 Maximized
     //   会让下次启动 splash 之前 loadWindowState 读 "window/mode=1", 不恢复路径虽然显式
     //   setMode(Normal) 覆盖, 但其他路径 (clean 启动) 还是会读 Maximized 起来. 改:
     //   Maximized 时落 Normal 到 QSettings. 行为: 关闭前 Maximized → 下次冷启动也是
@@ -344,7 +344,7 @@ void MainWindow::buildActions()
     m_actOpen     = new QAction(tr("打开..."),    this);
     m_actSave     = new QAction(tr("保存"),       this);
     m_actSaveAs   = new QAction(tr("另存为..."), this);
-    // P0-8.2 (2026-09-15): 多格式导出 (PS 同款 Save For Web)
+    // 多格式导出 (PS 同款 Save For Web)
     m_actExport   = new QAction(tr("导出..."),     this);
     m_actCloseCur = new QAction(tr("关闭当前"), this);
     m_actCloseOthers   = new QAction(tr("关闭其他"),   this);
@@ -367,7 +367,7 @@ void MainWindow::buildActions()
     m_actResetLayout = new QAction(tr("重置布局"), this);
     m_actToggleTheme = new QAction(tr("切换主题"), this);
 
-    // ----- 模式 (3D 模块已移除, 2026-09-02: 模式选择删除) -----
+    // 模式 (3D 模块已移除, 模式选择删除)
     //   后续如果需要多模态切分 (图片/视频/音频), 在这里加回 QActionGroup
 
     // ----- 快捷键 -----
@@ -462,7 +462,7 @@ void MainWindow::buildActions()
     mEdit->addAction(m_actFind);
     mEdit->addAction(m_actReplace);
 
-    // P7.2 (2026-10-12): PS 2025 顶部菜单栏重整.
+    // PS 2025 顶部菜单栏重整
     //   - 视图: 移除 工作区 submenu (3D/2026-09-02 已删了) + 主页入口 + 信息树入口 +
     //     右侧面板入口 (dock 自身有 close btn, 不需要菜单).
     //     保留 zoom + 屏幕模式 + 100%/200% 等 PS 通用项.
@@ -541,8 +541,8 @@ void MainWindow::buildActions()
     QAction *aLogin = mSetup->addAction(tr("登录..."));
     connect(aLogin, &QAction::triggered, this, &MainWindow::onShowLogin);
 
-    // P7.2: 增效工具 (占位) — PS 标准 11 菜单的第 9 个, 现在只放空 placeholder,
-    //   后续 P7.11 真接入插件管理 (动态加载 .so / .dll).
+    // 增效工具 (PS 标准 11 菜单的第 9 个) — 空壳, 插件管理未实装
+    //   TODO(P8.9): the plugins menu is an empty shell, so the plugin entry point does nothing -- see docs/DEBT.md#A-PLUGINMENU
     QMenu *mPlugins = mb->addMenu(tr("增效工具"));
     QAction *aPluginsMgr = mPlugins->addAction(tr("增效工具管理器..."));
     aPluginsMgr->setEnabled(false);   // P7.11 实装
@@ -558,9 +558,9 @@ void MainWindow::buildActions()
     rebuildDocsMenu(mDocs);
     mWindow->addSeparator();
     QAction *aCascade = mWindow->addAction(tr("堆叠文档"));
-    aCascade->setEnabled(false);   // P7.2: tab-based UI 不支持 MDI, 灰态占位
+    aCascade->setEnabled(false);   //tab-based UI 不支持 MDI, 灰态
     QAction *aTile = mWindow->addAction(tr("平铺文档"));
-    aTile->setEnabled(false);     // P7.2: tab-based UI 不支持 MDI, 灰态占位
+    aTile->setEnabled(false);     //tab-based UI 不支持 MDI, 灰态
     QAction *aMinAll = mWindow->addAction(tr("全部最小化"));
     connect(aMinAll, &QAction::triggered, this, [this]() {
         showMinimized();
@@ -607,17 +607,17 @@ void MainWindow::buildActions()
             .arg(QString::fromLatin1("6.0.4")));
     });
 
-    // F-J (2026-09-09): 6 主菜单加子菜单 (图像/图层/文字/选择/滤镜)
+    // 6 主菜单加子菜单 (图像/图层/文字/选择/滤镜)
     //   F-L/F-N 阶段 action 接实际功能
-    // Q4.5 (2026-10-08): 删 dead notImpl lambda. 之前 F-J 阶段所有 menu action
-    //   都用 notImpl 占位, P2.x 全部接成真接. 现在没有调用方, 编译 warning -Wunused-lambda
+    // 删 dead notImpl lambda. 之前所有 menu action
+    //   都用 notImpl lambda, 全部接成真接. 现在没有调用方, 编译 warning -Wunused-lambda
     //   也不会有 (C++ lambda 不强制 unused warning), 但 dead code 留着浪费阅读时间.
 
     // ---- 图像 (Image) ----
     QMenu *mImage = mb->addMenu(tr("图像"));
     QAction *aImgResize = mImage->addAction(tr("调整大小..."));
     aImgResize->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+I")));
-    // P2.5 (2026-09-22): active ImageWindow + QInputDialog 双弹窗宽度/高度
+    // active ImageWindow + QInputDialog 双弹窗宽度/高度
     //   + cv::resize(cv::INTER_LINEAR) + ImageEditCommand 推 undo stack.
     //   Full ResizeDialog (with aspect-ratio lock / dpi / preset) 是 P2.5.x 计划.
     connect(aImgResize, &QAction::triggered, this, [this]() {
@@ -666,7 +666,7 @@ void MainWindow::buildActions()
     mImage->addAction(m_actImageRotate180);
     mImage->addSeparator();
 
-    // P5 (2026-10-08): 图像菜单补齐 — PS 模式 / 画布大小 / 裁切 / 全部显示.
+    // 图像菜单补齐 — PS 模式 / 画布大小 / 裁切 / 全部显示
     //   Mode (RGB/Grayscale/CMYK) 走 cv::cvtColor 转换, 简单实用.
     //   Canvas Size 跟 Image Size 区别: Image Size 缩放像素, Canvas Size 加 padding.
     //   Trim 自动裁切透明边缘 (cv::findNonZero boundingRect).
@@ -772,7 +772,7 @@ void MainWindow::buildActions()
     QMenu *mLayer = mb->addMenu(tr("图层"));
     QAction *aLayerNew = mLayer->addAction(tr("新建图层"));
     aLayerNew->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
-    // P2.5 (2026-09-22): routed to active ImageWindow -> applyLayerOp(NewBitmap).
+    // routed to active ImageWindow -> applyLayerOp(NewBitmap)
     connect(aLayerNew, &QAction::triggered, this, [this]() {
         auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
         if (!iw) { statusBar()->showMessage(tr("没有活动的图片窗口"), 2000); return; }
@@ -817,7 +817,7 @@ void MainWindow::buildActions()
         iw->applyLayerOp(ImageWindow::LayerOp::FlattenVisible);
     });
 
-    // P7.4 (2026-10-12): 图层 → 蒙版 submenu (PS 风格 12 项蒙版操作整合).
+    // 图层 → 蒙版 submenu (PS 风格 12 项蒙版操作整合)
     //   把 P1.3.4/5/6/7 4 个 mask 操作收进 submenu + 加 P7.4 4 个新 real op
     //   (启用/禁用/删除/应用/反相). Refine Edge / Color Range 在 滤镜 菜单
     //   也可以入口 (PS 在多菜单都有), 保持现状.
@@ -874,7 +874,7 @@ void MainWindow::buildActions()
     QAction *aMaskColorRange = mMask->addAction(tr("颜色范围 (Color Range)..."));
     connect(aMaskColorRange, &QAction::triggered, this, [this]{ onColorRangeMask(); });
 
-    // P1.4.2 (2026-09-17): 智能对象 4 主菜单 action (idx=-1 → 用当前 selection)
+    // 智能对象 4 主菜单 action (idx=-1 → 用当前 selection)
     mLayer->addSeparator();
     QAction *aSmartConvert = mLayer->addAction(tr("转换为智能对象"));
     connect(aSmartConvert, &QAction::triggered, this, [this]{
@@ -892,14 +892,14 @@ void MainWindow::buildActions()
     connect(aSmartRelink, &QAction::triggered, this, [this]{
         onSmartObjectRelink();
     });
-    // P1.4.4 (2026-09-17): SmartFilter main menu entry (shares the LayerPanel
+    // SmartFilter main menu entry (shares the LayerPanel
     //   right-click handler flow).
     QAction *aSmartFilter = mLayer->addAction(tr("应用智能滤镜..."));
     connect(aSmartFilter, &QAction::triggered, this, [this]{
         onApplySmartFilter();
     });
 
-    // P1.4.5 (2026-09-17): SmartObject 非破坏性变换 主菜单 4 entry
+    // SmartObject 非破坏性变换 主菜单 4 entry
     //   (与 LayerPanel 右键菜单的变换/重置 同流程, 通过 ImageWindow::applySmartObjectTransform
     //    路径接入, 推 LayerCommand::makeSetSmartObjectTransform 进 undoStack)
     mLayer->addSeparator();
@@ -920,7 +920,7 @@ void MainWindow::buildActions()
         onSmartObjectResetTransform();
     });
 
-    // ---- 文字 (Text) - P2.3 (2026-09-22): text menu actions routed to active ImageWindow ----
+    // 文字 (Text) - text menu actions routed to active ImageWindow
 //   Earlier (P0) these were notImpl placeholders. P2.3 wires them through
 //   ImageWindow::textOverlay() so font / size / color / bold / italic change
 //   the active text item via TextOverlayController + applyStyleToCurrent().
@@ -996,7 +996,7 @@ void MainWindow::buildActions()
     connect(aSelInverse, &QAction::triggered, this, &MainWindow::onImageInverse);
     mSelect->addSeparator();
     QAction *aSelFeather = mSelect->addAction(tr("羽化..."));
-    // P2.5 (2026-09-22): Selection feathering via QInputDialog radius + QImage
+    // Selection feathering via QInputDialog radius + QImage
     //   box blur (3-pass: horizontal+vertical+diagonal) on the current mask.
     //   Self-contained: doesn't require ImageWindow member.
     connect(aSelFeather, &QAction::triggered, this, [this]() {
@@ -1045,7 +1045,7 @@ void MainWindow::buildActions()
         statusBar()->showMessage(tr("选区羽化完成 (半径 %1 px)").arg(radius), 2000);
     });
 
-    // ---- 滤镜 (Filter) - P7.3 (2026-10-12) PS 2025 风格完整化 ----
+    // 滤镜 (Filter) - PS 2025 风格完整化
     //   顶部: 上次滤镜操作 + 转换为智能滤镜 + Neural Filters placeholder
     //   中段 6 standalone: 滤镜库/自适应广角/Camera Raw/镜头校正/液化/消失点
     //   8 submenu: 风格化/扭曲/锐化/像素化/渲染/杂点/颜色/其它
@@ -1074,8 +1074,9 @@ void MainWindow::buildActions()
     mFilter->addSeparator();
 
     // ----- Neural Filters -----
+    // TODO(P8.9): five filter menu entries are disabled, so Neural Filters / adaptive wide angle / Camera Raw / lens correction / vanish point never run -- see docs/DEBT.md#A-FILTERMENU
     QAction *aNeural = mFilter->addAction(tr("Neural Filters..."));
-    aNeural->setEnabled(false);   // P7.3 占位 (云端 AI 滤镜)
+    aNeural->setEnabled(false);   // 云端 AI 滤镜 (未实装)
 
     mFilter->addSeparator();
 
@@ -1087,19 +1088,19 @@ void MainWindow::buildActions()
     });
     QAction *aAdaptiveWide = mFilter->addAction(tr("自适应广角..."));
     aAdaptiveWide->setShortcut(QKeySequence(QStringLiteral("Alt+Shift+Ctrl+A")));
-    aAdaptiveWide->setEnabled(false);   // PS 占位
+    aAdaptiveWide->setEnabled(false);   //PS 同款入口 (未实装)
     QAction *aCameraRaw = mFilter->addAction(tr("Camera Raw 滤镜..."));
     aCameraRaw->setShortcut(QKeySequence(QStringLiteral("Shift+Ctrl+A")));
-    aCameraRaw->setEnabled(false);   // PS 占位
+    aCameraRaw->setEnabled(false);   //PS 同款入口 (未实装)
     QAction *aLensCorr = mFilter->addAction(tr("镜头校正..."));
     aLensCorr->setShortcut(QKeySequence(QStringLiteral("Shift+Ctrl+R")));
-    aLensCorr->setEnabled(false);   // PS 占位
+    aLensCorr->setEnabled(false);   //PS 同款入口 (未实装)
     QAction *aLiquify = mFilter->addAction(tr("液化..."));
     aLiquify->setShortcut(QKeySequence(QStringLiteral("Shift+Ctrl+X")));
     connect(aLiquify, &QAction::triggered, this, [this]{ onLiquifyTriggered(); });
     QAction *aVanish = mFilter->addAction(tr("消失点..."));
     aVanish->setShortcut(QKeySequence(QStringLiteral("Alt+Ctrl+V")));
-    aVanish->setEnabled(false);   // PS 占位
+    aVanish->setEnabled(false);   //PS 同款入口 (未实装)
 
     mFilter->addSeparator();
 
@@ -1252,7 +1253,7 @@ void MainWindow::buildLeftArea()
     l->setContentsMargins(10, 0, 12, 0);
     l->setSpacing(8);
 
-    // logo: 纯文字占位 (无外部资源), 后续准备 SVG 后换 QPixmap
+    // logo: 纯文字 (无外部资源), 后续准备 SVG 后换 QPixmap
     auto *logo = new QLabel(QStringLiteral("M"), m_titleLeft);
     logo->setObjectName(QStringLiteral("titleLogo"));
     logo->setAlignment(Qt::AlignCenter);
@@ -1293,7 +1294,7 @@ void MainWindow::buildRightArea()
     l->setContentsMargins(8, 0, 0, 0);
     l->setSpacing(4);
 
-    // (3D 模块已移除, 2026-09-02: mode corner 整段删除, modeBtnMod/MM 字段已删)
+    // (3D 模块已移除, mode corner 整段删除, modeBtnMod/MM 字段已删)
     //   后续如果需要标题栏右侧的快速切换 (例如多模态切分), 在这里加回
 
     // 1) theme 按钮 (新)
@@ -1313,7 +1314,7 @@ void MainWindow::buildRightArea()
     m_btnUser->setCursor(Qt::PointingHandCursor);
     m_btnUser->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     l->addWidget(m_btnUser);
-    // 阶段 0 第 10 步: user 按钮触发 LoginDialog (UI 骨架, 阶段 5+ 真接 AuthClient)
+    // user 按钮触发 LoginDialog (UI 骨架, 未接 AuthClient)
     connect(m_btnUser, &QToolButton::clicked, this, &MainWindow::onShowLogin);
 
     // 4) 窗口控制按钮 (最右)
@@ -1404,7 +1405,7 @@ void MainWindow::setMode(WindowMode m)
 void MainWindow::loadWindowState()
 {
     QSettings s;
-    // Q4.1 (2026-09-23): 默认值 Normal (之前 Maximized).
+    // 默认值 Normal (之前 Maximized)
     //   冷启动 / "上次异常退出 + 用户选不恢复" 等没有 QSettings 的路径,
     //   应该 Normal 居中显示 1280x800, 而不是强制 Maximized. 这就是用户
     //   反复看到的"取消恢复也会最大化"根因.
@@ -1415,7 +1416,7 @@ void MainWindow::loadWindowState()
     LOG_INFO("[State] loadWindowState read m_mode={} m_normalSize={}x{} (default, not persisted)",
              static_cast<int>(m_mode), m_normalSize.width(), m_normalSize.height());
 
-    // P1.4.6 fix (2026-09-17): 走 setMode 统一入口, 不再直接 showMaximized/showNormal.
+    // 走 setMode 统一入口, 不再直接 showMaximized/showNormal
     //   setMode 内部已经处理 Normal 的居中 setGeometry + 按钮文字同步.
     applyWindowMode();
 }
@@ -1444,17 +1445,17 @@ void MainWindow::buildInfoTree()
     // 关键: 启动时只显示主页, 信息树默认隐藏
     //   (后续从菜单"视图 → 信息树"显式打开, 或选目录后自动打开)
     m_infoDock->hide();
-    // 阶段 0 第 7 步: 信息树里双击/回车文件 → 调 MediaDispatcher 路由
+    // 信息树里双击/回车文件 → 调 MediaDispatcher 路由
     connect(m_infoDock, &InfoTreeDock::openFileRequested,
             this, [this](const QString &path) { onHomeOpenPathRequested(path); });
 
-    // F-G.4 (2026-09-09): tab connect 移到 buildInfoTree 末尾 (从原 buildHome 拆出)
+    // tab connect 移到 buildInfoTree 末尾 (从原 buildHome 拆出)
     //   不再有 home tab 锁住第一位, reorder 逻辑简化 (不再有 m_homeTabIndex 例外)
     connect(ui->tabWidget, &QTabWidget::currentChanged,
             this, &MainWindow::onTabChanged);
     connect(ui->tabWidget, &QTabWidget::tabCloseRequested,
             this, &MainWindow::onTabCloseRequested);
-    // P7.2 (2026-10-12): 窗口 → 文档 submenu 动态重排 (增删/切 tab 自动刷新).
+    // 窗口 → 文档 submenu 动态重排 (增删/切 tab 自动刷新)
     //   注: QTabWidget 没有 tabInserted signal (它只在内部用), 但 new tab
     //   addTab 后会触发 currentChanged (-1 -> 0), 删 tab 由 tabCloseRequested
     //   触发, 两个 signal 一起已覆盖所有 tab 状态变化.
@@ -1500,7 +1501,7 @@ MainWindow::DocType MainWindow::docTypeOf(QWidget *w)
 {
     if (qobject_cast<DocWindow *>(w))   return TypeText;
     if (qobject_cast<ImageWindow *>(w)) return TypeImage;
-    // (3D 模块已移除, 2026-09-02: ModelWindow 检查删除)
+    // (3D 模块已移除, ModelWindow 检查删除)
     return TypeUnknown;
 }
 
@@ -1731,7 +1732,7 @@ int MainWindow::addDocTab(QWidget *doc)
 
 int MainWindow::addImageTab(ImageWindow *img) { return addDocTab(img); }
 
-// (3D 模块已移除, 2026-09-02: addModelTab 删除)
+// (3D 模块已移除, addModelTab 删除)
 
 void MainWindow::focusOrCreateWidget(QWidget *doc)
 {
@@ -1743,7 +1744,7 @@ void MainWindow::focusOrCreateWidget(QWidget *doc)
 
 // ----------------- 主页 / 全局按钮 -----------------
 
-// PS/WPS/VS 风格主页切换 (2026-09-10): 跟 F-G.4 之前 + F-G.4 临时方案都不同
+// PS/WPS/VS 风格主页切换 跟 之前 + 临时方案都不同
 //   HomePage 是独立 widget, 装在 mainStack page 0 (homePageContainer)
 //   tabWidget 装在 mainStack page 1 (工作空间)
 //   启动默认 page 0, 新建/打开切到 page 1, 关闭所有 tab 切回 page 0
@@ -1781,7 +1782,7 @@ void MainWindow::switchToHomePage()
     // 切回 HomePage (不关闭当前 doc tabs, 用户可再切回工作空间)
     if (ui && ui->mainStack) {
         ui->mainStack->setCurrentIndex(0);
-        // P8.3.1 (2026-10-26): the left tool column + options panel belong
+        // the left tool column + options panel belong
         //   to the workspace. On the home page they covered the left edge
         //   of the start screen for no reason.
         if (m_leftDockContainer) m_leftDockContainer->setVisible(false);
@@ -1796,7 +1797,7 @@ void MainWindow::switchToWorkspace()
     if (ui && ui->mainStack) {
         ui->mainStack->setCurrentIndex(1);
     }
-    // P8.3.1 (2026-10-26): show the left panel together with the
+    // show the left panel together with the
     //   workspace it belongs to.
     if (m_leftDockContainer) m_leftDockContainer->setVisible(true);
 }
@@ -1807,10 +1808,10 @@ void MainWindow::onTabChanged(int index)
     updateWindowTitle();
     // 切换时也刷新一下 tooltip (主题色变化时)
     for (int i = 0; i < ui->tabWidget->count(); ++i) refreshTabTitle(i);
-    // P7.6.x v3 (2026-10-14): 4 左侧 dock (LeftToolBar + ImageOptionBar + ModeSelectorBar
+    // 4 左侧 dock (LeftToolBar + ImageOptionBar + ModeSelectorBar
     //   + AppBar) 在 MainWindow 顶层. active image 切换 → 重 attach 到新 image 的组件.
     bindLeftDockWidgets(activeImageWindow());
-    // P7.11 (2026-10-15): 状态栏底部 GPU/CPU 状态按钮刷新.
+    // 状态栏底部 GPU/CPU 状态按钮刷新
     refreshGpuStatusButton();
 }
 
@@ -1882,7 +1883,7 @@ void MainWindow::onTabCloseRequested(int index)
 
     updateWindowTitle();
 
-    // PS/WPS/VS 风格 (2026-09-10): 关闭最后一个 doc tab -> 切回 HomePage (page 0)
+    // PS/WPS/VS 风格 关闭最后一个 doc tab -> 切回 HomePage (page 0)
     if (ui->tabWidget->count() == 0) {
         LOG_INFO("[MainWindow] last doc tab closed -> switch to HomePage");
         switchToHomePage();
@@ -1913,7 +1914,7 @@ void MainWindow::onCloseSameType()
     }
 }
 
-// P7.2 (2026-10-12): 窗口 → 文档 submenu 动态重排 + tabWidget 信号接听.
+// 窗口 → 文档 submenu 动态重排 + tabWidget 信号接听
 ImageWindow* MainWindow::activeImageWindow() const
 {
     if (!ui || !ui->tabWidget) return nullptr;
@@ -1955,7 +1956,7 @@ void MainWindow::onTabContextMenu(const QPoint &pos)
     if (!w) return;
 
     QMenu menu(this);
-    // PS/WPS/VS 风格 (2026-09-10): 任何 tab 右键都显示"返回主页"
+    // PS/WPS/VS 风格 任何 tab 右键都显示"返回主页"
     QAction *aHome = menu.addAction(tr("返回主页"));
     aHome->setEnabled(true);
     connect(aHome, &QAction::triggered, this, &MainWindow::switchToHomePage);
@@ -1992,14 +1993,14 @@ void MainWindow::onTabContextMenu(const QPoint &pos)
 
 void MainWindow::onNewFile()
 {
-    // 阶段 0 第 5 步: 新建默认只建 txt 文本
+    // 新建默认只建 txt 文本
     //   4 大模块 (imageWorker / audioWorker / videoWorker / visionWorker) 全部通过"打开文件"进入,
-    //   没有"新建"的概念 (新建图像工程 / 视频工程留阶段 1+ 单独设计)
+    //   没有"新建"的概念 (新建图像工程 / 视频工程单独设计)
     auto *doc = new DocWindow;
     int idx = addDocTab(doc);
     if (idx >= 0) {
         ui->tabWidget->setCurrentIndex(idx);
-        // PS/WPS/VS 风格 (2026-09-10): 新建后切到工作空间 (page 1)
+        // PS/WPS/VS 风格 新建后切到工作空间 (page 1)
         switchToWorkspace();
     }
 }
@@ -2079,7 +2080,7 @@ void MainWindow::onSaveAsFile()
     }
 }
 
-// P0-8.2 (2026-09-15): 多格式导出 (Ctrl+Shift+E)
+// 多格式导出 (Ctrl+Shift+E)
 void MainWindow::onExportFile()
 {
     auto *w = widgetAt(ui->tabWidget->currentIndex());
@@ -2103,7 +2104,7 @@ void MainWindow::onCloseAll()
         onTabCloseRequested(i);
     }
     if (-1 >= 0) ui->tabWidget->setCurrentIndex(-1);
-    // PS/WPS/VS 风格 (2026-09-10): 关闭所有 doc -> 切回 HomePage
+    // PS/WPS/VS 风格 关闭所有 doc -> 切回 HomePage
     switchToHomePage();
 }
 
@@ -2129,7 +2130,7 @@ void MainWindow::onCopy()    { if (auto *d = qobject_cast<DocWindow *>(widgetAt(
 void MainWindow::onPaste()   { if (auto *d = qobject_cast<DocWindow *>(widgetAt(ui->tabWidget->currentIndex()))) d->editor()->paste(); }
 void MainWindow::onSelectAll(){ if (auto *d = qobject_cast<DocWindow *>(widgetAt(ui->tabWidget->currentIndex()))) d->editor()->selectAll(); }
 
-// P0-4.7 (2026-09-10): 选择菜单 3 action 实装
+// 选择菜单 3 action 实装
 //   操作当前 ImageWindow 的 SelectionModel, push SelectionCommand 到 undoStack 支持 undo/redo
 void MainWindow::onImageSelectAll()
 {
@@ -2163,7 +2164,7 @@ void MainWindow::onImageInverse()
         statusBar()->showMessage(tr("当前页面没有可反选的选区"), 2000);
     }
 }
-// P2.3 (2026-09-22): onFind / onReplace — search TextLayer text via QInputDialog
+// onFind / onReplace — search TextLayer text via QInputDialog
 //   Active ImageWindow -> LayerStack -> scan all Text layers for substring.
 //   Replace pushes per-layer setText command via LayerCommand factory.
 void MainWindow::onFind()
@@ -2238,7 +2239,7 @@ void MainWindow::onReplace()
         tr("替换: '%1' → '%2' 在 %3 个文字图层中应用").arg(pattern, replacement).arg(replaced),
         4000);
 }
-// P7.6.x (2026-10-14): 视图 → 放大/缩小 路由到 active ImageWindow (PS 风格, 主菜单
+// 视图 → 放大/缩小 路由到 active ImageWindow (PS 风格, 主菜单
 //   是唯一的 zoom entry point — 中央画布上方不放 zoom 按钮了). 旧实现只 show status,
 //   不真实缩放. 现在 forward 到 ImageWindow::onZoomIn/Out → m_canvas 真实缩放.
 void MainWindow::onZoomIn()
@@ -2257,7 +2258,7 @@ void MainWindow::onZoomOut()
         statusBar()->showMessage(tr("没有打开的图像"), 2000);
     }
 }
-// P2.3 (2026-09-22): onResetLayout — restore default dock/panel layout
+// onResetLayout — restore default dock/panel layout
 //   Calls QMainWindow::restoreState with the saved default state file
 //   (workspace_default.ini under QStandardPaths::AppDataLocation).
 //   Falls back to a statusBar message if the file is missing.
@@ -2280,7 +2281,7 @@ void MainWindow::onResetLayout()
         tr("默认布局文件不存在 (%1) — 请先保存当前布局为默认").arg(path), 3000);
 }
 
-// P0-6.5 (2026-09-14): 图像变换 6 槽 — 调当前 ImageWindow 接口
+// 图像变换 6 槽 — 调当前 ImageWindow 接口
 //   P0-6.6 ImageWindow::onImageTransform 完整实装, 槽留 forward + statusBar 提示
 void MainWindow::onFreeTransform()
 {
@@ -2343,7 +2344,7 @@ void MainWindow::onSettings()
 }
 
 // =============================================================
-// Q4.4 (2026-10-08): 工具菜单转发 — 找活动 ImageWindow, 调 m_toolMed.switchTool
+// 工具菜单转发 — 找活动 ImageWindow, 调 m_toolMed.switchTool
 //   Tools 菜单 15 个 action (Move/RectSelect/Lasso/MagicWand/Crop/Text/Brush/
 //   Eyedropper/Shape/Pen/Clone/Heal/Patch/RedEye/MaskBrush) 全部走这个入口.
 //   找不到活动 ImageWindow 时 statusBar 提示, 不 crash.
@@ -2365,9 +2366,9 @@ void MainWindow::onSwitchTool(mediators::ToolId id)
 }
 
 // =============================================================
-// 阶段 0 第 10 步: 主题画廊 (UI 骨架)
+// 主题画廊 (UI 骨架)
 //   - 只弹 dialog, 选 accent/模式不真改 ThemeManager
-//   - 阶段 5+: ThemeGalleryDialog::onApplyClicked 内部调
+//   ThemeGalleryDialog::onApplyClicked 内部调 (未实装, 见 docs/DEBT.md#A-THEME)
 //              ThemeManager::setAccentColor / setMode / persistToSettings
 //   - 这里也用作"从设置弹主题画廊"的入口, 跟工具菜单触发器共用
 // =============================================================
@@ -2378,9 +2379,9 @@ void MainWindow::onShowThemeGallery()
 }
 
 // =============================================================
-// 阶段 0 第 10 步: 登录对话框 (UI 骨架)
+// 登录对话框 (UI 骨架)
 //   - dialog 选 provider 后 emit providerChosen, 这里接住打 statusBar 提示
-//   - 阶段 5+: LoginDialog 内部调 AuthClient::loginXxxAsync(...)
+//   LoginDialog 内部调 AuthClient::loginXxxAsync(...) (未实装, 见 docs/DEBT.md#A-AUTH)
 //              AuthClient::loginFinished -> UserManager::setState(Authenticated, user)
 //              这里只需 listen AuthClient 信号, 不再处理 providerChosen
 // =============================================================
@@ -2395,18 +2396,18 @@ void MainWindow::onShowLogin()
                           : (p == LoginDialog::ProviderPhone)  ? "手机号"
                           : (p == LoginDialog::ProviderGuest)  ? "游客"
                           : "本地";
-        statusBar()->showMessage(tr("已选择登录方式: %1 (阶段 0 仅占位)").arg(name), 4000);
-        // 阶段 5+ 这里调 UserManager::instance().setUser(provider, "stub_user_id", name);
+        statusBar()->showMessage(tr("已选择登录方式: %1").arg(name), 4000);
+        //  这里调 UserManager::instance.setUser(provider, "stub_user_id", name) (未实装, 见 docs/DEBT.md#A-AUTH)
     });
     dlg.exec();
 }
 
-// (3D 模块已移除, 2026-09-02: 模式切换 onModeModeling / onModeMultimedia / confirmSwitchMode / setAppMode / modeDisplayName / applyModeToActions 整段删除)
+// (3D 模块已移除, 模式切换 onModeModeling / onModeMultimedia / confirmSwitchMode / setAppMode / modeDisplayName / applyModeToActions 整段删除)
 //   后续如果需要多模态切分, 在这里加回
 
 QString MainWindow::defaultFileDialogFilter() const
 {
-    // 决策 5 (2026-09-02): 用 FileExtensionRegistry 动态生成
+    // 决策 5 用 FileExtensionRegistry 动态生成
     //   跟 MediaDispatcher 路由表保持一致; 后续增/删扩展名只改 FileExtensionRegistry
     auto glob = [](const QStringList &exts) {
         QStringList pat;
@@ -2459,22 +2460,22 @@ void MainWindow::updateWindowTitle()
     else                    setWindowTitle(base);
 }
 
-// PS/WPS/VS 风格 (2026-09-10): HomePage signal handlers
+// PS/WPS/VS 风格 HomePage signal handlers
 //   转发到 onNewFile / onOpenFile, 调完切到工作空间 (page 1)
 void MainWindow::onHomeNewRequested()    { onNewFile(); switchToWorkspace(); }
 void MainWindow::onHomeOpenRequested()   { onOpenFile(); switchToWorkspace(); }
 void MainWindow::onHomeModuleRequested(int moduleKind)
 {
-    // 阶段 1+ 接 MediaDispatcher, 当前 P0 阶段只 log
+    //  接 MediaDispatcher, 当前只 log (未实装, 见 docs/DEBT.md#A-MEDIADISPATCH)
     LOG_INFO("[Home] module requested: kind={}", moduleKind);
 }
 
 // ----------------- HomePage -----------------
-// F-G.4 (2026-09-09): onHomeNewRequested / onHomeOpenRequested 删 (HomePage dialog 直接 connect 到 onNewFile / onOpenFile)
+// onHomeNewRequested / onHomeOpenRequested 删 (HomePage dialog 直接 connect 到 onNewFile / onOpenFile)
 
-// P0-5 (2026-09-10): 滤镜菜单弹 FilterDialog
-//   P3.1.1 (2026-09-22): dialog 加 slider/picker, 用 strategy 当前参数
-//   P3.1.3 (2026-09-22): Apply 实时预览 — dialog 直接调 m_host->previewFilter
+// 滤镜菜单弹 FilterDialog
+//   dialog 加 slider/picker, 用 strategy 当前参数
+//   Apply 实时预览 — dialog 直接调 m_host->previewFilter
 //     /clearPreview/applyFilterWithStrategy, mainwindow 这边只剩 status bar
 //     反馈 (避免重复 push FilterCommand)
 //   Apply = preview (临时 m_previewImage), OK = apply + 入撤销栈, Cancel = 关闭
@@ -2487,7 +2488,7 @@ void MainWindow::onFilterMenuTriggered(filter::FilterKind kind)
     }
     auto *dlg = new filter::FilterDialog(img, kind, this);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
-    // P3.1.3 (2026-09-22): dialog 已经做了 preview / push command. mainwindow
+    // dialog 已经做了 preview / push command. mainwindow
     //   只剩 status bar 反馈.
     connect(dlg, &filter::FilterDialog::applyRequested, this, [this, kind](){
         statusBar()->showMessage(
@@ -2502,7 +2503,7 @@ void MainWindow::onFilterMenuTriggered(filter::FilterKind kind)
     dlg->show();
 }
 
-// P7.3 (2026-10-12): 滤镜 → 转换为智能滤镜
+// 滤镜 → 转换为智能滤镜
 //   - 拿当前 ImageWindow 活动图层
 //   - 调 convertToSmartObject (in-place Bitmap -> SmartObject)
 //   - 然后 appendSmartFilter 把当前 FilterKind 当作 sub-layer
@@ -2532,10 +2533,10 @@ void MainWindow::onConvertToSmartFilter()
     }
 }
 
-// P1.2.5+6+8 (2026-09-16): 启动 Liquify 交互式液化对话框
+// 启动 Liquify 交互式液化对话框
 //   - 拿当前图像 -> 开 LiquifyDialog (modal)
 //   - OK: 拿 resultImage, push LiquifyCommand (入撤销栈)
-// P0 leftover 5 (2026-09-21): 触发 Curves / Levels / B&W / ChannelMixer
+// 触发 Curves / Levels / B&W / ChannelMixer
 //   standalone dialog. Routes through the active ImageWindow's
 //   DialogMediator. DialogMediator (P0 leftover 4) self-wires to
 //   DialogFactory to instantiate + parent + show the dialog. Its
@@ -2599,7 +2600,7 @@ void MainWindow::onLiquifyTriggered()
 }
 
 // =====================================================================
-//  P1.3.4/5/6/7 (2026-09-17): 图层蒙版入口实现
+//  图层蒙版入口实现
 // =====================================================================
 
 // P1.3.4: 切换到 MaskBrushTool (像素蒙版画笔).
@@ -2794,7 +2795,7 @@ void MainWindow::onColorRangeMask()
 }
 
 // =====================================================================
-//  P1.4.2 (2026-09-17): 智能对象 4 主菜单 / 右键菜单入口
+//  智能对象 4 主菜单 / 右键菜单入口
 //   - 主菜单触发: idx=-1 (用 stack->selection())
 //   - LayerPanel 右键触发: idx=具体值 (绕过 selection, 直接对右键目标)
 //   - 所有 4 个 slot 都通过 LayerCommand 推 undoStack, undo/redo 完整恢复
@@ -2943,7 +2944,7 @@ void MainWindow::onSmartObjectRelink(int idx)
         tr("已重新链接到: %1").arg(QFileInfo(path).fileName()), 3000);
 }
 
-// P1.4.4 (2026-09-17): Smart filter main menu entry.
+// Smart filter main menu entry
 //   Same flow as the LayerPanel right-click handler: pick filter type,
 //   rasterize the SmartObject as base image, append the SmartFilter, push
 //   a makeAppendSmartFilter undo command.
@@ -2988,7 +2989,7 @@ void MainWindow::onApplySmartFilter(int idx)
 }
 
 // =====================================================================
-//  P1.4.5 (2026-09-17): SmartObject 非破坏性变换 主菜单 4 入口
+//  SmartObject 非破坏性变换 主菜单 4 入口
 //
 //  共享 resolveSmartObjectTarget 解析 img/stack/idx. 路径:
 //    1. 主菜单触发: idx=-1 → resolveSmartObjectTarget 走 stack->selection()
@@ -3117,7 +3118,7 @@ void MainWindow::onSmartObjectResetTransform(int idx)
 
 void MainWindow::onHomeOpenFolderRequested()
 {
-    // 阶段 0 第 7 步: 打开文件夹不再一次性扫描 + 全部打开
+    // 打开文件夹不再一次性扫描 + 全部打开
     //   改为: 弹目录选择 → 启动 InfoTreeDock → 加载整个目录的文件树
     //         用户在信息树里双击/回车 → MediaDispatcher 路由到对应模块
     const QString startDir = RecentManager::instance().entries().value(0).filePath.isEmpty()
@@ -3148,10 +3149,10 @@ void MainWindow::onHomeOpenPathRequested(const QString &path)
         QString p;
         if (auto *d = qobject_cast<DocWindow *>(w))   p = d->filePath();
         else if (auto *img = qobject_cast<ImageWindow *>(w)) p = img->filePath();
-        // (3D 模块已移除, 2026-09-02: ModelWindow 检查删除)
+        // (3D 模块已移除, ModelWindow 检查删除)
         if (!p.isEmpty() && p == path) {
             ui->tabWidget->setCurrentIndex(i);
-            // Stage G v2 (2026-09-15): 文件已开时也要切到工作空间
+            // 文件已开时也要切到工作空间
             //   之前只 setCurrentIndex, 没切 mainStack page, 用户视觉上"没反应"
             //   现在跟新打开文件保持一致: 切到 workspace page 1 显示图片
             switchToWorkspace();
@@ -3163,13 +3164,13 @@ void MainWindow::onHomeOpenPathRequested(const QString &path)
     // 3D 模块移除后, 不再分流: 全部按扩展名识别 (图片/文本/...)
     //   简单做法: 优先尝试 ImageWindow.loadFile, 失败回退 DocWindow
     auto *img = new ImageWindow;
-    // F-G.3 (2026-09-09): 注入 WorkspaceMediator
+    // 注入 WorkspaceMediator
     img->attachWorkspaceMed(m_workspaceMed.get());
     if (img->loadFile(path, &err)) {
         int idx = addImageTab(img);
         if (idx >= 0) {
             ui->tabWidget->setCurrentIndex(idx);
-            // PS/WPS/VS 风格 (2026-09-10): 打开文件后切到工作空间 (page 1)
+            // PS/WPS/VS 风格 打开文件后切到工作空间 (page 1)
             switchToWorkspace();
         }
         RecentManager::instance().touchOpen(path, RecentModeMultimedia);
@@ -3187,7 +3188,7 @@ void MainWindow::onHomeOpenPathRequested(const QString &path)
     int idx = addDocTab(doc);
     if (idx >= 0) {
         ui->tabWidget->setCurrentIndex(idx);
-        // PS/WPS/VS 风格 (2026-09-10): 打开文件后切到工作空间 (page 1)
+        // PS/WPS/VS 风格 打开文件后切到工作空间 (page 1)
         switchToWorkspace();
     }
     RecentManager::instance().touchOpen(path, RecentModeMultimedia);
@@ -3225,15 +3226,15 @@ void MainWindow::restoreSession()
 void MainWindow::restoreSessionFiles(const QStringList &files, const QString &activeFile)
 {
     if (files.isEmpty()) return;
-    // 启动入口恢复 (2026-09-10): 恢复文件后切到第一个 image/doc tab, 隐藏 HomePage
+    // 启动入口恢复 恢复文件后切到第一个 image/doc tab, 隐藏 HomePage
     int targetIdx = -1;
     for (const QString &p : files) {
         if (!QFileInfo::exists(p)) continue;
         QString err;
-        // (3D 模块已移除, 2026-09-02: 模式分支删除, 全部按扩展名识别)
+        // (3D 模块已移除, 模式分支删除, 全部按扩展名识别)
         //   优先尝试 ImageWindow, 失败回退 DocWindow
         ImageWindow *img = new ImageWindow;
-        // F-G.3 (2026-09-09): 注入 WorkspaceMediator
+        // 注入 WorkspaceMediator
         img->attachWorkspaceMed(m_workspaceMed.get());
         if (img->loadFile(p, &err)) {
             int idx = addImageTab(img);
@@ -3261,7 +3262,7 @@ void MainWindow::restoreSessionFiles(const QStringList &files, const QString &ac
             break;
         }
     }
-    // PS/WPS/VS 风格 (2026-09-10): restore session 完 -> 切到工作空间 (page 1)
+    // PS/WPS/VS 风格 restore session 完 -> 切到工作空间 (page 1)
     if (ui->tabWidget->count() > 0) {
         switchToWorkspace();
     }
@@ -3280,7 +3281,7 @@ void MainWindow::restoreSessionFiles(const QStringList &files, const QString &ac
 void MainWindow::mousePressEvent(QMouseEvent *e)
 {
     if (e->button() == Qt::LeftButton && titleBarDragRect().contains(e->pos())) {
-        // 决策 5 后续修复 (2026-09-02): 最大化状态时不要立即 showNormal
+        // 决策 5 后续修复 最大化状态时不要立即 showNormal
         //   单击不拖 = 啥也不做 (跟系统行为一致, 双击才切最大化/还原)
         //   拖动距离 > 阈值才 showNormal + 跟随鼠标 (跟系统行为一致)
         m_titleDragging = true;
@@ -3351,7 +3352,7 @@ void MainWindow::mouseDoubleClickEvent(QMouseEvent *e)
 
 void MainWindow::retranslateUiTexts()
 {
-    // (3D 模块已移除, 2026-09-02: mode 按钮文字更新删除)
+    // (3D 模块已移除, mode 按钮文字更新删除)
 
     if (-1 >= 0)
         ui->tabWidget->setTabText(-1, tr("主页"));
@@ -3360,7 +3361,7 @@ void MainWindow::retranslateUiTexts()
     for (int i = 0; i < ui->tabWidget->count(); ++i) refreshTabTitle(i);
 }
 
-// P7.6.x v3 (2026-10-14): 把 4 左侧 dock 重新绑定到指定 active image.
+// 把 4 左侧 dock 重新绑定到指定 active image
 //   LeftToolBar.attach(toolMed, ctx)  切工具 → Mediator → ctx.setState
 //   ImageOptionBar.attach(ctx, mosaic, textCtrl, brushOpt)  切 page 显示 brush 等选项
 //   ModeSelectorBar.attach(ctx)  二级 mode 按钮 (Blend / SampleSize 等)
@@ -3419,8 +3420,8 @@ void MainWindow::bindLeftDockWidgets(ImageWindow* iw)
 }
 
 // ---------------------------------------------------------------------------
-// P7.11 (2026-10-15): 状态栏底部 GPU/CPU 状态按钮
-// P8.3 (2026-10-16): 接实际 GPU/CPU backend 切换
+// 状态栏底部 GPU/CPU 状态按钮
+// 接实际 GPU/CPU backend 切换
 // ---------------------------------------------------------------------------
 //
 // 读 active image 的 RightPanelDock 3 sub-dock 内 9 V*Page 的
@@ -3450,7 +3451,7 @@ void MainWindow::buildStatusBar()
                                  "实际 backend 由 BrushKind + kindNeedsGpu() 决定"));
     m_btnGpuStatus->setEnabled(true);   // P8.3: enabled, 实际可点
 
-    // P8.3 (2026-10-16): 3 menu actions wired to BackendRegistry::setMode.
+    // 3 menu actions wired to BackendRegistry::setMode
     // The action currently selected reflects the current mode.
     auto* menu = new QMenu(m_btnGpuStatus);
     auto* autoAct = menu->addAction(tr("Auto"));
@@ -3484,7 +3485,7 @@ void MainWindow::refreshGpuStatusButton()
 {
     if (!m_btnGpuStatus) return;
 
-    // P8.3 (2026-10-16): status text now reflects the actual backend
+    // status text now reflects the actual backend
     // selection, not just the V*Page preference distribution. Format:
     //   "AUTO | qt-opengl-stub"        (Auto mode, GPU available, Wet kind)
     //   "FORCE CPU | cpu"              (user force, any kind)

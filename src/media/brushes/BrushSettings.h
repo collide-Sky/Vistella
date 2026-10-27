@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BrushSettings - P1.1 (2026-09-15) Brush full implementation
+// BrushSettings - Brush full implementation
 //   PS-style brush tip parameters (size, hardness, opacity, flow, spacing, angle, roundness)
 //   Inspired by Photoshop's Brush panel "Shape Dynamics" basic settings.
 //   Designed to be 100% data (no Qt event loop dependency) so it can be used

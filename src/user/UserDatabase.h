@@ -2,11 +2,11 @@
 #define USERDATABASE_H
 
 // =============================================================
-// UserDatabase — 本地 SQLite 存储 (阶段 0 第 4 步)
+// UserDatabase — 本地 SQLite 存储
 //
 // 3 张表:
 //   users       - 用户基本信息 (id / username / display / email / avatar / provider)
-//   tokens      - access/refresh token 缓存 (阶段 5 加密, 阶段 0 明文)
+//   tokens      - access/refresh token 缓存 (加密,  明文)
 //   login_logs  - 登录日志 (用户名 / 成功失败 / IP / 时间)
 //
 // 线程: 单线程 (MainWindow 调), 不做 QSqlDatabase 多线程考虑
@@ -39,7 +39,7 @@ public:
     User loadUserByUsername(const QString &username);
     QList<User> allUsers();
 
-    // ----- tokens 表 (阶段 0 明文, 阶段 5 加密) -----
+    // tokens 表 (明文, 加密)
     bool saveToken(const QString &userId,
                    const QString &accessToken,
                    const QString &refreshToken,

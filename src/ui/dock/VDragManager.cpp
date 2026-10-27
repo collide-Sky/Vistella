@@ -1,5 +1,4 @@
 // VDragManager.cpp
-//   P7.6.x v3 commit 2 (2026-10-14).
 #include "VDragManager.h"
 
 #include <QApplication>

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SelectionModel - P0-4.1 (2026-09-10)
+// SelectionModel
 //
 // Image selection state holder.
 //   - 1-channel QImage mask (Format_Alpha8: 0=out, 255=in)
@@ -64,7 +64,7 @@ public:
     // Compose newMask into current mask per mode
     void setMask(const QImage& newMask, Mode mode = Mode::Replace);
 
-    // P3.6 (2026-09-23): PS select > Modify 5 项 + Transform.
+    // PS select > Modify 5 项 + Transform
     //   5 项都生成新 mask (不直接改),触发 changed signal, bbox recompute.
     //   选区变换 (translate/scale/rotate) — QTransform 应用到 mask 像素坐标.
     //   选区羽化 (feather radiusPx): Gaussian blur alpha8 mask + 阈值化保留边缘

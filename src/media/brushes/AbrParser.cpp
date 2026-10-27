@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// AbrParser impl - P1.1 (2026-09-15)
+// AbrParser impl
 
 #include "AbrParser.h"
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// PatternTab implementation - P7.7 (2026-10-14)
+// PatternTab implementation
 //
 //   6 PS-style patterns. P7.11+ extends to full editor (scale/density/color).
 //

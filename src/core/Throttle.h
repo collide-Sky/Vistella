@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// Throttle - F-O (2026-09-10)
+// Throttle
 //
 // Generic trailing-edge debouncer. Multiple trigger() calls within the
 // configured interval collapse to exactly one fired() emission, fired()

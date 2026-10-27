@@ -49,7 +49,7 @@ void FileTreeItem::removeAllChildren()
 
 bool FileTreeItem::hasLazyPlaceholder() const
 {
-    // 占位 child 数量 = 1 且 fileName == "..."
+    // 虚拟 child 数量 = 1 且 fileName == "..."
     if (m_children.size() != 1) return false;
     return m_children.first()->m_data.fileName == QStringLiteral("...");
 }

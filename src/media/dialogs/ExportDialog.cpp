@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// ExportDialog implementation - P0-8.2 (2026-09-15)
+// ExportDialog implementation
 //
 // 详见 ExportDialog.h 头注释
 //
@@ -27,7 +27,7 @@ namespace dialogs {
 
 ExportDialog::ExportDialog(QWidget* parent) : QDialog(parent)
 {
-    // P0-8.4 (2026-09-15): 从 QSettings 加载最近 settings (格式/jpeg quality/png/tiff/webp/resize/ICC)
+    // 从 QSettings 加载最近 settings (格式/jpeg quality/png/tiff/webp/resize/ICC)
     QSettings settings;
     m_opts.format          = static_cast<Format>(settings.value(QStringLiteral("ExportDialog/format"),
                                                                   static_cast<int>(m_opts.format)).toInt());
@@ -236,7 +236,7 @@ void ExportDialog::setupUI()
             this, &ExportDialog::onJpegQualityChanged);
     connect(m_webpSlider, &QSlider::valueChanged,
             this, &ExportDialog::onWebpQualityChanged);
-    // P0-8.4 (2026-09-15): PNG/TIFF/WebP spin 直接 connect valueChanged -> opts 同步
+    // PNG/TIFF/WebP spin 直接 connect valueChanged -> opts 同步
     connect(m_pngSpin, QOverload<int>::of(&QSpinBox::valueChanged),
             this, [this](int v) { m_opts.pngCompression = v; });
     connect(m_tiffCombo, &QComboBox::currentTextChanged,
@@ -339,7 +339,7 @@ void ExportDialog::onAccept()
     m_opts.embedIcc        = m_iccCheck->isChecked();
     m_opts.iccProfilePath  = m_iccEdit->text();
 
-    // P0-8.4 (2026-09-15): 持久化 settings 到 QSettings (跨 dialog 调用)
+    // 持久化 settings 到 QSettings (跨 dialog 调用)
     QSettings settings;
     settings.setValue(QStringLiteral("ExportDialog/format"),         static_cast<int>(m_opts.format));
     settings.setValue(QStringLiteral("ExportDialog/jpegQuality"),    m_opts.jpegQuality);

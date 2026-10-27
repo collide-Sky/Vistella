@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// MagicWand implementation - F-L (2026-09-10) + P0-4.5 (2026-09-10) + P2.1 (2026-09-22)
+// MagicWand implementation
 //
 #include "MagicWand.h"
 #include "../imagewindow.h"
@@ -81,7 +81,7 @@ QString MagicWand::pageTitle() const { return QCoreApplication::translate("tools
 
 QCursor MagicWand::cursor() const
 {
-    // F-N (2026-09-10): PS MagicWand uses crosshair
+    // PS MagicWand uses crosshair
     return Qt::CrossCursor;
 }
 

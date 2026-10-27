@@ -1,6 +1,6 @@
 // =============================================================
 // ImageWorker 实现
-// 阶段 1 W1 骨架 (2026-09-03) — 详见 ImageWorker.h 注释
+//  骨架 — 详见 ImageWorker.h 注释
 // =============================================================
 
 #include "ImageWorker.h"
@@ -25,7 +25,7 @@ ModuleInfo ImageWorker::info() const
         QStringLiteral(".tif"),
         QStringLiteral(".tiff"),
     };
-    mi.iconPath.clear();   // 阶段 1+ 阶段 6 主题系统加
+    mi.iconPath.clear();   //   主题系统加 (未实装)
     return mi;
 }
 
@@ -47,7 +47,7 @@ IWorkspace *ImageWorker::openFile(const QString &path)
 
 IWorkspace *ImageWorker::createNew()
 {
-    // 阶段 1 W1 暂未实现空白画布, 返 nullptr 让 MediaDispatcher 报 "not support createNew"
+    //  暂未实现空白画布, 返 nullptr 让 MediaDispatcher 报 "not support createNew"
     // W4 图层系统再加 (new blank cv::Mat + createNew)
     return nullptr;
 }

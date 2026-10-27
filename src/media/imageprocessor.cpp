@@ -16,7 +16,7 @@
 #include <cstring>
 #include <memory>
 
-// P0-3.1 (2026-09-08): EngineContext + executor 完整 include (applyLutAsync 走 background pool)
+// EngineContext + executor 完整 include (applyLutAsync 走 background pool)
 //   跟 P0-2.5 ImageProcessorAsync.cpp / LayerStack.cpp 同样的相对路径
 #include "../core/ThreadPool/engine_context.h"
 #include "../core/ThreadPool/executor.hpp"
@@ -69,7 +69,7 @@ bool ImageProcessor::saveImage(const cv::Mat &img, const QString &path,
         return false;
     }
 
-    // P0-8.2 (2026-09-15): 多格式 + quality 路径
+    // 多格式 + quality 路径
     //   QImage::save(path, format, quality) 接受 0-100 quality (JPEG/WebP 有效)
     //   PNG 走 compression (QImage::save 不支持, 但 Qt 6.5+ 用 QImageWriter 走 png compression)
     //   TIFF compression 同样不支持直接走, 用 QImageWriter
@@ -333,7 +333,7 @@ void ImageProcessor::rotate90(const cv::Mat &in, cv::Mat &out, int direction)
     cv::rotate(in, out, cv::ROTATE_90_COUNTERCLOCKWISE);
 }
 
-// P0-6.6 (2026-09-14): 几何变换
+// 几何变换
 void ImageProcessor::flip(const cv::Mat &in, cv::Mat &out, int flipCode)
 {
     if (in.empty()) { out = in; return; }
@@ -353,7 +353,7 @@ void ImageProcessor::warpAffine(const cv::Mat &in, cv::Mat &out, const cv::Mat &
     cv::warpAffine(in, out, M, dsize, cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0, 0));
 }
 
-// P3.2.3 (2026-09-22): 4 corner 透视变换 (3x3 矩阵). 用于 TransformTool Distort
+// 4 corner 透视变换 (3x3 矩阵). 用于 TransformTool Distort
 //   模式拖成非平行四边形的情况 (QTransform 2x3 affine 不能表达).
 //   srcQuad/dstQuad = 4 个 QPointF, 顺序 TL/TR/BR/BL (跟 TransformBox::cornersArray 一致).
 void ImageProcessor::warpPerspective(const cv::Mat &in, cv::Mat &out,
@@ -706,7 +706,7 @@ ImageProcessor::PixelInfo ImageProcessor::pixelAt(const cv::Mat &bgr, int x, int
 }
 
 // =============================================================
-// P0-3.1 (2026-09-08): 8 个色彩调整 LUT 函数 + applyLut 同步/异步
+// 8 个色彩调整 LUT 函数 + applyLut 同步/异步
 //   模拟 PS 风格色彩调整: Curves / Levels / HSL / B&W /
 //   Color Balance / Vibrance / Photo Filter
 //
@@ -822,7 +822,7 @@ cv::Mat ImageProcessor::buildLevelsLUT(int inLow, int inHigh, double gamma,
 //                      Cyans / Blues / Magentas / (预留)
 //   lightness: -100..100 (明度调整)
 //   P0-3.1 简化: LUT 只处理 lightness 部分 (256 元素单通道)
-//                hue/sat pairs 是 API 占位, 完整 per-hue 应用留 P0-3.x
+//                TODO(P8.5): hue/sat pairs are accepted but never applied, so the HSL sliders have no effect -- see docs/DEBT.md#A-HUESATLUT
 //   原因: H/S 调整是 2D (per-pixel in HSL space), 不是 1D LUT 能表达的
 //         L (明度) 是 1D, 适合 LUT; 跟 PS HSL 面板 "Lightness" 单滑条一致
 cv::Mat ImageProcessor::buildHueSatLUT(const QVector<QPair<int, int>> &hueSatPairs,
@@ -1034,7 +1034,7 @@ std::future<cv::Mat> ImageProcessor::applyLutAsync(const cv::Mat &in,
     return futureRet;
 }
 
-// applyLutAsync (callback overload, P0-3.2 2026-09-08)
+// applyLutAsync (callback overload)
 //   跟 std::future overload 同样的逻辑, 但 callback 模式更适合 UI 实时调参:
 //   - 不需要 future 轮询, callback 完成后直接切主线程刷显示
 //   - 跟 P0-2.5 LayerStack::renderAsync 调用模式一致

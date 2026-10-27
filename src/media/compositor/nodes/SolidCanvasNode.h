@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// SolidCanvasNode - P8.1.1.y (2026-10-22)
+// SolidCanvasNode
 //
 //   Source node (no inputs) producing a constant-colour tile.
 //

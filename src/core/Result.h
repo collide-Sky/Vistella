@@ -2,16 +2,16 @@
 #define vistella_RESULT_H
 
 // =============================================================
-// Result<T> — 统一错误处理基础设施 (阶段 1 前置优化, 2026-09-03)
+// Result<T> — 统一错误处理基础设施 (前置优化)
 //
 // 设计动机:
-//   阶段 0 错误处理是分散的:
+//    错误处理是分散的
 //     - 失败返 nullptr (e.g. MediaDispatcher::openFile)
 //     - 失败 emit openFailed(path, reason) 信号
 //     - 失败返 bool (e.g. IWorkspace::save)
 //     - 失败 throw exception (main.cpp try/catch 兜底)
 //
-//   阶段 1+ worker (imageWorker / audioWorker / ...) 大量计算函数, 每步都失败:
+//    worker (imageWorker / audioWorker /...) 大量计算函数, 每步都失败 — 未接线
 //     - 文件 IO 失败
 //     - 解码失败
 //     - 内存不足
@@ -48,7 +48,7 @@
 
 namespace vistella {
 
-// 错误码 (阶段 0/1 全部错误来源, 后面阶段可加, 不删)
+// 错误码 (全部错误来源, 后面阶段可加, 不删)
 enum class ErrorCode {
     Ok = 0,                  // 没失败 (Result<T>::ok 用, 一般不直接返回)
     Unknown,                 // 未知错误 (兜底)
@@ -63,8 +63,8 @@ enum class ErrorCode {
     NotImplemented,          // 暂未实现
     NotRegistered,           // 模块没注册 (MediaDispatcher 用)
     InvalidState,            // 状态非法 (e.g. 未初始化就调)
-    NetworkError,            // 网络错误 (阶段 5+ AI 助手用)
-    ModelNotFound,           // AI 模型文件不存在 (阶段 7+ AI 工具用)
+    NetworkError,            // 网络错误 (AI 助手用)
+    ModelNotFound,           // AI 模型文件不存在 (AI 工具用)
     ModelLoadFailed,         // AI 模型加载失败
     Internal,                // 内部错误 (assert 失败, 不变量违反)
 };

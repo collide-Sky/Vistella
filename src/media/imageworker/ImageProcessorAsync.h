@@ -2,18 +2,18 @@
 #define IMAGEPROCESSORASYNC_H
 
 // =============================================================
-// ImageProcessorAsync — 阶段 1 W2.3 异步滤镜 facade (2026-09-03)
+// ImageProcessorAsync — 异步滤镜 facade
 //
 // 设计动机:
-//   阶段 0 imageWindow 同步调 ImageProcessor 滤镜, 大图 (24MP+) 卡 UI.
-//   阶段 1 W2 用 C.1 Async.h (QtConcurrent + QFutureWatcher) 包装 OpenCV 调用,
+//    imageWindow 同步调 ImageProcessor 滤镜, 大图 (24MP+) 卡 UI
+//    用 C.1 Async.h (QtConcurrent + QFutureWatcher) 包装 OpenCV 调用
 //   UI 线程不阻塞.
 //
 // 设计原则 (成熟方案):
 //   1. 同步版本保留 — 现有 imageWindow.cpp 调用方不强制改
 //   2. 异步版本是 facade: 跟同步签名一致, 但返 QFuture<Result<cv::Mat>>
 //      - 调用方未来从 sync 调用换成 async 调用 = 改 1 行 (加 Async::run 包装)
-//      - 错误传递用 Result<cv::Mat> (阶段 1 A.1 错误处理统一)
+//      错误传递用 Result<cv::Mat> (A.1 错误处理统一)
 //   3. 撤销栈 — 由调用方 (imageWindow) 维护, 异步 result 回来后 push Command
 //      当前阶段 W2.3 不替换现有调用, 只建模板 + 单元测试
 //
@@ -27,7 +27,7 @@
 //             setCurrentImage(r.value());
 //         });
 //
-// 阶段 1+ 渐进:
+//  渐进 — 未接线
 //   W2 (本阶段): 建 facade + tst_ImageProcessorAsync 测 API 模板
 //   W3 色彩调整: 替换 1-2 个 sync 调用 (saturation / exposure) → async
 //   W4 图层: 替换更多 (mosaic / edge detect) → async
@@ -48,7 +48,7 @@ namespace vistella {
 template <typename T> class Result;
 }
 
-// P0-2.5 (2026-09-08): EngineContext forward decl
+// EngineContext forward decl
 //   6 个新 overload 接 EngineContext*, 走 background().submit_fn 后台跑
 //   跟旧 overload (走 vistella::run<>) 签名并存, 旧调用方不破坏
 namespace vistella::tp { class EngineContext; }
@@ -62,7 +62,7 @@ public:
     // ---- 同步版本 (跟 ImageProcessor 签名一致, 这里不重复声明) ----
     // 异步 facade 在 src/media/ImageProcessorAsync.cpp 实现, 内部用 vistella::Async
 
-    // ---- 异步入口 (阶段 1 W2 模板, 未来 W3/W4 替换 imageWindow.cpp 调用) ----
+    // 异步入口 (模板, 未来 /替换 imageWindow.cpp 调用)
 
     // 高斯模糊
     static QFuture<vistella::Result<cv::Mat>> gaussianBlur(cv::Mat img, int ksize, double sigma);
@@ -82,7 +82,7 @@ public:
     // Canny 边缘检测
     static QFuture<vistella::Result<cv::Mat>> edgeDetect(cv::Mat img, double low, double high);
 
-    // ---- P0-2.5 (2026-09-08): EngineContext 接入 (新 overload) ----
+    // EngineContext 接入 (新 overload)
     //   设计原则 (一次性到位, 不留补丁):
     //     1. engine == nullptr → 内部 fallback 调旧 overload (走 vistella::run<>)
     //        旧调用方 (没 engine 的场景, e.g. 纯算法测试) 不破坏
@@ -113,7 +113,7 @@ private:
     template <typename Fn>
     static QFuture<vistella::Result<cv::Mat>> runOp(Fn &&fn);
 
-    // P0-2.5 (2026-09-08): EngineContext 版 helper — 走 background().submit_fn
+    // EngineContext 版 helper — 走 background.submit_fn
     //   返 std::shared_ptr<std::promise<Result<cv::Mat>>> (用 shared_ptr 是因为
     //   submit_fn 接受 std::function, 闭包按值捕获 promise 须可拷贝; promise 不可拷贝,
     //   所以包 shared_ptr)
