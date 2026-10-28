@@ -34,13 +34,18 @@
 #include "../../../core/ThreadPool/executor.hpp"
 
 #include <algorithm>
+#include <atomic>
 
 namespace layers {
 
 namespace {
-int g_nextGroupId = 1;   // 进程级 group id 计数器 (简单自增)
-}
+int g_nextGroupId = 1;   // 旧逻辑 group id 计数器 (未使用)
 
+// 图层稳定 id 分配器 (LYR-06/12/16).
+//   全局单调递增, 跨 LayerStack 也唯一 —— 这样把图层快照搬到另一个栈
+//   不会撞 id. 0 保留给"还没分配".
+std::atomic<quint64> g_nextStableId{1};
+}
 LayerStack::LayerStack(QObject *parent)
     : QObject(parent)
 {
@@ -149,15 +154,42 @@ LayerId LayerStack::idOf(int index) const
 {
     auto l = at(index);
     if (!l) return 0;
-    return reinterpret_cast<LayerId>(l.get());
+    return l->stableId;
 }
 
 LayerPtr LayerStack::byId(LayerId id) const
 {
+    if (id == 0) return nullptr;
     for (const auto &l : m_layers) {
-        if (reinterpret_cast<LayerId>(l.get()) == id) return l;
+        if (l && l->stableId == id) return l;
     }
     return nullptr;
+}
+
+// 给还没分配 stableId 的图层发一个.
+//   值拷贝带过来的 id 原样保留 —— 撤销时把快照放回去, 身份不变.
+void LayerStack::assignStableId(Layer &layer)
+{
+    if (layer.stableId != 0) return;
+    layer.stableId = g_nextStableId.fetch_add(1, std::memory_order_relaxed);
+}
+
+// 把某个 id 从所有智能滤镜链里摘掉 (删图层时调用).
+//   链上存的是 id, 删掉一层以后链里不能留下查不到的条目 (LYR-16).
+void LayerStack::dropFromSmartFilterChains(LayerId id)
+{
+    if (id == 0) return;
+    for (auto it = m_smartFilterChain.begin(); it != m_smartFilterChain.end(); ++it) {
+        it.value().removeAll(id);
+    }
+    // 顺手清掉空链
+    for (auto it = m_smartFilterChain.begin(); it != m_smartFilterChain.end(); ) {
+        if (it.value().isEmpty()) {
+            it = m_smartFilterChain.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void LayerStack::reassignZOrder()
@@ -187,9 +219,20 @@ int LayerStack::addLayer(const Layer &layer)
 // which would break m_groups lookups keyed on that address — so anything
 // that has to preserve a Group's identity (duplicateLayer) goes through
 // here instead.
+// append an already-allocated layer.
+//   addLayer(const Layer&) 一定要新分配一个 LayerPtr, 所以 anything
+//   that has to preserve a Group's identity (duplicateLayer) goes
+//   through here instead.
 int LayerStack::appendLayerPtr(LayerPtr layer)
 {
     if (!layer) return -1;
+    // id 冲突保护: 同一个 id 同时活在 m_layers 里, 按 id 定位的撤销命令
+    //   / 智能滤镜链就会认错层. 正常路径不会撞 (id 来自唯一分配器),
+    //   这里兜底.
+    if (layer->stableId != 0 && indexById(layer->stableId) >= 0) {
+        layer->stableId = 0;
+    }
+    assignStableId(*layer);
     m_layers.append(std::move(layer));
     const int newIndex = m_layers.size() - 1;
     reassignZOrder();
@@ -200,6 +243,11 @@ int LayerStack::appendLayerPtr(LayerPtr layer)
 
 int LayerStack::addLayer(const QString &name, const cv::Mat &image)
 {
+    // 第一层定义文档画布尺寸 (LYR-05):
+    //   之后就算这层被编进组里, canvasSize() 也还有文档级的值可用.
+    if (m_layers.isEmpty() && !image.empty()) {
+        m_canvasSize = image.size();
+    }
     return addLayer(Layer(name, image));
 }
 
@@ -209,13 +257,18 @@ int LayerStack::addLayer(const QString &name, const cv::Mat &image)
 int LayerStack::insertLayer(int index, const Layer &layer)
 {
     if (index < 0 || index > m_layers.size()) return -1;
-    m_layers.insert(index, std::make_shared<Layer>(layer));
+    auto l = std::make_shared<Layer>(layer);
+    // id 冲突保护 (见 appendLayerPtr)
+    if (l->stableId != 0 && indexById(l->stableId) >= 0) {
+        l->stableId = 0;
+    }
+    assignStableId(*l);
+    m_layers.insert(index, l);
     reassignZOrder();
     emit layerAdded(index);
     emit countChanged();
     return index;
 }
-
 //  补发 layerChanged.
 //    setter 路径自带 emit; 直接改 Layer 字段的路径 (command 还原快照 /
 //    蒙版恢复 / 类型转换还原) 绕过 setter, 用这个让宿主知道内容变了.
@@ -293,32 +346,18 @@ int LayerStack::addAdjustmentLayer(const QString &name, const QString &adjustmen
     return addLayer(l);
 }
 
-// clone a layer AND carry its group children across
-//   to the clone's address.
+// clone a layer, keeping its stable identity.
 //
-//   m_groups is keyed by LayerId, and LayerId is the LayerPtr's address.
-//   A plain Layer copy allocates a new address, so a cloned Group ends up
-//   with no m_groups entry and renders as an empty group — everything
-//   inside it silently disappears. Re-keying the children under the clone
-//   is what makes nesting a group (mergeIntoGroup) and duplicating one
-//   (duplicateLayer) behave.
+//   m_groups 按 Group 的 stableId 存 children. 拷贝出来的图层 stableId
+//   原样保留, 所以编组时被编走的原层和它的克隆是同一个身份 ——
+//   m_groups 的条目不用搬家, 嵌套编组也不会把内组的子层弄丢.
 //
-//   Children are moved, not deep-copied: they already live at their own
-//   addresses, and their own nested-group entries stay valid because the
-//   child LayerPtrs themselves are unchanged. That matches the existing
-//   design, where a group's children are shared handles rather than a
-//   private deep tree.
+//   语义上"复制出新图层"的地方 (duplicateLayer) 要另外发新 id,
+//   并把 children 条目复制到新 id 下.
 LayerPtr LayerStack::cloneLayerWithGroupChildren(const LayerPtr& src)
 {
     if (!src) return LayerPtr();
-    auto clone = std::make_shared<Layer>(*src);
-    if (clone->kind == Layer::Group) {
-        auto it = m_groups.find(reinterpret_cast<LayerId>(src.get()));
-        if (it != m_groups.end() && !it.value().empty()) {
-            m_groups.insert(reinterpret_cast<LayerId>(clone.get()), it.value());
-        }
-    }
-    return clone;
+    return std::make_shared<Layer>(*src);
 }
 
 // drop a group layer's children entry when the layer
@@ -327,11 +366,8 @@ LayerPtr LayerStack::cloneLayerWithGroupChildren(const LayerPtr& src)
 void LayerStack::releaseGroupChildren(const LayerPtr& group)
 {
     if (!group) return;
-    m_groups.remove(reinterpret_cast<LayerId>(group.get()));
+    m_groups.remove(group->stableId);
 }
-
-// Group adjacent layers into a Group container
-//   1. Validate: >= 2 indices, sorted ascending, contiguous.
 //   2. Capture each layer's full copy (LayerPtr deep clone via std::make_shared<Layer>).
 //   3. Remove originals (high idx to low idx to avoid index shift).
 //   4. Build Group layer at end (kind=Group) + store clones in m_groups[newGroupIdx].
@@ -351,26 +387,43 @@ int LayerStack::mergeIntoGroup(const QList<int>& indices)
         if (sorted[i] != sorted[i - 1] + 1) return -1;
     }
     // Capture clones BEFORE removing originals (so indices stay valid).
-    // P8.1.z: cloneLayerWithGroupChildren, so grouping a group keeps the
-    // inner group's children instead of orphaning them under the old
-    // LayerId.
+    //   cloneLayerWithGroupChildren keeps the stableId, so the clone and
+    //   the original it replaces are the same identity.
     std::vector<LayerPtr> clones;
     clones.reserve(sorted.size());
+    // Group children live in m_groups keyed by the Group's stableId. The
+    //   clone keeps that id, but removing the original releases the entry
+    //   -- so snapshot the entries and put them back after the removal.
+    std::vector<LayerId> groupIds;
+    std::vector<std::vector<LayerPtr>> groupChildren;
     for (int idx : sorted) {
         clones.push_back(cloneLayerWithGroupChildren(m_layers[idx]));
+        if (m_layers[idx] && m_layers[idx]->kind == Layer::Group) {
+            const LayerId gid = m_layers[idx]->stableId;
+            auto it = m_groups.constFind(gid);
+            if (it != m_groups.constEnd() && !it.value().empty()) {
+                groupIds.push_back(gid);
+                groupChildren.push_back(it.value());
+            }
+        }
     }
     // Remove originals in reverse order (high -> low) to keep indices stable
     for (int i = sorted.size() - 1; i >= 0; --i) {
         if (!removeLayer(sorted[i])) return -1;   // shouldn't fail given validation
     }
+    // 还原刚被 removeLayer 释放掉的编组子层条目
+    for (size_t i = 0; i < groupIds.size(); ++i) {
+        m_groups.insert(groupIds[i], groupChildren[i]);
+    }
     // Build Group layer
     Layer grp;
     grp.kind = Layer::Group;
     grp.name = QStringLiteral("Group 1");
-    // Append Group at end
+    // Append Group at end of stack (既有契约).
+    // TODO(P8.4): 组应该落在最上面那个被选图层原来的位置 (PS 行为), 现在追加到栈尾, 选中间几层编组时组的 z 序会跑到没被选中的层上面; 改这一条要连带修 LYR-14 (base 之下的图层不参与合成) -- see docs/DEBT.md#A-GROUPZORDER
     const int groupIdx = addLayer(grp);
     if (groupIdx < 0) return -1;
-    // key m_groups by LayerId, not int layer index
+    // key m_groups by the Group's stableId, not int layer index
     //   so subsequent m_layers mutations (moveUp / removeLayer / flattenGroup)
     //   don't invalidate this lookup.
     m_groups.insert(idOf(groupIdx), std::move(clones));
@@ -434,7 +487,9 @@ const std::vector<LayerPtr>& LayerStack::groupChildrenOf(const LayerPtr& group) 
         static const std::vector<LayerPtr> kEmpty;
         return kEmpty;
     }
-    return groupChildrenOf(reinterpret_cast<LayerId>(group.get()));
+    // 用 stableId 查 (不是 LayerPtr 地址): 地址会随值拷贝漂移,
+    //   编组 / 复制以后按旧地址就查不到子层了 (LYR-12).
+    return groupChildrenOf(group->stableId);
 }
 
 // inverse of flattenGroup, used by LayerCommand
@@ -448,25 +503,18 @@ int LayerStack::reinsertGroup(int atIndex, std::vector<LayerPtr> children)
     Layer grp;
     grp.kind = Layer::Group;
     grp.name = QStringLiteral("Group 1");
-    // Insert Group at atIndex (push children forward).
-    m_layers.insert(atIndex, std::make_shared<Layer>(grp));
-    const int newGroupIdx = atIndex;
-    // Wire children into m_groups keyed by new Group's LayerId.
+    // 走 insertLayer: 新 Group 要领一个 stableId.
+    //   (直接 m_layers.insert 会漏掉 id 分配, 组的身份就成了 0)
+    const int newGroupIdx = insertLayer(atIndex, grp);
+    if (newGroupIdx < 0) return -1;
+    // Wire children into m_groups keyed by new Group's stableId.
     m_groups.insert(idOf(newGroupIdx), std::move(children));
-    emit layerAdded(newGroupIdx);
-    emit countChanged();
     return newGroupIdx;
 }
 
 bool LayerStack::removeLayer(int index)
 {
     if (index < 0 || index >= m_layers.size()) return false;
-    // SmartFilter chain bookkeeping is intentionally
-    //   NOT done here. Callers that remove SmartFilter sub-layers should go
-    //   through removeSmartFilter() (which handles chain), and SmartObject
-    //   removal should be paired with rasterizeSmartObject()/a cascade helper
-    //   to also drop orphaned SmartFilter children. Doing chain cleanup
-    //   here would double-mutate and leave stale indices in m_smartFilterChain.
     // capture the LayerPtr BEFORE removal. Reading
     //   m_layers[index] after removeAt() is out of range whenever index
     //   was the last element — which is exactly what happens when
@@ -476,6 +524,10 @@ bool LayerStack::removeLayer(int index)
     // A removed Group's children entry used to stay in m_groups forever,
     // keeping its child LayerPtrs alive.
     releaseGroupChildren(removed);
+    // 被删掉的层如果挂在智能滤镜链上, 链上的条目也要摘掉 (LYR-16).
+    //   链上存的是 id, 不摘的话链里会留下一个查不到的条目, 渲染时
+    //   智能滤镜会挂到别的图层上.
+    dropFromSmartFilterChains(removed->stableId);
     reassignZOrder();
     // 选中更新
     if (m_selection >= m_layers.size()) {
@@ -489,20 +541,25 @@ bool LayerStack::removeLayer(int index)
 
 bool LayerStack::duplicateLayer(int index)
 {
-    if (auto l = at(index)) {
-        Layer copy = *l;   // 拷贝构造 (cv::Mat clone, QString 值语义)
-        copy.name = l->name + QStringLiteral(" copy");
-        // a duplicated Group must keep its children
-        // appendLayerPtr (not addLayer) keeps the clone's address, which
-        // is the address its m_groups entry was re-keyed to.
-        if (l->kind == Layer::Group) {
-            auto clone = cloneLayerWithGroupChildren(l);
-            clone->name = copy.name;
-            return appendLayerPtr(std::move(clone)) >= 0;
+    auto l = at(index);
+    if (!l) return false;
+    Layer copy = *l;   // 拷贝构造 (cv::Mat clone, QString 值语义)
+    copy.name = l->name + QStringLiteral(" copy");
+    // 复制出来的是**另一个**图层, 必须领新的 stableId (LYR-06/16):
+    //   否则它跟原件共享身份, 撤销命令 / 编组表 / 智能滤镜链会认错层.
+    copy.stableId = 0;   // 0 = 待分配, 入栈时领新 id
+    if (l->kind == Layer::Group) {
+        // Group 的 children 条目按 Group 的 id 存, 换 id 后要跟着搬一份.
+        const auto children = groupChildrenOf(l->stableId);
+        auto clone = std::make_shared<Layer>(copy);
+        const int newIdx = appendLayerPtr(std::move(clone));
+        if (newIdx < 0) return false;
+        if (!children.empty()) {
+            m_groups.insert(at(newIdx)->stableId, children);
         }
-        return addLayer(copy) >= 0;
+        return true;
     }
-    return false;
+    return addLayer(copy) >= 0;
 }
 
 bool LayerStack::moveUp(int index)
@@ -980,9 +1037,12 @@ bool LayerStack::rasterizeSmartObject(int index)
     }
     // Drop SmartFilter sub-layers first (reverse order
     //   so the indices in m_smartFilterChain[index] stay valid during removal).
-    auto childCopy = smartFiltersFor(index);
-    for (int i = childCopy.size() - 1; i >= 0; --i) {
-        removeLayer(childCopy[i]);
+    // Drop SmartFilter sub-layers first (reverse order
+    //   so the chain bookkeeping stays consistent during removal).
+    const QList<LayerId> childIds = smartFilterIdsFor(index);
+    for (int i = childIds.size() - 1; i >= 0; --i) {
+        const int idx = indexById(childIds[i]);
+        if (idx >= 0) removeLayer(idx);
     }
     cv::Mat result = rasterize(l);
     if (result.empty()) return false;
@@ -991,7 +1051,7 @@ bool LayerStack::rasterizeSmartObject(int index)
     l->sourceFilePath.clear();
     l->sourceEmbedded = false;
     l->transform = QTransform();
-    m_smartFilterChain.remove(index);
+    m_smartFilterChain.remove(l->stableId);
     l->hasTransform = false;
     emit layerChanged(index);
     // Remove the now-orphan embedded cache file.
@@ -1069,19 +1129,32 @@ QString LayerStack::smartObjectCachePathFor(const QString &sourceFilePath)
 //   so the renderer skips them in the main loop and applies them as a chain
 //   to their parent SmartObject.
 
-const QList<int>& LayerStack::smartFiltersFor(int smartIdx) const
+QList<LayerId> LayerStack::smartFilterIdsFor(int smartIdx) const
 {
-    static const QList<int> kEmpty;
-    auto it = m_smartFilterChain.constFind(smartIdx);
-    if (it == m_smartFilterChain.constEnd()) return kEmpty;
+    auto l = at(smartIdx);
+    if (!l) return QList<LayerId>();
+    auto it = m_smartFilterChain.constFind(l->stableId);
+    if (it == m_smartFilterChain.constEnd()) return QList<LayerId>();
     return it.value();
+}
+
+QList<int> LayerStack::smartFiltersFor(int smartIdx) const
+{
+    // 每次调用都按 id 重新解析成当下有效的下标 (LYR-16):
+    //   链上存的是 id, 图层增删 / 移动以后下标会变, 缓存下来的下标就过期了.
+    QList<int> out;
+    const QList<LayerId> ids = smartFilterIdsFor(smartIdx);
+    out.reserve(ids.size());
+    for (LayerId fid : ids) {
+        const int idx = indexById(fid);
+        if (idx >= 0) out.append(idx);
+    }
+    return out;
 }
 
 int LayerStack::smartFilterCount(int smartIdx) const
 {
-    auto it = m_smartFilterChain.constFind(smartIdx);
-    if (it == m_smartFilterChain.constEnd()) return 0;
-    return it.value().size();
+    return smartFilterIdsFor(smartIdx).size();
 }
 
 int LayerStack::appendSmartFilter(int smartIdx, const QString &filterType,
@@ -1100,69 +1173,85 @@ int LayerStack::appendSmartFilter(int smartIdx, const QString &filterType,
     l.name = QStringLiteral("Filter: %1").arg(filterType);
     l.filterType = filterType;
     l.filterStrength = strength;
-    l.parentSmartIndex = smartIdx;
+    // 父层用 stableId 记, 不用下标 (LYR-16)
+    const LayerId parentId = sl->stableId;
+    l.parentSmartId = parentId;
     l.image = filtered;
     // Stamp the slot BEFORE addLayer so the stored layer carries the
     //   pre-append size (which equals the new 0-based slot index).
-    auto &chain = m_smartFilterChain[smartIdx];
-    l.filterSlotIndex = chain.size();
+    l.filterSlotIndex = m_smartFilterChain.value(parentId).size();
     const int newIdx = addLayer(l);
     if (newIdx < 0) return -1;
-    chain.append(newIdx);
+    m_smartFilterChain[parentId].append(at(newIdx)->stableId);
     return newIdx;
 }
 
-bool LayerStack::removeSmartFilter(int smartIdx, int filterIdx)
+bool LayerStack::removeSmartFilter(LayerId parentId, LayerId filterId)
 {
-    auto &chain = m_smartFilterChain[smartIdx];
-    const int pos = chain.indexOf(filterIdx);
-    if (pos < 0) return false;
-    // Remove from m_layers FIRST, then fix up chain
-    //   indices. removeLayer shifts all subsequent indices down by 1, so
-    //   we decrement chain entries > filterIdx to point at their new positions.
-    if (!removeLayer(filterIdx)) return false;
-    chain.removeAt(pos);
-    for (int i = 0; i < chain.size(); ++i) {
-        int &idx = chain[i];
-        if (idx > filterIdx) --idx;
-        if (auto l = at(idx)) l->filterSlotIndex = i;
+    {
+        auto it = m_smartFilterChain.find(parentId);
+        if (it == m_smartFilterChain.end()) return false;
+        const int pos = it.value().indexOf(filterId);
+        if (pos < 0) return false;
+        // 先从链上摘掉, 再删层: removeLayer 内部也会清理链 (幂等).
+        it.value().removeAt(pos);
     }
-    if (chain.isEmpty()) m_smartFilterChain.remove(smartIdx);
+    const int filterIdx = indexById(filterId);
+    if (filterIdx >= 0) removeLayer(filterIdx);
+    // 重排 slot
+    auto it = m_smartFilterChain.find(parentId);
+    if (it != m_smartFilterChain.end()) {
+        const QList<LayerId> ids = it.value();
+        for (int i = 0; i < ids.size(); ++i) {
+            const int idx = indexById(ids[i]);
+            if (idx >= 0) {
+                if (auto l = at(idx)) l->filterSlotIndex = i;
+            }
+        }
+        if (ids.isEmpty()) m_smartFilterChain.remove(parentId);
+    }
     return true;
 }
 
-bool LayerStack::moveSmartFilter(int smartIdx, int filterIdx, int newSlot)
+bool LayerStack::moveSmartFilter(LayerId parentId, LayerId filterId, int newSlot)
 {
-    auto &chain = m_smartFilterChain[smartIdx];
-    const int oldPos = chain.indexOf(filterIdx);
+    auto it = m_smartFilterChain.find(parentId);
+    if (it == m_smartFilterChain.end()) return false;
+    QList<LayerId> &chain = it.value();
+    const int oldPos = chain.indexOf(filterId);
     if (oldPos < 0) return false;
     if (newSlot < 0 || newSlot >= chain.size()) return false;
     if (oldPos == newSlot) return true;
     chain.move(oldPos, newSlot);
     for (int i = 0; i < chain.size(); ++i) {
-        if (auto l = at(chain[i])) l->filterSlotIndex = i;
+        const int idx = indexById(chain[i]);
+        if (idx >= 0) {
+            if (auto l = at(idx)) l->filterSlotIndex = i;
+        }
     }
     return true;
 }
 
-bool LayerStack::setSmartFilterEnabled(int smartIdx, int filterIdx, bool enabled)
+bool LayerStack::setSmartFilterEnabled(LayerId parentId, LayerId filterId, bool enabled)
 {
-    auto l = at(filterIdx);
+    const int idx = indexById(filterId);
+    auto l = at(idx);
     if (!l || l->kind != Layer::SmartFilter) return false;
-    if (l->parentSmartIndex != smartIdx) return false;
+    if (l->parentSmartId != parentId) return false;
     // PS: opacity 0 = hidden, opacity 1 = enabled. Keep the layer in chain.
     l->opacity = enabled ? 1.0f : 0.0f;
-    emit layerChanged(filterIdx);
+    emit layerChanged(idx);
     return true;
 }
 
-bool LayerStack::setSmartFilterStrength(int smartIdx, int filterIdx, double strength)
+bool LayerStack::setSmartFilterStrength(LayerId parentId, LayerId filterId, double strength)
 {
-    auto l = at(filterIdx);
+    const int idx = indexById(filterId);
+    auto l = at(idx);
     if (!l || l->kind != Layer::SmartFilter) return false;
-    if (l->parentSmartIndex != smartIdx) return false;
+    if (l->parentSmartId != parentId) return false;
     l->filterStrength = strength;
-    emit layerChanged(filterIdx);
+    emit layerChanged(idx);
     return true;
 }
 
@@ -1198,9 +1287,10 @@ cv::Mat LayerStack::rasterizeLayer(const LayerPtr &l) const
 cv::Mat LayerStack::applySmartFilterChain(const cv::Mat &src, int smartIdx) const
 {
     if (src.empty()) return cv::Mat();
-    const auto &chain = smartFiltersFor(smartIdx);
+    const QList<LayerId> chain = smartFilterIdsFor(smartIdx);
     cv::Mat out = src;
-    for (int fIdx : chain) {
+    for (LayerId fid : chain) {
+        const int fIdx = indexById(fid);
         auto fL = at(fIdx);
         if (!fL || !fL->visible || fL->opacity <= 0.0f) continue;
         cv::Mat filtered = applySmartFilter(fL->filterType, fL->filterStrength, out);
@@ -1215,21 +1305,27 @@ cv::Mat LayerStack::applySmartFilterChain(const cv::Mat &src, int smartIdx) cons
 //   the new layer index or -1 on failure.
 int LayerStack::reinsertSmartFilter(const Layer &filterLayer, int atSlot)
 {
-    if (filterLayer.kind != Layer::SmartFilter
-        || filterLayer.parentSmartIndex < 0) return -1;
-    auto sl = at(filterLayer.parentSmartIndex);
+    if (filterLayer.kind != Layer::SmartFilter || filterLayer.parentSmartId == 0) return -1;
+    auto sl = byId(filterLayer.parentSmartId);
     if (!sl || sl->kind != Layer::SmartObject) return -1;
+    const LayerId parentId = filterLayer.parentSmartId;
+    // 复原时要拿回原来的 stableId (命令快照里带着), 不能发新 id.
     const int newIdx = addLayer(filterLayer);
     if (newIdx < 0) return -1;
-    auto &chain = m_smartFilterChain[filterLayer.parentSmartIndex];
-    if (atSlot < 0) atSlot = 0;
-    if (atSlot > chain.size()) atSlot = chain.size();
-    chain.insert(atSlot, newIdx);
-    if (auto inserted = at(newIdx)) {
-        inserted->filterSlotIndex = atSlot;
+    const LayerId filterId = at(newIdx)->stableId;
+    int slot = atSlot;
+    if (slot < 0) slot = 0;
+    {
+        const int chainSize = m_smartFilterChain.value(parentId).size();
+        if (slot > chainSize) slot = chainSize;
     }
-    for (int i = 0; i < chain.size(); ++i) {
-        if (auto l = at(chain[i])) l->filterSlotIndex = i;
+    m_smartFilterChain[parentId].insert(slot, filterId);
+    const QList<LayerId> ids = m_smartFilterChain.value(parentId);
+    for (int i = 0; i < ids.size(); ++i) {
+        const int idx = indexById(ids[i]);
+        if (idx >= 0) {
+            if (auto l = at(idx)) l->filterSlotIndex = i;
+        }
     }
     return newIdx;
 }
@@ -1268,11 +1364,9 @@ cv::Mat LayerStack::flattenVisible()
     cv::Mat result = render();
     if (!result.empty()) {
         clear();
-        m_layers.append(std::make_shared<Layer>(
-            Layer(QStringLiteral("Background"), result)));
-        reassignZOrder();
-        emit layerAdded(0);
-        emit countChanged();
+        // 走 addLayer: 新底图要领一个 stableId.
+        //   (直接 append 到 m_layers 会漏掉 id 分配, 身份就成了 0)
+        addLayer(QStringLiteral("Background"), result);
     }
     return result;
 }
@@ -1389,11 +1483,16 @@ QList<int> LayerStack::selectedIndices() const
 
 cv::Size LayerStack::canvasSize() const
 {
-    // 优先 base layer (index 0) 的 image 尺寸
+    // 文档级画布尺寸 (LYR-05).
+    //   画布是文档的属性: 由 setBaseLayer / setCanvasSize 写入 m_canvasSize,
+    //   跟图层结构解耦.
+    //   栈顶图层的 image 尺寸优先 —— 独立使用 LayerStack 时 (测试 / 工具代码)
+    //   没人显式设过画布尺寸, 以第一层为准.
+    //   编组把底图吞进组里以后 index 0 变成 Group (没有 image), 这时走
+    //   m_canvasSize, 画布不会退化成 800x600 白底.
     if (!m_layers.isEmpty() && m_layers[0] && !m_layers[0]->image.empty()) {
         return m_layers[0]->image.size();
     }
-    // fallback: m_canvasSize (默认 800x600)
     return m_canvasSize;
 }
 
@@ -1740,6 +1839,9 @@ cv::Mat LayerStack::renderOne(int index) const
 
 void LayerStack::clear()
 {
+    // 编组子树不能跨文档残留 (LYR-12): m_groups 以前不在 clear 里清,
+    //   旧组的子层会一直挂在内存里, 新建的 Group 甚至会继承旧 children.
+    m_groups.clear();
     if (m_layers.isEmpty()) return;
     m_layers.clear();
     m_smartFilterChain.clear();
@@ -1751,6 +1853,9 @@ void LayerStack::clear()
 void LayerStack::setBaseLayer(const cv::Mat &baseImage)
 {
     if (baseImage.empty()) return;
+    // 文档级画布尺寸跟着底图走 (LYR-05):
+    //   canvasSize() 不再从 index 0 反推, 所以这里必须显式写.
+    m_canvasSize = baseImage.size();
     if (m_layers.isEmpty()) {
         addLayer(QStringLiteral("Background"), baseImage);
     } else {

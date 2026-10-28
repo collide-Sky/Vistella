@@ -40,9 +40,6 @@ namespace vistella::tp { class EngineContext; }
 
 namespace layers {
 
-// Layer 唯一 id (用于链接跨组引用)
-using LayerId = quintptr;   // reinterpret_cast<quintptr>(layerPtr.get())
-
 class LayerStack : public QObject
 {
     Q_OBJECT
@@ -57,7 +54,10 @@ public:
     LayerPtr baseLayer() const;   // zOrder 最小的层 (底图)
     LayerPtr topLayer() const;    // zOrder 最大的层 (顶层)
     int  indexOf(LayerPtr layer) const;
-    int  indexById(LayerId id) const;   // 链接用
+    // 按稳定 id 定位图层 (LYR-06/12/16).
+    //   下标会随增删移动漂移, LayerPtr 地址会随值拷贝漂移 —— 只有 stableId
+    //   在图层生命周期内不变, 所以撤销命令 / 编组 / 智能滤镜链一律用它.
+    int  indexById(LayerId id) const;
 
     // ---- 修改操作 (基础) ----
     int  addLayer(const Layer &layer);
@@ -162,11 +162,16 @@ public:
 
     // SmartFilter chain management (PS-style smart filters)
     //   Each SmartObject layer can have 0+ filter sub-layers stored in
-    //   smartFiltersFor(smartIdx). Filter sub-layers occupy indices in the main
-    //   stack (so they show up in LayerPanel) but are tagged with parentSmartIndex.
+    //   smartFilterIdsFor(smartIdx). Filter sub-layers occupy indices in the main
+    //   stack (so they show up in LayerPanel) but are tagged with parentSmartId.
     //   The renderer skips them in the main loop and applies them as a chain to
     //   their parent SmartObject.
-    const QList<int>& smartFiltersFor(int smartIdx) const;   // ordered indices
+    //
+    //   链上存的是 filter 子层的**稳定 id**, 不是 m_layers 下标 (LYR-16):
+    //   下标会随上层图层的增删移动整体漂移, 智能滤镜因此会挂到别的图层上.
+    //   smartFiltersFor 每次调用都按 id 重新解析成当下有效的下标.
+    QList<int> smartFiltersFor(int smartIdx) const;         // 当前解析后的下标
+    QList<LayerId> smartFilterIdsFor(int smartIdx) const;    // 链上的子层 id
     int smartFilterCount(int smartIdx) const;
     // Append a filter sub-layer to a SmartObject's chain.
     //   Applies the filter to imageBefore via the inline filter dispatcher
@@ -176,10 +181,11 @@ public:
     //   or -1 on failure.
     int appendSmartFilter(int smartIdx, const QString &filterType, double strength,
                           const cv::Mat &imageBefore);
-    bool removeSmartFilter(int smartIdx, int filterIdx);
-    bool moveSmartFilter(int smartIdx, int filterIdx, int newSlot);
-    bool setSmartFilterEnabled(int smartIdx, int filterIdx, bool enabled);
-    bool setSmartFilterStrength(int smartIdx, int filterIdx, double strength);
+    //   下面四个接口的 parentId / filterId 都是**稳定 id**, 不是下标.
+    bool removeSmartFilter(LayerId parentId, LayerId filterId);
+    bool moveSmartFilter(LayerId parentId, LayerId filterId, int newSlot);
+    bool setSmartFilterEnabled(LayerId parentId, LayerId filterId, bool enabled);
+    bool setSmartFilterStrength(LayerId parentId, LayerId filterId, double strength);
 
     // Re-insert a previously-removed filter sub-layer
     //   (used by undo). The layer is added at end of m_layers and inserted
@@ -334,7 +340,8 @@ public:
     void setBaseLayer(const cv::Mat &baseImage);
     QStringList layerNames() const;
 
-    // ---- ID helpers (链接跨组用) ----
+    // ---- ID helpers ----
+    //   idOf: 下标 -> 稳定 id; byId: 稳定 id -> 图层.
     LayerId idOf(int index) const;
     LayerPtr byId(LayerId id) const;
 
@@ -361,30 +368,27 @@ private:
     // Phase 3: 画布尺寸 (无 base layer 时 rasterize text/vector 用)
     cv::Size m_canvasSize = cv::Size(800, 600);
 
-    // SmartObject -> SmartFilter sub-layer indices
-    //   Each SmartObject at index `smartIdx` has a QList of filter sub-layer
-    //   indices in chain order (0..N-1). Filter sub-layers are full Layer
-    //   entries in m_layers (so they show up in LayerPanel) but tagged with
-    //   parentSmartIndex so the renderer knows to skip them as standalone.
-    QHash<int, QList<int>> m_smartFilterChain;
+    // SmartObject -> SmartFilter sub-layer ids
+    //   key = 父 SmartObject 的 stableId, value = filter 子层 stableId 列表 (链序).
+    //   全用 id 而不是 m_layers 下标: 增删 / 移动图层都不会让链错位 (LYR-16).
+    QHash<LayerId, QList<LayerId>> m_smartFilterChain;
 
     // Group children storage
-    //   rekeyed by LayerId (stable LayerPtr.get()) instead of int layer index,
-    //   so mutations to m_layers (moveUp / removeLayer / duplicateLayer /
-    //   flattenGroup) do NOT invalidate m_groups lookups. Value is the vector
-    //   of cloned child layers. Layer struct itself does NOT hold children
-    //   (would break Layer's copy semantics; see Layer.h comment).
+    //   key = Group 图层的 stableId, value = 子层列表 (按 zOrder).
+    //   用稳定 id 而不是 LayerPtr 地址: 图层被值拷贝 (编组 / 复制) 时 id 跟着走,
+    //   m_groups 的条目不会因为换了 LayerPtr 就查不到 (LYR-12).
+    //   Layer struct 本身不持有 children (会破坏 Layer 的拷贝语义, 见 Layer.h).
     QHash<LayerId, std::vector<LayerPtr>> m_groups;
-
-    // m_groups is keyed by LayerId, which IS the
-    // LayerPtr's address. So any operation that produces a NEW LayerPtr
-    // for a Group orphans that group's children: the entry still exists
-    // under the old address and the clone looks childless. Three
-    // operations hit this — mergeIntoGroup() (nesting a group), and
-    // duplicateLayer() — plus removeLayer(), which used to leak the
-    // entry outright. These two helpers are the single place where a
-    // layer's group children are carried across an address change or
-    // released with their owner.
+    // 图层的 stableId 由 LayerStack 统一分配 (全局单调递增, 跨栈也唯一).
+    //   值为 0 的图层 (新建但还没进栈) 在入栈时领一个.
+    //   值拷贝带过来的 id 原样保留 —— 撤销时把快照放回去, 身份不变.
+    void    assignStableId(Layer &layer);
+    // 把某个 id 从所有智能滤镜链里摘掉 (删图层时调用).
+    //   链上存的是 id, 删掉一层以后链里不能留下查不到的条目 (LYR-16).
+    void    dropFromSmartFilterChains(LayerId id);
+    // 复制一个图层. stableId 原样带过去 (值拷贝), 所以编组时编出来的
+    //   子层跟被编走的原层是同一个身份, m_groups 条目不用搬家.
+    //   语义上"复制出新图层"的地方 (duplicateLayer) 要另外发新 id.
     LayerPtr cloneLayerWithGroupChildren(const LayerPtr& src);
     void    releaseGroupChildren(const LayerPtr& group);
     int     appendLayerPtr(LayerPtr layer);

@@ -3,7 +3,7 @@
 //  + undo stack unit tests (8 cases).
 //
 //  Coverage:
-//    - appendSmartFilter_basic (returns idx, kind=SmartFilter, parentSmartIndex correct)
+//    - appendSmartFilter_basic (returns idx, kind=SmartFilter, parentSmartId correct)
 //    - smartFilterChain_order (3 filters returned in insertion order)
 //    - removeSmartFilter (chain + stack count both decrease)
 //    - moveSmartFilter (slot reorder, filterSlotIndex renumbered)
@@ -119,7 +119,7 @@ void tst_SmartFilter::test_appendSmartFilter_basic()
     QVERIFY(fL);
     QCOMPARE(fL->kind, Layer::SmartFilter);
     QCOMPARE(fL->filterType, QStringLiteral("GaussianBlur"));
-    QCOMPARE(fL->parentSmartIndex, soIdx);
+    QCOMPARE(fL->parentSmartId, stack.idOf(soIdx));
     QVERIFY(!fL->image.empty());
     QVERIFY(fL->isValid());
 
@@ -181,7 +181,7 @@ void tst_SmartFilter::test_removeSmartFilter()
     // Capture the f1 layer pointer to verify it survives the f0 removal.
     LayerPtr f1Before = stack.at(f1);
 
-    QVERIFY(stack.removeSmartFilter(soIdx, f0));
+    QVERIFY(stack.removeSmartFilter(stack.idOf(soIdx), stack.idOf(f0)));
     QCOMPARE(stack.count(), 2);
     QCOMPARE(stack.smartFilterCount(soIdx), 1);
     // f1 was at index 2; after removing f0 (index 1) f1 shifts down to 1.
@@ -192,8 +192,8 @@ void tst_SmartFilter::test_removeSmartFilter()
     QCOMPARE(f1Before->kind, Layer::SmartFilter);
 
     // Bad removal: wrong index / wrong parent
-    QVERIFY(!stack.removeSmartFilter(soIdx, 999));
-    QVERIFY(!stack.removeSmartFilter(999, f1 - 1));
+    QVERIFY(!stack.removeSmartFilter(stack.idOf(soIdx), 999));
+    QVERIFY(!stack.removeSmartFilter(999, stack.idOf(f1 - 1)));
 }
 
 // =====================================================================
@@ -214,7 +214,7 @@ void tst_SmartFilter::test_moveSmartFilter()
     QVERIFY(f0 >= 0 && f1 >= 0 && f2 >= 0);
 
     // Move first -> last
-    QVERIFY(stack.moveSmartFilter(soIdx, f0, 2));
+    QVERIFY(stack.moveSmartFilter(stack.idOf(soIdx), stack.idOf(f0), 2));
     const auto &chain = stack.smartFiltersFor(soIdx);
     QCOMPARE(chain[0], f1);
     QCOMPARE(chain[1], f2);
@@ -224,15 +224,15 @@ void tst_SmartFilter::test_moveSmartFilter()
     QCOMPARE(stack.at(f0)->filterSlotIndex, 2);
 
     // Move last -> first
-    QVERIFY(stack.moveSmartFilter(soIdx, f0, 0));
+    QVERIFY(stack.moveSmartFilter(stack.idOf(soIdx), stack.idOf(f0), 0));
     QCOMPARE(stack.smartFiltersFor(soIdx)[0], f0);
     QCOMPARE(stack.smartFiltersFor(soIdx)[1], f1);
     QCOMPARE(stack.smartFiltersFor(soIdx)[2], f2);
     QCOMPARE(stack.at(f0)->filterSlotIndex, 0);
 
     // Out of range / no-op
-    QVERIFY(!stack.moveSmartFilter(soIdx, f0, 5));
-    QVERIFY(!stack.moveSmartFilter(soIdx, 999, 0));
+    QVERIFY(!stack.moveSmartFilter(stack.idOf(soIdx), stack.idOf(f0), 5));
+    QVERIFY(!stack.moveSmartFilter(stack.idOf(soIdx), 999, 0));
 }
 
 // =====================================================================
@@ -248,19 +248,19 @@ void tst_SmartFilter::test_setSmartFilterEnabled()
         soIdx, QStringLiteral("GaussianBlur"), 1.0, base);
     QVERIFY(fIdx >= 0);
 
-    QVERIFY(stack.setSmartFilterEnabled(soIdx, fIdx, false));
+    QVERIFY(stack.setSmartFilterEnabled(stack.idOf(soIdx), stack.idOf(fIdx), false));
     QCOMPARE(stack.at(fIdx)->opacity, 0.0f);
     // Layer still in chain
     QCOMPARE(stack.smartFilterCount(soIdx), 1);
 
-    QVERIFY(stack.setSmartFilterEnabled(soIdx, fIdx, true));
+    QVERIFY(stack.setSmartFilterEnabled(stack.idOf(soIdx), stack.idOf(fIdx), true));
     QCOMPARE(stack.at(fIdx)->opacity, 1.0f);
     QCOMPARE(stack.smartFilterCount(soIdx), 1);
 
     // Bad: wrong parent
-    QVERIFY(!stack.setSmartFilterEnabled(999, fIdx, false));
+    QVERIFY(!stack.setSmartFilterEnabled(999, stack.idOf(fIdx), false));
     // Bad: wrong kind
-    QVERIFY(!stack.setSmartFilterEnabled(soIdx, soIdx, false));
+    QVERIFY(!stack.setSmartFilterEnabled(stack.idOf(soIdx), stack.idOf(soIdx), false));
 }
 
 // =====================================================================
@@ -356,9 +356,9 @@ void tst_SmartFilter::test_smartFilterUndo_remove()
     // Capture filter state for undo
     Layer oldFilter = *stack.at(fIdx);
     QCOMPARE(oldFilter.filterSlotIndex, 0);
-    QCOMPARE(oldFilter.parentSmartIndex, soIdx);
+    QCOMPARE(oldFilter.parentSmartId, stack.idOf(soIdx));
 
-    QVERIFY(stack.removeSmartFilter(soIdx, fIdx));
+    QVERIFY(stack.removeSmartFilter(stack.idOf(soIdx), stack.idOf(fIdx)));
     QCOMPARE(stack.count(), 1);
     QCOMPARE(stack.smartFilterCount(soIdx), 0);
 
@@ -378,7 +378,7 @@ void tst_SmartFilter::test_smartFilterUndo_remove()
     QCOMPARE(restored->kind, Layer::SmartFilter);
     QCOMPARE(restored->filterType, QStringLiteral("Brightness"));
     QCOMPARE(restored->filterStrength, 0.7);
-    QCOMPARE(restored->parentSmartIndex, soIdx);
+    QCOMPARE(restored->parentSmartId, stack.idOf(soIdx));
     QCOMPARE(restored->filterSlotIndex, 0);
 }
 

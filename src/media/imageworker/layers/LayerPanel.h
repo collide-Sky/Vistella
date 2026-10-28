@@ -79,7 +79,10 @@ signals:
     void moveDownRequested(int index);
     void mergeDownRequested(int index);
     void flattenVisibleRequested();
-    void groupRequested(int first, int last);
+    //   编组请求: 传**选中的图层下标集合** (LYR-05).
+    //   以前是 (first, last) 区间, 面板直接把整个栈传上来,
+    //   底图被吞进组里以后画布退化成 800x600 白底.
+    void groupRequested(QList<int> indices);
     void ungroupRequested();
     void renameRequested(int index, const QString &newName);
     void setVisibleRequested(int index, bool visible);

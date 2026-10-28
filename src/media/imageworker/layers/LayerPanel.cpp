@@ -35,6 +35,7 @@
 
 #include <opencv2/imgproc.hpp>
 #include <cmath>
+#include <algorithm>
 
 namespace layers {
 
@@ -164,7 +165,8 @@ LayerPanel::LayerPanel(LayerStack *stack, QWidget *parent)
     m_tree->setHeaderHidden(true);
     m_tree->setIconSize(QSize(kThumbSize, kThumbSize));
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
+    // 多选: 编组按选区来 (LYR-05), 用户要能选中几层再编成一个组.
+    m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     connect(m_tree, &QTreeWidget::customContextMenuRequested,
             this, &LayerPanel::onContextMenu);
     connect(m_tree, &QTreeWidget::currentItemChanged,
@@ -730,7 +732,11 @@ void LayerPanel::onSelectionChanged(int index)
     if (!m_tree) return;
     if (m_rebuilding) return;
     if (auto *topItem = findTopLevelItemByLayerIndex(index)) {
-        m_tree->setCurrentItem(topItem);
+        // 只在当前项真的不是目标时才 setCurrentItem:
+        //   setCurrentItem 会重置选择集, 多选会被它清掉.
+        if (m_tree->currentItem() != topItem) {
+            m_tree->setCurrentItem(topItem);
+        }
     }
     // 同步属性面板
     if (m_stack) {
@@ -855,9 +861,27 @@ void LayerPanel::onFlattenClicked()
 
 void LayerPanel::onGroupClicked()
 {
-    if (!m_stack) return;
-    // Phase 1 简化: group 整个 stack (标记 link)
-    emit groupRequested(0, m_stack->count() - 1);
+    if (!m_stack || !m_tree) return;
+    // 按选区编组 (LYR-05).
+    //   以前是把整个栈 [0, count-1] 打包, 底图被吞进组里以后
+    //   index 0 变成没有 image 的 Group, 画布退化成 800x600 白底.
+    //   现在只打包用户在面板里选中的图层.
+    QList<int> idx;
+    for (QTreeWidgetItem *item : m_tree->selectedItems()) {
+        if (!item) continue;
+        const QVariant data = item->data(0, Qt::UserRole);
+        // 组子项的 UserRole 是字符串 ("child:<gid>:<idx>"), 不参与编组
+        if (data.type() != QVariant::Int) continue;
+        idx.append(data.toInt());
+    }
+    std::sort(idx.begin(), idx.end());
+    // 去重 (QList 没有 removeDuplicates)
+    QList<int> uniq;
+    for (int i : idx) {
+        if (uniq.isEmpty() || uniq.last() != i) uniq.append(i);
+    }
+    idx = uniq;
+    emit groupRequested(idx);
 }
 
 void LayerPanel::onUngroupClicked()
@@ -907,7 +931,11 @@ void LayerPanel::onContextMenu(const QPoint &pos)
     int index = data.toInt();
     if (!m_stack || index < 0) return;
     if (auto *topItem = findTopLevelItemByLayerIndex(index)) {
-        m_tree->setCurrentItem(topItem);
+        // 只在当前项真的不是目标时才 setCurrentItem:
+        //   setCurrentItem 会重置选择集, 多选会被它清掉.
+        if (m_tree->currentItem() != topItem) {
+            m_tree->setCurrentItem(topItem);
+        }
     }
     auto l = m_stack->at(index);
     if (!l) return;
@@ -1149,7 +1177,7 @@ void LayerPanel::onSmartObjectToggleEmbedClicked()
 QString LayerPanel::childItemId(LayerId groupId, int childIdx)
 {
     return QStringLiteral("child:%1:%2")
-        .arg(quintptr(groupId), 0, 16)
+        .arg(quint64(groupId), 0, 16)
         .arg(childIdx);
 }
 
@@ -1164,7 +1192,7 @@ LayerId LayerPanel::childItemGroupId(const QString &s)
     const QStringList parts = s.split(QLatin1Char(':'));
     if (parts.size() != 3) return 0;
     bool ok = false;
-    const quintptr gid = parts[1].toULongLong(&ok, 16);
+    const quint64 gid = parts[1].toULongLong(&ok, 16);
     return ok ? static_cast<LayerId>(gid) : 0;
 }
 

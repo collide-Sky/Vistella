@@ -20,8 +20,8 @@
 //
 // 设计原则:
 //   - 每个 command 存两份状态: before (旧值) + after (新值)
-//   - undo() 应用 before, redo() 应用 after, 两者走同一套 LayerStack API
-//   - 状态变更统一收口在 applyState(), 末尾统一 notifyChanged()
+//   - 结构性操作 (Add / Remove / Merge) 额外记住目标图层的 stableId,
+//     撤销 / 重做按 id 定位而不是裸下标 (LYR-06)
 //   - 不用 parent (每个 command 独立, 易于调试)
 //
 // 调用约定 (重要):
@@ -217,6 +217,12 @@ private:
     LayerStack *m_stack;
     Op          m_op;
     int         m_index = -1;
+    // 目标图层的稳定 id (LYR-06).
+    //   撤销 / 重做按 id 定位, 不用裸下标 —— 下标会随增删移动漂移,
+    //   按旧下标删会删掉另一个图层.
+    LayerId     m_targetId = 0;
+    // Merge: 被合并掉的那一层 (上层) 的 id.
+    LayerId     m_secondId = 0;
     int         m_index2 = -1;       // second index (move / group)
     int         m_intVal = 0;        // direction / blend
     float       m_floatVal = 0;      // opacity (old)

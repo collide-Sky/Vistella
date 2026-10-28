@@ -1205,7 +1205,7 @@ void tst_P8_1_1::parity_smartObject_filterChain_applied()
                                            0.5, chain.rasterizeForRender(s2));
     QVERIFY(f1 >= 0);
     QVERIFY(f2 >= 0);
-    QVERIFY(chain.setSmartFilterEnabled(s2, f1, /*enabled=*/false));
+    QVERIFY(chain.setSmartFilterEnabled(chain.idOf(s2), chain.idOf(f1), /*enabled=*/false));
     requireParity(chain, "smartObject, one disabled + one active filter");
 }
 

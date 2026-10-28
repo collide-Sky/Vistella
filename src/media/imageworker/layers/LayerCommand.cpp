@@ -28,7 +28,11 @@ LayerCommand::LayerCommand(LayerStack *stack, Op op, const Layer &layer, QUndoCo
     default:     setText(QStringLiteral("Layer Op")); break;
     }
     // Add: 调用方已经把这层加进栈了, 它就在栈顶
-    if (op == Add && m_stack) m_index = m_stack->count() - 1;
+    if (op == Add && m_stack) {
+        m_index = m_stack->count() - 1;
+        // 记住新层的稳定 id: 撤销时按 id 删, 下标漂移也删对层 (LYR-06).
+        if (auto added = m_stack->at(m_index)) m_targetId = added->stableId;
+    }
 }
 
 LayerCommand* LayerCommand::makeRemove(LayerStack *stack, int index)
@@ -38,6 +42,7 @@ LayerCommand* LayerCommand::makeRemove(LayerStack *stack, int index)
     if (!l) return nullptr;
     auto *cmd = new LayerCommand(stack, Remove, *l);   // 保存完整 layer (含 cv::Mat clone)
     cmd->m_index = index;                              // 记住原位, 撤销时放回原位
+    cmd->m_targetId = l->stableId;                     // 稳定身份: 重做时按 id 找层
     return cmd;
 }
 
@@ -87,8 +92,10 @@ LayerCommand::LayerCommand(LayerStack *stack, int mergeIndex, QUndoCommand *pare
     if (!m_stack) return;
     // 保存 merge target (下层) before/after
     auto target = m_stack->at(mergeIndex - 1);
+    if (target) m_targetId = target->stableId;   // 下层 (合并目标) 的 id
     if (target) m_mergeBefore = *target;   // 下层 before
     auto src = m_stack->at(mergeIndex);
+    if (src) m_secondId = src->stableId;          // 上层 (被合并掉) 的 id
     if (src) {
         m_mergeUpper = *src;               // 上层: 撤销时插回原来的位置
         // 计算 mergeAfter: target 跟 src 按 src.opacity blend
@@ -534,14 +541,28 @@ void LayerCommand::applyState(bool after)
     switch (m_op) {
     case Add: {
         // 调用方已经把图层加在栈顶; 撤销 = 删掉它, 重做 = 放回原位
-        if (after) m_stack->insertLayer(m_index, m_layer);
-        else      m_stack->removeLayer(m_index);
+        if (after) {
+            m_stack->insertLayer(m_index, m_layer);
+        } else {
+            // 按 id 删 (下标可能已经漂移, 按旧下标会删错层) (LYR-06)
+            const int idx = m_stack->indexById(m_targetId);
+            if (idx >= 0) m_stack->removeLayer(idx);
+        }
         break;
     }
     case Remove: {
         // 向前 = 删掉这层 (由 command 自己执行), 撤销 = 放回原来的位置
-        if (after) m_stack->removeLayer(m_index);
-        else      m_stack->insertLayer(m_index, m_layer);
+        if (after) {
+            // 按 id 删 (下标可能已经漂移, 按旧下标会删错层) (LYR-06)
+            const int idx = m_stack->indexById(m_targetId);
+            if (idx >= 0) {
+                m_index = idx;
+                m_stack->removeLayer(idx);
+            }
+        } else {
+            // 快照里带着原 stableId, 放回去还是同一个身份
+            m_stack->insertLayer(m_index, m_layer);
+        }
         break;
     }
     case Move: {
@@ -577,19 +598,23 @@ void LayerCommand::applyState(bool after)
     case Merge: {
         // 向前: 下层写合并结果, 上层删掉
         // 撤销: 下层还原, 上层插回原来的位置
+        // 上下层都按 id 定位 (LYR-06): 下标会随增删移动漂移
+        const int targetIdx = m_stack->indexById(m_targetId);
+        if (targetIdx >= 0) {
+            if (auto t = m_stack->at(targetIdx)) {
+                t->image = after ? m_mergeAfter.image.clone()
+                                 : m_mergeBefore.image.clone();
+                // 下层是被直接改写的, 补发一次信号
+                m_stack->notifyLayerChanged(targetIdx);
+            }
+        }
         if (after) {
-            if (auto t = m_stack->at(m_index - 1)) {
-                t->image = m_mergeAfter.image.clone();
-            }
-            m_stack->removeLayer(m_index);
+            const int upperIdx = m_stack->indexById(m_secondId);
+            if (upperIdx >= 0) m_stack->removeLayer(upperIdx);
         } else {
-            if (auto t = m_stack->at(m_index - 1)) {
-                t->image = m_mergeBefore.image.clone();
-            }
+            // 快照带着原 stableId, 插回去还是同一个身份
             m_stack->insertLayer(m_index, m_mergeUpper);
         }
-        // 下层是被直接改写的, 补发一次信号
-        m_stack->notifyLayerChanged(m_index - 1);
         break;
     }
     case Group: {
@@ -612,12 +637,11 @@ void LayerCommand::applyState(bool after)
             m_stack->flattenGroup(m_index);
         } else if (!m_flattenChildren.empty() && m_flattenAtIndex >= 0
                    && m_flattenAtIndex <= m_stack->count()) {
-            const int n = m_groupChildCount > 0
-                        ? m_groupChildCount
-                        : static_cast<int>(m_flattenChildren.size());
-            for (int i = 0; i < n; ++i) {
-                if (m_flattenAtIndex >= m_stack->count()) break;
-                m_stack->removeLayer(m_flattenAtIndex);
+            // 按 id 摘子层 (不是按位置): 位置会漂移, 按位置摘会摘错层 (LYR-18)
+            for (const auto &child : m_flattenChildren) {
+                if (!child) continue;
+                const int idx = m_stack->indexById(child->stableId);
+                if (idx >= 0) m_stack->removeLayer(idx);
             }
             // 传副本而不是 move: 命令要留着这份快照, 否则 undo→redo→undo
             // 第二遍就还原不回来
@@ -725,8 +749,8 @@ void LayerCommand::applyState(bool after)
             if (idx >= 0) m_index = idx;
         } else {
             auto l = m_stack->at(m_index);
-            if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
-                m_stack->removeSmartFilter(l->parentSmartIndex, m_index);
+            if (l && l->kind == Layer::SmartFilter && l->parentSmartId != 0) {
+                m_stack->removeSmartFilter(l->parentSmartId, l->stableId);
             }
         }
         break;
@@ -736,8 +760,8 @@ void LayerCommand::applyState(bool after)
         // 撤销: 挂回链上原来的槽位
         if (after) {
             auto l = m_stack->at(m_index);
-            if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
-                m_stack->removeSmartFilter(l->parentSmartIndex, m_index);
+            if (l && l->kind == Layer::SmartFilter && l->parentSmartId != 0) {
+                m_stack->removeSmartFilter(l->parentSmartId, l->stableId);
             }
         } else {
             const int idx = m_stack->reinsertSmartFilter(m_layer, m_layer.filterSlotIndex);
@@ -747,24 +771,24 @@ void LayerCommand::applyState(bool after)
     }
     case MoveSmartFilter: {
         auto l = m_stack->at(m_index);
-        if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
-            m_stack->moveSmartFilter(l->parentSmartIndex, m_index,
+        if (l && l->kind == Layer::SmartFilter && l->parentSmartId != 0) {
+            m_stack->moveSmartFilter(l->parentSmartId, l->stableId,
                                       after ? m_intNew : m_oldSlot);
         }
         break;
     }
     case SetSmartFilterEnabled: {
         auto l = m_stack->at(m_index);
-        if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
-            m_stack->setSmartFilterEnabled(l->parentSmartIndex, m_index,
+        if (l && l->kind == Layer::SmartFilter && l->parentSmartId != 0) {
+            m_stack->setSmartFilterEnabled(l->parentSmartId, l->stableId,
                                             after ? m_boolNew : m_boolVal);
         }
         break;
     }
     case SetSmartFilterStrength: {
         auto l = m_stack->at(m_index);
-        if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
-            m_stack->setSmartFilterStrength(l->parentSmartIndex, m_index,
+        if (l && l->kind == Layer::SmartFilter && l->parentSmartId != 0) {
+            m_stack->setSmartFilterStrength(l->parentSmartId, l->stableId,
                                              after ? m_doubleNew
                                                    : static_cast<double>(m_floatVal));
         }

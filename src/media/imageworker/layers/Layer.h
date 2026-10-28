@@ -41,7 +41,21 @@
 
 namespace layers {
 
+// 图层稳定身份 (LYR-06 / LYR-12 / LYR-16).
+//   所有外部引用 —— 撤销命令 / 编组 children 表 / 智能滤镜链 / 面板 item ——
+//   一律用这个 id:
+//     int 下标     : 增删 / 移动图层就漂移, 撤销时按旧下标会删错层
+//     LayerPtr 地址: 值拷贝一次就变, 编组 / 复制之后原地址查不到
+//     cv::Mat::data: 空 image 的层 (Text / Group / Adjustment) 全是 nullptr
+//   id 由 LayerStack 在图层首次入栈时分配, 值拷贝时随 Layer 一起带走,
+//   所以"删掉再撤销"能拿回同一个身份.
+using LayerId = quint64;
+
 struct Layer {
+    // ---- 稳定身份 ----
+    //   0 = 还没进过栈, 由 LayerStack 入栈时分配.
+    LayerId stableId = 0;
+
     // ---- 类型 (Phase 1: Bitmap 完整, 其他 enum 声明) ----
     enum LayerKind {
         Bitmap,        // cv::Mat
@@ -51,7 +65,7 @@ struct Layer {
         Adjustment,    // adjustmentType + adjustmentLut
         SmartFilter,   // SmartObject sub-filter (filterType + filterStrength)
         Group          // Container layer; children live in
-                      // LayerStack::m_groups keyed by Group layer index.
+                      // LayerStack::m_groups keyed by Group layer stable id.
     };
     LayerKind kind = Bitmap;
 
@@ -104,11 +118,14 @@ struct Layer {
 
     // ---- SmartFilter payload (kind == SmartFilter, P1.4.4 2026-09-17) ----
     //   Sub-filter of a SmartObject layer. References parent via
-    //   LayerStack::smartFiltersFor(smartIdx). Owns the filtered image (cv::Mat)
+    //   Layer::parentSmartId (LayerStack::smartFilterIdsFor). Owns the
+    //   filtered image (cv::Mat)
     //   so the renderer can stack outputs without re-running the filter.
     QString filterType;           // "GaussianBlur" / "Sharpen" / "Brightness" / ...
     double  filterStrength = 1.0; // 0..2 intensity multiplier
-    int     parentSmartIndex = -1; // index of parent SmartObject in stack (-1 = orphan)
+    //   父 SmartObject 的 stableId (0 = 孤儿). 用 id 而不是下标:
+    //   下标会随增删 / 移动漂移, 智能滤镜会因此挂到别的图层上 (LYR-16).
+    LayerId parentSmartId = 0;
     int     filterSlotIndex  = -1; // 0-based position in parent's smartFilters chain
 
     // ---- 蒙版 (Phase 4 实现) ----
@@ -146,7 +163,7 @@ struct Layer {
             return !sourceFilePath.isEmpty();
         case SmartFilter:
             return !image.empty() && image.depth() == CV_8U
-                && !filterType.isEmpty() && parentSmartIndex >= 0;
+                && !filterType.isEmpty() && parentSmartId != 0;
         case Group:
             return true;  // Empty group is valid; non-empty validated by LayerStack::m_groups entry.
         case Vector:

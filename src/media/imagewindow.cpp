@@ -1346,20 +1346,18 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         // wire group/ungroup tool buttons
         //   to the P1.5.2 LayerCommand factories (mergeIntoGroup /
         //   flattenGroup). Previously emitted "TBD" statusBar hint.
-        // groupRequested: caller passes [first, last] range (toolbar emits
-        //   full stack [0, count-1]). Build the indices list and push
-        //   makeMergeIntoGroup onto the undo stack.
+        // groupRequested: 面板传**选中的图层下标集合** (LYR-05).
+        //   以前面板传的是整个栈 [0, count-1], 底图被吞进组里以后
+        //   画布退化成 800x600 白底.
         connect(m_layerPanel, &layers::LayerPanel::groupRequested,
-                this, [this](int first, int last) {
+                this, [this](QList<int> indices) {
             if (!m_layerStack) return;
-            if (last < first || last >= m_layerStack->count()
-                || first < 0 || m_layerStack->count() < 2) {
+            if (indices.size() < 2 || m_layerStack->count() < 2) {
                 statusBar()->showMessage(
                     tr("编组失败: 至少需要 2 个图层"), 3000);
                 return;
             }
-            QList<int> indices;
-            for (int i = first; i <= last; ++i) indices << i;
+            // indices 由面板给出 (已排序去重)
             if (m_undoStack) {
                 m_undoStack->push(layers::LayerCommand::makeMergeIntoGroup(
                     m_layerStack.get(), indices));
@@ -1368,7 +1366,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             }
             refreshCanvasNow();
             statusBar()->showMessage(
-                tr("已编组 [%1..%2] (入撤销栈)").arg(first).arg(last), 3000);
+                tr("已编组 %1 个图层 (入撤销栈)").arg(indices.size()), 3000);
         });
 
         // ungroupRequested: locate the current selection's Group and
@@ -1882,6 +1880,10 @@ void ImageWindow::setDocumentImage(const cv::Mat &img)
     if (img.empty()) return;
     m_original = img.clone();
     ensureLayerStack();
+    // 文档级画布尺寸跟着像素走 (LYR-05):
+    //   LayerStack::canvasSize() 不再从 index 0 反推, 裁切 / 旋转 / 翻转
+    //   改了尺寸以后必须显式写回去.
+    m_layerStack->setCanvasSize(img.size());
     if (m_layerStack->count() > 0) {
         auto base = m_layerStack->baseLayer();
         if (base) base->image = img.clone();

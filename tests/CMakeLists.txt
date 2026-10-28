@@ -151,6 +151,8 @@ add_vistella_test(tst_SmartObject_v2)
 
 # P1.5.2 (2026-09-21): LayerStack Group/Ungroup (mergeIntoGroup + flattenGroup)
 add_vistella_test(tst_LayerGroup)
+# M1-2: 图层稳定身份 (stableId) + 编组按选区 (LYR-05/06/12/16)
+add_vistella_test(tst_LayerIdentity)
 # P1.4.2 (2026-09-17): SmartObject UI/菜单集成 (Convert / Rasterize / Relink + Watcher resync)
 add_vistella_test(tst_SmartObject_v3)
 # P1.4.3 (2026-09-17): LayerPanel 实例化 + 关键信号接通 (creation / selection signal / SmartObject page)

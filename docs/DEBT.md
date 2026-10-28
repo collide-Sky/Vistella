@@ -96,6 +96,7 @@
 | `A-MOSAICBACKUP` | `media/imagewindow/MosaicTool.cpp` | — | `ensureBackup()` 现在快照的是**活动图层**的像素，涂抹落在图层上，撤销走 `LayerCommand::SetLayerImage` | 马赛克有真实备份链路，撤销能还原图层像素 | P8.4 | 马赛克前有真实备份且可恢复 | done |
 | `A-TEXTOVERLAYAPPLY` | `media/imagewindow/TextOverlayController.cpp:244` | `applyStyleToCurrent()` 空实现，保留接口没有调用者 | 文字样式改动没有统一的生效入口 | P8.5 | 文字样式通过该入口生效，或删除该接口 | open |
 | `A-PROJECTFORMAT` | `ImageIOController.cpp:68` | 保存写 `currentImage()`，**无任何工程格式** → 保存后重开只剩一张扁平图，图层/蒙版/智能对象/文字全丢（LYR-23 / §5.2） | 「非破坏修图」定位不成立 | P8.8 | 自定义 .vst 格式往返 | open |
+| `A-GROUPZORDER` | `layers/LayerStack.cpp` `mergeIntoGroup()` | 编组时把 Group **追加到栈尾**，而不是落到最上面那个被选图层原来的位置 (PS 行为)；直接改成原位置会让组沉到 base 位图之下，而渲染循环从 base 起 (LYR-14) → 组被整层跳过、渲染丢内容；修这一条要连带把渲染循环改成覆盖全栈 + compositor 侧重排 | 选中中间几层编组后，组的 z 序跑到没被选中的层上面；组内层与组外层的叠放次序和 PS 不一致 | P8.4 | 渲染循环覆盖全栈后，编组的 z 序落在最上面那个被选层原位置，且 legacy / compositor 两条渲染路径画面一致 | open |
 
 ### A.3　源码中的「以后会做」承诺（20 处散落注释，尚未登记）
 
@@ -137,7 +138,7 @@
 | 不变量 | 当前状态 | 违反点 | 审计编号 | 影响的用户路径 | 建议阶段 | 状态 |
 |---|---|---|---|---|---|---|
 | `INV-PIXEL-2`（`m_current` 只读） | violated | `m_current` 同时是渲染缓存与可编辑画布；`setCurrentImage` 会写 `m_original` 并把合成图写进 base layer | 04-02 / 05-02 / 05-03 / 05-10 / 05-15 / 05-30 / 05-36 / CP-11 | 画笔 / 滤镜 / 调整 / 涂抹 / 保存 | P8.4 | planned |
-| `INV-ID-1`（图层身份唯一） | violated | `LayerPtr` 地址 / `int` 下标 / `cv::Mat::data` 像素指针三种混用；`m_groups` 以地址为 key | LYR-06 / LYR-12 / LYR-16 / LYR-27 | 图层删除/重排/编组/智能滤镜 | P8.6 | planned |
+| `INV-ID-1`（图层身份唯一） | partial | `Layer` 内建 `quint64 stableId`（`LayerStack` 全局单调分配），`m_groups` / 智能滤镜链 / `LayerCommand` 的 Add·Remove·Merge·Ungroup 全部改按 id 定位；**剩余**：`SmartObjectWatcher` 仍以 `int` 下标跟踪智能对象（LYR-27，图层模块 P1 项） | LYR-06 / LYR-12 / LYR-16 / LYR-27 | 图层删除/重排/编组/智能滤镜 | P8.6 | planned |
 | `INV-UNDO-1/2/3`（撤销架构统一） | violated | 4 种命令风格并存；除 Merge 外 30+ 个 `redo()` 是 no-op；undo 静默改字段不发信号不重绘；整图快照 144MB/笔 | LYR-07 / LYR-08 / 05-09 / 04-16 / 06-13 / 06-14 / 06-21 | Ctrl+Z / Ctrl+Y | P8.6 | planned |
 | `INV-STATE-1`（状态唯一 owner） | violated | 前景背景色 3 份、工具配置 3 份、面板显隐 2 份、Quick Mask 3 份、选中图层 2 份、主题 2 份、窗口模式 2 份 | 09-01 / 04-14 / APP-05 / APP-12 / APP-14 | 颜色 / 工具 / 面板 / 主题 / 窗口最大化 | P8.5 | planned |
 | `INV-LIFE-1/2/3`（生命周期） | violated | `invokeMethod(qApp,...)` + 裸 `this`（CI-03/05-04/LYR-10）；`ImageCanvas::m_box` 裸指针全项目无处置空（04-01）；选项页裸指针（05-05） | 04-01 / 05-04 / 05-05 / 05-06 / LYR-10 / UI-01 | 关 tab / Ctrl+T 后切工具 / 跨窗口移面板 | P8.4 | planned |
