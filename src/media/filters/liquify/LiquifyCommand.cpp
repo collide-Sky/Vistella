@@ -5,33 +5,31 @@
 
 namespace filters::liquify {
 
-LiquifyCommand::LiquifyCommand(ImageWindow* host, const cv::Mat& before,
-                               const cv::Mat& after, QUndoCommand* parent)
+LiquifyCommand::LiquifyCommand(ImageWindow* host, int layerIndex,
+                               const cv::Mat& before, const cv::Mat& after,
+                               QUndoCommand* parent)
     : QUndoCommand(parent),
       m_host(host),
+      m_layerIndex(layerIndex),
       m_before(before.clone()),
       m_after(after.clone()) {
     setText(QObject::tr("Liquify"));
 }
 
+void LiquifyCommand::applyToLayer(const cv::Mat& pixels) {
+    if (!m_host || pixels.empty()) return;
+    if (m_layerIndex < 0) return;
+    m_host->writeLayerPixels(m_layerIndex, pixels);
+}
+
 void LiquifyCommand::undo() {
-    if (!m_host) return;
-    if (!m_before.empty()) {
-        m_host->replaceCurrentImage(m_before);
-        LOG_INFO("[LiquifyCommand] undo: restored before-image");
-    }
+    applyToLayer(m_before);
+    LOG_INFO("[LiquifyCommand] undo: restored before-image");
 }
 
 void LiquifyCommand::redo() {
-    if (!m_host) return;
-    if (m_firstRedo) {
-        // push() triggers redo() once; after-image already prepared.
-        m_firstRedo = false;
-    }
-    if (!m_after.empty()) {
-        m_host->replaceCurrentImage(m_after);
-        LOG_INFO("[LiquifyCommand] redo: applied liquify result");
-    }
+    applyToLayer(m_after);
+    LOG_INFO("[LiquifyCommand] redo: applied liquify result");
 }
 
 }  // namespace filters::liquify

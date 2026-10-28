@@ -248,7 +248,7 @@ void ImageEditCommand::undo()
 {
     if (m_w.isNull()) return;   // ImageWindow 已销毁, 安全跳过
     if (m_useImage) {
-        m_w->replaceCurrentImage(m_imgBefore);
+        m_w->setDocumentImage(m_imgBefore);
     } else {
         m_w->applyParams(m_before, /*repaint*/true);
     }
@@ -258,19 +258,10 @@ void ImageEditCommand::redo()
 {
     if (m_w.isNull()) return;
     if (m_useImage) {
-        // redo is a no-op for the m_useImage
-        //   path. Callers (MosaicTool/CloneTool/PatchTool/Crop/Brush/
-        //   RedEyeTool/MainWindow::resizeImage) have already applied the
-        //   "after" image (either via setCurrentImage or in-place m_current
-        //   mutation) before pushing this command. Without the no-op, push
-        //   would re-apply m_imgAfter (double-apply: extra base-layer clone
-        //   + invalidate + renderToView). Matches Phase 3/4/5 simplification
-        //   pattern used by LayerCommand::Visible/Locked/Linked/Blend/Rename
-        //   /Move/Group/Ungroup/Opacity/SetAdjustmentLut (P2.5 commits
-        //   1d82e3c, 77ab161, 7810b97, 730803f).
-        //
-        //   Trade-off: redo after undo is a no-op, so user cannot redo to
-        //   restore m_imgAfter. Same trade-off documented for those ops.
+        //  文档级写入是幂等的 (setDocumentImage 只换 base layer + 原图基准),
+        //  所以 redo 可以安全地重放一次 —— Ctrl+Z 之后还能 Ctrl+Y 回来.
+        //  像素级编辑不走这条路, 它们用 LayerCommand::SetLayerImage.
+        m_w->setDocumentImage(m_imgAfter);
     } else {
         m_w->applyParams(m_after, /*repaint*/true);
     }
@@ -831,22 +822,58 @@ QImage ImageWindow::layerStackAsQImage(int index) const
     return QImage(rgb.data, W, H, rgb.step, QImage::Format_RGB888).copy();
 }
 
-// 公开: 给 ImageEditCommand (m_useImage 模式) 还原 m_current
-void ImageWindow::replaceCurrentImage(const cv::Mat &img)
+// =====================================================================
+//  工具编辑目标 (活动图层)
+// =====================================================================
+//
+//  工具编辑写进图层, 不写合成缓存 m_current.
+//  m_current 是 layerStack->render() 的派生缓存, 任何 invalidate 都会
+//  把它重算一遍 —— 直接改它等于把用户的编辑冲掉.
+//
+//  一次完整的工具编辑:
+//    1. activeLayerImage() 拿到活动图层的像素缓冲, 就地涂抹
+//    2. commitLayerEdit() 通知图层栈内容变了 + 重绘画布
+//    3. pushLayerImageEdit() 把编辑前后的像素作为撤销命令入栈
+
+cv::Mat* ImageWindow::activeLayerImage()
 {
-    if (img.empty()) return;
-    //  同步更新 base layer image + invalidate cache
-    if (m_layerStack && m_layerStack->count() > 0) {
-        auto base = m_layerStack->baseLayer();
-        if (base) base->image = img.clone();
+    if (!m_layerStack) return nullptr;
+    return m_layerStack->activeLayerImage();
+}
+
+int ImageWindow::activeLayerIndex() const
+{
+    if (!m_layerStack) return -1;
+    return m_layerStack->activeLayerIndex();
+}
+
+void ImageWindow::commitLayerEdit(int index)
+{
+    if (m_layerStack && index >= 0) {
+        m_layerStack->notifyLayerChanged(index);
     }
-    invalidateCurrentCache();
-    m_current = img.clone();   // 兼容: 旧引用直接 m_current
-    renderToView();
-    // sync selection mask size with image size
-    if (m_selection) {
-        m_selection->setSize(QSize(m_current.cols, m_current.rows));
-    }
+    refreshCanvasNow();
+}
+
+void ImageWindow::pushLayerImageEdit(int index, const cv::Mat &before,
+                                     const cv::Mat &after, const QString &text)
+{
+    if (!m_layerStack || !m_undoStack || index < 0) return;
+    if (before.empty() || after.empty()) return;
+    if (before.size() != after.size() || before.type() != after.type()) return;
+    m_undoStack->push(layers::LayerCommand::makeSetLayerImage(
+        m_layerStack.get(), index, before, after, text));
+}
+
+//  把 pixels 写进指定图层的像素缓冲, 通知图层栈 + 重绘画布.
+void ImageWindow::writeLayerPixels(int index, const cv::Mat &pixels)
+{
+    if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+    if (pixels.empty()) return;
+    auto l = m_layerStack->at(index);
+    if (!l) return;
+    l->image = pixels.clone();
+    commitLayerEdit(index);
 }
 
 bool ImageWindow::loadFile(const QString &path, QString *err)
@@ -877,15 +904,8 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
 
     //  初始化 layerStack, 把加载的图片作为 base layer
     //   LayerStack 是 QObject, parent = this (生命周期跟随 ImageWindow)
-    m_layerStack = std::make_unique<layers::LayerStack>(this);
+    ensureLayerStack();
     m_layerStack->setBaseLayer(img);
-    // 监听 layer 变化 → invalidate cache
-    connect(m_layerStack.get(), &layers::LayerStack::layerChanged,
-            this, [this](int){ invalidateCurrentCache(); });
-    connect(m_layerStack.get(), &layers::LayerStack::layerAdded,
-            this, [this](int){ invalidateCurrentCache(); });
-    connect(m_layerStack.get(), &layers::LayerStack::layerRemoved,
-            this, [this](int){ invalidateCurrentCache(); });
     // 智能对象文件监听器
     //   监听每个 SmartObject layer 的源文件 mtime, 触发源变化时弹 statusBar 提示
     //   layerAdded/Removed/Changed 后 rewatchAll 同步 watch 列表 (MainWindow 4 slot
@@ -1853,17 +1873,43 @@ QString ImageWindow::displayTitle() const
     return base;
 }
 
-void ImageWindow::setCurrentImage(const cv::Mat &img)
+//  文档级变更: 文档本身变了 (尺寸 / 色彩模式 / 裁切 / 旋转 / 翻转).
+//  原图基准和 base layer 一起换, 上层图层保持不动 —— 它们叠在新的底图上.
+//  m_current 不在这里写: 它是 layerStack->render() 的缓存, invalidate 之后
+//  由渲染器重算, 直接赋值只会造出第二份“真相”.
+void ImageWindow::setDocumentImage(const cv::Mat &img)
 {
-    m_current = img.clone();
+    if (img.empty()) return;
     m_original = img.clone();
-    //  同步 base layer image (适用 setCurrentImage 流程)
-    if (m_layerStack && m_layerStack->count() > 0) {
+    ensureLayerStack();
+    if (m_layerStack->count() > 0) {
         auto base = m_layerStack->baseLayer();
         if (base) base->image = img.clone();
+    } else {
+        m_layerStack->setBaseLayer(img);
     }
     invalidateCurrentCache();
     refreshAll();
+    // sync selection mask size with image size
+    if (m_selection) {
+        m_selection->setSize(QSize(img.cols, img.rows));
+    }
+}
+
+//  图层栈是文档像素的容器. 文档一旦有像素就必须有图层栈,
+//  否则 m_current (合成缓存) 就没有唯一的来源.
+void ImageWindow::ensureLayerStack()
+{
+    if (m_layerStack) return;
+    //   LayerStack 是 QObject, parent = this (生命周期跟随 ImageWindow)
+    m_layerStack = std::make_unique<layers::LayerStack>(this);
+    // 监听 layer 变化 → invalidate cache
+    connect(m_layerStack.get(), &layers::LayerStack::layerChanged,
+            this, [this](int){ invalidateCurrentCache(); });
+    connect(m_layerStack.get(), &layers::LayerStack::layerAdded,
+            this, [this](int){ invalidateCurrentCache(); });
+    connect(m_layerStack.get(), &layers::LayerStack::layerRemoved,
+            this, [this](int){ invalidateCurrentCache(); });
 }
 
 void ImageWindow::refreshAll()
@@ -1950,8 +1996,22 @@ void ImageWindow::rebuildCurrentCache()
     // 小图同步 (避免线程切换开销)
     // 阈值 1024*1024 = 1M 像素; 经验值, 大于这个值 OpenCV 单次 render 耗时 > 50ms
     //   → 走 background pool 后台跑, UI 不卡
-    const long long pixelCount = static_cast<long long>(m_original.cols)
-                                * static_cast<long long>(m_original.rows);
+    //  阈值按当前文档尺寸算 (base layer 的大小).
+    //  m_original 是载入时的尺寸, 裁切/缩放之后就跟文档对不上了.
+    int docW = 0;
+    int docH = 0;
+    if (m_layerStack) {
+        if (auto base = m_layerStack->baseLayer()) {
+            docW = base->image.cols;
+            docH = base->image.rows;
+        }
+    }
+    if (docW <= 0 || docH <= 0) {
+        docW = m_current.cols;
+        docH = m_current.rows;
+    }
+    const long long pixelCount = static_cast<long long>(docW)
+                                * static_cast<long long>(docH);
     if (pixelCount <= 1024LL * 1024LL) {
         m_current = m_layerStack->render();
         m_currentDirty = false;
@@ -2031,8 +2091,8 @@ void ImageWindow::applyFilter(filter::FilterKind kind)
     QString filterName = strategy->name();
     LOG_INFO("[ImageWindow] applyFilter: kind={} ({})", static_cast<int>(kind),
              filterName.toStdString());
-    m_undoStack->push(new filter::FilterCommand(
-        this, m_current, kind, filterName));
+    //  滤镜作用在活动图层上 (不是合成图) —— 合成图会把上层图层重复合成
+    m_undoStack->push(new filter::FilterCommand(this, kind, filterName));
 }
 
 // 滤镜 Apply 实时预览 — FilterDialog::onApplyClicked 调
@@ -2045,16 +2105,28 @@ void ImageWindow::previewFilter(filter::FilterStrategy* strategy)
         LOG_WARN("[ImageWindow] previewFilter: null strategy");
         return;
     }
-    if (m_current.empty()) {
-        LOG_WARN("[ImageWindow] previewFilter: no image loaded");
+    //  预览必须跟最终提交的结果一致: 滤镜作用在活动图层上,
+    //  预览就是把该图层换成滤镜结果之后的整张合成图
+    cv::Mat* layer = activeLayerImage();
+    if (!layer || layer->empty()) {
+        LOG_WARN("[ImageWindow] previewFilter: no writable layer");
         return;
     }
-    auto mat = std::make_shared<cv::Mat>();
-    strategy->apply(m_current, *mat);
-    if (mat->empty()) {
+    const cv::Mat saved = layer->clone();
+    cv::Mat filtered;
+    strategy->apply(saved, filtered);
+    if (filtered.empty()) {
         LOG_WARN("[ImageWindow] previewFilter: strategy produced empty output");
         return;
     }
+    *layer = filtered;
+    cv::Mat composite = filtered;
+    if (m_layerStack) {
+        cv::Mat rendered = m_layerStack->render();
+        if (!rendered.empty()) composite = rendered;
+    }
+    *layer = saved;   // 预览不改文档
+    auto mat = std::make_shared<cv::Mat>(composite);
     {
         QMutexLocker lock(&s_previewRegistryMutex);
         s_previewRegistry[this] = mat;
@@ -2095,7 +2167,7 @@ void ImageWindow::applyFilterWithStrategy(filter::FilterStrategy* strategy, cons
     }
     LOG_INFO("[ImageWindow] applyFilterWithStrategy: text={}", text.toStdString());
     // 走新 ctor (strategy-based), 用 dialog 提供的 strategy (含 slider 当前值)
-    m_undoStack->push(new filter::FilterCommand(this, m_current, strategy, text));
+    m_undoStack->push(new filter::FilterCommand(this, strategy, text));
 }
 
 // ---------------- 撤销栈 ----------------
@@ -2881,10 +2953,8 @@ void ImageWindow::applyTransformImage(const cv::Mat& img, const transform::Trans
         LOG_WARN("[ImageWindow] applyTransformImage: empty image");
         return;
     }
-    setCurrentImage(img);
-    // 同步 m_original (applyTransformImage 通常产生 new original — 翻转/旋转后)
-    // P0-6.6 简化: 不改 m_original, 由 P0-6.7+ 实装完整 original 同步
-    //   if (m_original.empty() == false) m_original = img.clone();  // 简化
+    //  变换改的是整张文档 (几何变了) -> 文档级写入
+    setDocumentImage(img);
     if (m_canvas) m_canvas->update();
 }
 
@@ -2908,7 +2978,7 @@ void ImageWindow::applyImageTransform(const QTransform& t, const QString& text)
     if (m_undoStack) {
         m_undoStack->push(new transform::TransformCommand(this, before, after, text));
     } else {
-        setCurrentImage(after);
+        setDocumentImage(after);
     }
 }
 
@@ -2988,7 +3058,7 @@ void ImageWindow::onImageFlipH()
     if (m_undoStack) {
         m_undoStack->push(new transform::TransformCommand(this, before, after, tr("水平翻转")));
     } else {
-        setCurrentImage(after);
+        setDocumentImage(after);
     }
 }
 
@@ -3004,7 +3074,7 @@ void ImageWindow::onImageFlipV()
     if (m_undoStack) {
         m_undoStack->push(new transform::TransformCommand(this, before, after, tr("垂直翻转")));
     } else {
-        setCurrentImage(after);
+        setDocumentImage(after);
     }
 }
 
@@ -3020,7 +3090,7 @@ void ImageWindow::onImageRotate90CW()
     if (m_undoStack) {
         m_undoStack->push(new transform::TransformCommand(this, before, after, tr("旋转 90° 顺时针")));
     } else {
-        setCurrentImage(after);
+        setDocumentImage(after);
     }
 }
 
@@ -3036,7 +3106,7 @@ void ImageWindow::onImageRotate90CCW()
     if (m_undoStack) {
         m_undoStack->push(new transform::TransformCommand(this, before, after, tr("旋转 90° 逆时针")));
     } else {
-        setCurrentImage(after);
+        setDocumentImage(after);
     }
 }
 
@@ -3052,7 +3122,7 @@ void ImageWindow::onImageRotate180()
     if (m_undoStack) {
         m_undoStack->push(new transform::TransformCommand(this, before, after, tr("旋转 180°")));
     } else {
-        setCurrentImage(after);
+        setDocumentImage(after);
     }
 }
 // onOpen / onSave / onSaveAs / onClose 4 个 IO slot 已搬到

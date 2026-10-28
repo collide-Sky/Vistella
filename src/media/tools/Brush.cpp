@@ -127,13 +127,17 @@ QColor Brush::paintColor() const { return m_paintColor; }
 void Brush::onMousePress(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& scenePos)
 {
     if (!host) return;
-    // Snapshot current image for undo (will push on release)
-    cv::Mat& cur = host->currentImage();
-    if (cur.empty()) {
-        LOG_WARN("[Brush] mouse press on empty image, ignore");
+    // 编辑目标: 活动图层的像素.
+    //   不能用合成缓存 m_current —— 它是 layerStack->render() 的派生结果,
+    //   下一次 invalidate 就会把刚画的笔画冲掉 (04-02).
+    cv::Mat* target = host->activeLayerImage();
+    if (!target || target->empty()) {
+        LOG_WARN("[Brush] no editable layer, ignore");
         return;
     }
-    m_backup = cur.clone();
+    m_layerIndex = host->activeLayerIndex();
+    // Snapshot the layer pixels for undo (pushed on release)
+    m_backup = target->clone();
     m_active = true;
 
     m_smoother->reset();
@@ -142,8 +146,7 @@ void Brush::onMousePress(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& s
     m_lastStampDist  = 0.0;
     // First stamp placed immediately
     paintSingleStamp(host, scenePos, 1.0);
-    // TODO(P8.4): the brush calls renderToViewPublic directly, bypassing the single refresh entry point -- see docs/DEBT.md#A-REFRESHDUP2
-    host->renderToViewPublic();
+    host->refreshCanvasNow();
 }
 
 void Brush::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& scenePos)
@@ -175,7 +178,7 @@ void Brush::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& sc
         }
         m_lastStampScene = cur;
         m_lastStampDist = 0;
-        host->renderToViewPublic();
+        host->refreshCanvasNow();
     }
 }
 
@@ -188,8 +191,8 @@ void Brush::onMouseRelease(QMouseEvent* /*e*/, ImageWindow* host, const QPointF&
 void Brush::paintSingleStamp(ImageWindow* host, const QPointF& scenePos, double pressure)
 {
     if (!host) return;
-    cv::Mat& target = host->currentImage();
-    if (target.empty()) return;
+    cv::Mat* target = host->activeLayerImage();
+    if (!target || target->empty()) return;
 
     // read shared brush state from ToolContext
     //   Before: this used m_preset.settings.size / m_blendMode only.
@@ -236,11 +239,11 @@ void Brush::paintSingleStamp(ImageWindow* host, const QPointF& scenePos, double 
         stamp.stamp = brushes::BrushEngine::applyDual(stamp.stamp, dual.stamp, m_preset.dynamics.dual);
     }
 
-    // Paint stamp onto m_current
+    // Paint stamp onto the active layer's pixels
     const int ix = int(std::round(scenePos.x()));
     const int iy = int(std::round(scenePos.y()));
     // Q4.2.3: pass m_blendMode through to applyStamp (0=Normal default, 1=Multiply, 2=Screen).
-    brushes::BrushEngine::applyStamp(target, cv::Point(ix, iy), stamp, m_paintColor, opacity, flow, 0, m_blendMode);
+    brushes::BrushEngine::applyStamp(*target, cv::Point(ix, iy), stamp, m_paintColor, opacity, flow, 0, m_blendMode);
 }
 
 void Brush::finalizeStroke(ImageWindow* host)
@@ -248,18 +251,15 @@ void Brush::finalizeStroke(ImageWindow* host)
     if (!m_active || !host) return;
     m_active = false;
 
-    // Push undo command: imageBefore=m_backup, imageAfter=m_current
-    cv::Mat& cur = host->currentImage();
-    if (!m_backup.empty() && cur.size() == m_backup.size() && cur.type() == m_backup.type()) {
-        auto* cmd = new ImageEditCommand(host, m_backup, cur, QStringLiteral("Brush stroke"));
-        if (host->undoStack()) {
-            host->undoStack()->push(cmd);
-        } else {
-            delete cmd;
-        }
+    // Push undo command: 图层级像素编辑 (before/after 是该图层编辑前后的像素)
+    cv::Mat* cur = host->activeLayerImage();
+    if (cur && !m_backup.empty() && cur->size() == m_backup.size()
+        && cur->type() == m_backup.type()) {
+        host->pushLayerImageEdit(m_layerIndex, m_backup, *cur,
+                                 QStringLiteral("Brush stroke"));
     }
     m_backup.release();
-    host->renderToViewPublic();
+    host->commitLayerEdit(m_layerIndex);
 }
 
 } // namespace tools

@@ -52,10 +52,14 @@ void RedEyeTool::onExit(ImageWindow* host)
 
 void RedEyeTool::applyRedEyeAt(ImageWindow* host, const QPointF& a, const QPointF& b)
 {
-    auto& img = host->currentImage();
+    //  直接改活动图层的像素, 不走 QImage 中转 ——
+    //  中转会丢通道 (RGBA -> RGB) 并且多一次全图拷贝
+    cv::Mat* target = host->activeLayerImage();
+    if (!target) return;
+    cv::Mat& img = *target;
     if (img.empty()) return;
-    QImage qimg = ImageProcessor::matToQImage(img);
-    if (qimg.isNull()) return;
+    const int ch = img.channels();
+    if (ch != 3 && ch != 4) return;   // 灰度图没有红眼
 
     const int x1 = static_cast<int>(a.x());
     const int y1 = static_cast<int>(a.y());
@@ -70,28 +74,30 @@ void RedEyeTool::applyRedEyeAt(ImageWindow* host, const QPointF& a, const QPoint
     //   0   = leave pixel as-is (no-op for this pixel)
     //   100 = full PS desaturate (R = (G+B)/2)
     const int darkenClamped = std::clamp(m_darken, 0, 100);
+
+    //  先留一份"处理前"的快照 (像素马上要就地改)
+    m_layerIndex = host->activeLayerIndex();
+    m_backup = img.clone();
+
     for (int y = rect.top(); y <= rect.bottom(); ++y) {
+        if (y < 0 || y >= img.rows) continue;
         for (int x = rect.left(); x <= rect.right(); ++x) {
-            const QColor c = qimg.pixelColor(x, y);
-            if (isRedEyePixel(c.red(), c.green(), c.blue())) {
-                // P2.2: partial darken support — new R lerps from original R to (G+B)/2
-                const int targetR = (c.green() + c.blue()) / 2;
-                const int newR = c.red() + (targetR - c.red()) * darkenClamped / 100;
-                qimg.setPixelColor(x, y, QColor(newR, c.green(), c.blue()));
-                ++reduced;
-            }
+            if (x < 0 || x >= img.cols) continue;
+            uchar* px = img.ptr<uchar>(y) + x * ch;
+            const int b = px[0];
+            const int g = px[1];
+            const int r = px[2];
+            if (!isRedEyePixel(r, g, b)) continue;
+            // P2.2: partial darken support — new R lerps from original R to (G+B)/2
+            const int targetR = (g + b) / 2;
+            px[2] = static_cast<uchar>(r + (targetR - r) * darkenClamped / 100);
+            ++reduced;
         }
     }
     if (reduced > 0) {
-        // P2.2: snapshot before applying (MosaicTool pattern)
-        m_backup = img.clone();
-        cv::Mat newMat = ImageProcessor::qImageToMat(qimg);
-        host->setCurrentImage(newMat);
-        // P2.2: commit single ImageEditCommand per stroke
-        if (auto* stack = host->undoStack()) {
-            stack->push(new ImageEditCommand(host, m_backup, newMat,
-                QCoreApplication::translate("tools::RedEyeTool", "Red Eye Removal")));
-        }
+        host->commitLayerEdit(m_layerIndex);
+        host->pushLayerImageEdit(m_layerIndex, m_backup, img,
+            QCoreApplication::translate("tools::RedEyeTool", "Red Eye Removal"));
         m_backup.release();
         LOG_INFO("[RedEyeTool] reduced {} pixels in {}x{} region (darken={}%)",
                  reduced, rect.width(), rect.height(), darkenClamped);

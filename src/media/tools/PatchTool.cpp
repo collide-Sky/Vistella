@@ -47,7 +47,10 @@ void PatchTool::onExit(ImageWindow* host)
 void PatchTool::applyPatch(ImageWindow* host, const QPointF& dstA, const QPointF& dstB)
 {
     if (!host || !m_hasSource) return;
-    auto& img = host->currentImage();
+    //  修补写进活动图层的像素 (合成缓存会被下一次 render 冲掉)
+    cv::Mat* target = host->activeLayerImage();
+    if (!target) return;
+    cv::Mat& img = *target;
     if (img.empty()) return;
 
     QPoint srcTl(static_cast<int>(m_sourceA.x()), static_cast<int>(m_sourceA.y()));
@@ -72,7 +75,8 @@ void PatchTool::applyPatch(ImageWindow* host, const QPointF& dstA, const QPointF
         return;
     }
 
-    // P2.2: snapshot before apply for ImageEditCommand undo (MosaicTool pattern)
+    // P2.2: snapshot before apply for the layer-level undo command
+    m_layerIndex = host->activeLayerIndex();
     m_backup = img.clone();
     m_strokeOpen = true;
 
@@ -105,21 +109,21 @@ void PatchTool::applyPatch(ImageWindow* host, const QPointF& dstA, const QPointF
         const cv::Rect dstCv(dstClip.x(), dstClip.y(), dstClip.width(), dstClip.height());
         sourceRoi.copyTo(result(dstCv));
     }
-    host->setCurrentImage(result);
+    //  写回活动图层 + 提交图层级撤销命令
+    img = result;
+    host->commitLayerEdit(m_layerIndex);
 
     // P2.2: commit undo command (single push per patch)
-    if (auto* stack = host->undoStack()) {
-        const QString modeName = [this]() {
-            switch (m_patchMode) {
-            case PatchMode::Normal:              return QStringLiteral("Normal");
-            case PatchMode::Mixed:               return QStringLiteral("Mixed");
-            case PatchMode::MonochromeTransfer:  return QStringLiteral("Monochrome Transfer");
-            }
-            return QStringLiteral("Normal");
-        }();
-        stack->push(new ImageEditCommand(host, m_backup, result,
-            QCoreApplication::translate("tools::PatchTool", "Patch (%1)").arg(modeName)));
-    }
+    const QString modeName = [this]() {
+        switch (m_patchMode) {
+        case PatchMode::Normal:              return QStringLiteral("Normal");
+        case PatchMode::Mixed:               return QStringLiteral("Mixed");
+        case PatchMode::MonochromeTransfer:  return QStringLiteral("Monochrome Transfer");
+        }
+        return QStringLiteral("Normal");
+    }();
+    host->pushLayerImageEdit(m_layerIndex, m_backup, img,
+        QCoreApplication::translate("tools::PatchTool", "Patch (%1)").arg(modeName));
     m_backup.release();
     m_strokeOpen = false;
     LOG_INFO("[PatchTool] applied seamlessClone patch ({}x{} region, mode={})",

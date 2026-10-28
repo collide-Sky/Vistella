@@ -241,28 +241,6 @@ LayerCommand* LayerCommand::makeSetAdjustmentLut(LayerStack *stack, int index, c
     return cmd;
 }
 
-// 升级版 SetAdjustmentLut factory
-//   接受 host + newImage, undo/redo 走 replaceCurrentImage 恢复 image
-//   m_oldMat 在这里重定义为"before image 快照" (跟 layer.adjustmentLut 字段名同名但实际存 image)
-//   m_newMat = "after image 快照" (仅在 host 模式有意义, 旧版不用)
-//   用法:
-//     cmd = LayerCommand::makeSetAdjustmentLut(stack, index, beforeImg, afterImg, host);
-//     host->setCurrentImage(afterImg);  // 推 command 前先应用新值 (跟 P0-3.2 现有流程一致)
-//     stack->push(cmd);                  // undo 走 host->replaceCurrentImage(beforeImg)
-//   注意: 不在这里面调 setCurrentImage, 跟 P0-3.2 factory 风格一致 (factory 只存, apply 在 push 前后做)
-LayerCommand* LayerCommand::makeSetAdjustmentLut(LayerStack *stack, int index,
-                                                  const cv::Mat &oldImage,
-                                                  const cv::Mat &newImage,
-                                                  ImageWindow *host)
-{
-    auto *cmd = new LayerCommand(stack, SetAdjustmentLut, index);
-    cmd->m_oldMat = oldImage.empty() ? cv::Mat() : oldImage.clone();
-    cmd->m_newMat = newImage.empty() ? cv::Mat() : newImage.clone();
-    cmd->m_host = host;
-    cmd->setText(QStringLiteral("Edit Adjustment LUT"));
-    return cmd;
-}
-
 // =====================================================================
 //   蒙版 factory
 // =====================================================================
@@ -414,6 +392,21 @@ LayerCommand* LayerCommand::makeSetSmartFilterStrength(LayerStack *stack, int fi
     return cmd;
 }
 
+//  工具编辑: 替换某图层整层像素.
+//    before/after 都是调用方给的快照; 调用方已经把 after 应用到图层上,
+//    所以 push 触发的首个 redo 不用再应用一次.
+LayerCommand* LayerCommand::makeSetLayerImage(LayerStack *stack, int index,
+                                               const cv::Mat &before,
+                                               const cv::Mat &after,
+                                               const QString &text)
+{
+    auto *cmd = new LayerCommand(stack, SetLayerImage, index);
+    cmd->m_oldMat = before.empty() ? cv::Mat() : before.clone();
+    cmd->m_newMat = after.empty() ? cv::Mat() : after.clone();
+    cmd->setText(text.isEmpty() ? QStringLiteral("Edit Layer Pixels") : text);
+    return cmd;
+}
+
 // =====================================================================
 //  undo / redo
 // =====================================================================
@@ -487,8 +480,8 @@ void LayerCommand::captureAfter()
         break;
     case SetAdjustmentType: m_strNew = l->adjustmentType; break;
     case SetAdjustmentLut:
-        // host 模式的新图由 factory 单独存 (m_newMat), 这里只管 legacy 模式
-        if (!m_host) m_newMat = l->adjustmentLut.clone();
+        // 新值 = 调整图层当前的 LUT (调用方先写新值, 再 push command)
+        m_newMat = l->adjustmentLut.clone();
         break;
     case AddMask:
     case ClearMask:
@@ -521,6 +514,9 @@ void LayerCommand::captureAfter()
         break;
     case SetSmartFilterStrength:
         m_doubleNew = l->filterStrength;
+        break;
+    case SetLayerImage:
+        // 新旧像素由 factory 显式传入, 不从图层上读
         break;
     default:
         break;
@@ -647,19 +643,12 @@ void LayerCommand::applyState(bool after)
         m_stack->setAdjustmentType(m_index, after ? m_strNew : m_strVal);
         break;
     case SetAdjustmentLut: {
-        // 分支: m_host 非空 → 走 image-based undo (AdjustmentPanel 用法)
-        //   m_host 走 replaceCurrentImage 恢复 image (跟 ImageEditCommand 等价)
-        //   m_host 为空 → 走 layer.adjustmentLut 路径 (兼容已有调用)
-        if (m_host) {
-            const cv::Mat &img = after ? m_newMat : m_oldMat;
-            if (!img.empty()) m_host->replaceCurrentImage(img);
-        } else {
-            auto l = m_stack->at(m_index);
-            if (l) {
-                const cv::Mat &lut = after ? m_newMat : m_oldMat;
-                l->adjustmentLut = lut.empty() ? cv::Mat() : lut.clone();
-                m_stack->notifyLayerChanged(m_index);
-            }
+        // 调整图层存的是 LUT, 不是像素 —— 底图像素永远不被改写
+        auto l = m_stack->at(m_index);
+        if (l) {
+            const cv::Mat &lut = after ? m_newMat : m_oldMat;
+            l->adjustmentLut = lut.empty() ? cv::Mat() : lut.clone();
+            m_stack->notifyLayerChanged(m_index);
         }
         break;
     }
@@ -778,6 +767,20 @@ void LayerCommand::applyState(bool after)
             m_stack->setSmartFilterStrength(l->parentSmartIndex, m_index,
                                              after ? m_doubleNew
                                                    : static_cast<double>(m_floatVal));
+        }
+        break;
+    }
+    case SetLayerImage: {
+        // 工具编辑: 整层像素替换.
+        //   clone 而不是共享: 工具会在图层上就地涂抹, 共享会连带改掉
+        //   命令里存的快照.
+        auto l = m_stack->at(m_index);
+        if (l) {
+            const cv::Mat &img = after ? m_newMat : m_oldMat;
+            if (!img.empty()) {
+                l->image = img.clone();
+                m_stack->notifyLayerChanged(m_index);
+            }
         }
         break;
     }

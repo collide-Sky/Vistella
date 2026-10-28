@@ -24,6 +24,7 @@
 #include "../media/imageworker/layers/Layer.h"
 #include "../media/imageworker/layers/LayerCommand.h"
 #include "../media/imageworker/layers/LayerMaskCommand.h"
+#include "../media/imageprocessor.h"
 // Unified transform dialog (replaces the chained
 //   QInputDialog).
 #include "../media/docks/TransformDialog.h"
@@ -641,7 +642,7 @@ void MainWindow::buildActions()
             iw->undoStack()->push(new ImageEditCommand(iw, src, dst,
                 tr("调整图像大小 (%1x%2)").arg(w).arg(h)));
         }
-        iw->setCurrentImage(dst);
+        iw->setDocumentImage(dst);
         statusBar()->showMessage(tr("已调整图像大小为 %1x%2").arg(w).arg(h), 2000);
     });
     QAction *aImgConvert = mImage->addAction(tr("转换格式..."));
@@ -691,7 +692,7 @@ void MainWindow::buildActions()
             if (iw->undoStack()) {
                 iw->undoStack()->push(new ImageEditCommand(iw, src, dst, tr("转换为 RGB 灰度")));
             }
-            iw->setCurrentImage(dst);
+            iw->setDocumentImage(dst);
         });
         QAction* aModeGray = mMode->addAction(tr("灰度"));
         connect(aModeGray, &QAction::triggered, this, [this]() {
@@ -706,7 +707,7 @@ void MainWindow::buildActions()
             if (iw->undoStack()) {
                 iw->undoStack()->push(new ImageEditCommand(iw, src, dst, tr("转换为灰度")));
             }
-            iw->setCurrentImage(dst);
+            iw->setDocumentImage(dst);
         });
 
         // ---- Canvas Size (调整画布大小, 不缩放) ----
@@ -731,7 +732,7 @@ void MainWindow::buildActions()
             if (iw->undoStack()) {
                 iw->undoStack()->push(new ImageEditCommand(iw, src, dst, tr("调整画布大小为 %1x%2").arg(w).arg(h)));
             }
-            iw->setCurrentImage(dst);
+            iw->setDocumentImage(dst);
         });
 
         // ---- Trim (裁切透明/纯色边缘) ----
@@ -759,7 +760,7 @@ void MainWindow::buildActions()
                 iw->undoStack()->push(new ImageEditCommand(iw, src, dst,
                     tr("裁切到 %1x%2").arg(dst.cols).arg(dst.rows)));
             }
-            iw->setCurrentImage(dst);
+            iw->setDocumentImage(dst);
         });
 
         // ---- Reveal All (fit 缩放) ----
@@ -2573,8 +2574,15 @@ void MainWindow::onLiquifyTriggered()
         return;
     }
 
-    // 取当前图像 (QImage from m_current cv::Mat)
-    const QImage source = img->currentImageAsQImage();
+    //  液化作用在活动图层上 (跟滤镜一致) —— 对合成图做会把上层图层重复合成
+    const int layerIdx = img->activeLayerIndex();
+    cv::Mat* layer = img->activeLayerImage();
+    if (!layer || layer->empty()) {
+        statusBar()->showMessage(tr("Liquify: 当前没有可编辑的图层"), 2000);
+        return;
+    }
+    const cv::Mat before = layer->clone();
+    const QImage source = ImageProcessor::matToQImage(before);
     if (source.isNull()) {
         statusBar()->showMessage(tr("Liquify: 当前图像为空"), 2000);
         return;
@@ -2582,28 +2590,21 @@ void MainWindow::onLiquifyTriggered()
 
     auto *dlg = new filters::liquify::LiquifyDialog(source, this);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
-    connect(dlg, &QDialog::accepted, this, [this, dlg, img, source]() {
+    connect(dlg, &QDialog::accepted, this, [this, dlg, img, layerIdx, before]() {
         const QImage result = dlg->resultImage();
         if (result.isNull()) return;
 
-        // before = current cv::Mat (clone), after = QImage -> cv::Mat
-        const cv::Mat before = img->currentImage().clone();
-        cv::Mat after;
-        if (result.format() == QImage::Format_ARGB32 || result.format() == QImage::Format_RGB32) {
-            after = cv::Mat(result.height(), result.width(), CV_8UC4,
-                             (void*)result.bits(), result.bytesPerLine()).clone();
-        } else if (result.format() == QImage::Format_RGB888) {
-            after = cv::Mat(result.height(), result.width(), CV_8UC3,
-                             (void*)result.bits(), result.bytesPerLine()).clone();
-        } else {
-            const QImage converted = result.convertToFormat(QImage::Format_ARGB32);
-            after = cv::Mat(converted.height(), converted.width(), CV_8UC4,
-                             (void*)converted.bits(), converted.bytesPerLine()).clone();
+        //  QImage 是 RGB 顺序, qImageToMat 负责换回 BGR
+        cv::Mat after = ImageProcessor::qImageToMat(result);
+        if (after.empty()) return;
+        //  图层带 alpha 时补回来 (QImage 中转会把 alpha 丢掉)
+        if (before.channels() == 4 && after.channels() == 3) {
+            cv::Mat bgra;
+            cv::cvtColor(after, bgra, cv::COLOR_BGR2BGRA);
+            after = bgra;
         }
 
-        if (after.empty()) return;
-
-        auto *cmd = new filters::liquify::LiquifyCommand(img, before, after);
+        auto *cmd = new filters::liquify::LiquifyCommand(img, layerIdx, before, after);
         img->undoStack()->push(cmd);
         statusBar()->showMessage(tr("已应用 Liquify (入撤销栈)"), 2000);
     });

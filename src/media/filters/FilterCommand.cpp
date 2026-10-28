@@ -9,59 +9,72 @@
 
 namespace filter {
 
-FilterCommand::FilterCommand(ImageWindow *host, const cv::Mat &before, FilterKind kind,
-                             const QString &text, QUndoCommand *parent)
-    : QUndoCommand(parent), m_host(host), m_before(before.clone()), m_kind(kind)
+namespace {
+
+//  取活动图层的像素 + 图层索引.
+//  没有可写的 Bitmap 图层时返回 false —— 滤镜没有落点, 命令不做事.
+bool grabActiveLayer(ImageWindow* host, int& layerIndex, cv::Mat& pixels)
+{
+    layerIndex = -1;
+    if (!host) return false;
+    layerIndex = host->activeLayerIndex();
+    cv::Mat* layer = host->activeLayerImage();
+    if (!layer || layer->empty()) return false;
+    pixels = layer->clone();
+    return true;
+}
+
+} // namespace
+
+FilterCommand::FilterCommand(ImageWindow* host, FilterKind kind,
+                             const QString& text, QUndoCommand* parent)
+    : QUndoCommand(parent), m_host(host), m_kind(kind)
 {
     setText(text);
-    // Apply filter once at ctor time -> m_after
+    cv::Mat before;
+    if (!grabActiveLayer(host, m_layerIndex, before)) return;
+    m_before = before;
     auto strategy = FilterFactory::createFilter(kind);
-    if (strategy && !before.empty()) {
-        strategy->apply(before, m_after);
+    if (strategy && !m_before.empty()) {
+        strategy->apply(m_before, m_after);
     } else {
-        m_after = before.clone();
+        m_after = m_before.clone();
     }
 }
 
-// 用 caller 提供的 strategy (FilterDialog 持有, 已用用户参数)
-//   跟原 ctor 行为一致: apply 一次存 m_after; redo() replaceCurrentImage(m_after).
-//   关键: FilterCommand 不动 caller 的 m_current, redo 仅替换当前显示, 不重复 apply.
-//   这跟 P0-5 factory pattern 一致 — caller (ImageWindow::applyFilterWithStrategy
-//   或 FilterDialog::onOkClicked) 不显式 setCurrentImage, FilterCommand 自己 apply.
-FilterCommand::FilterCommand(ImageWindow *host, const cv::Mat &before,
-                             FilterStrategy *strategy, const QString &text,
-                             QUndoCommand *parent)
-    : QUndoCommand(parent), m_host(host), m_before(before.clone()),
+FilterCommand::FilterCommand(ImageWindow* host, FilterStrategy* strategy,
+                             const QString& text, QUndoCommand* parent)
+    : QUndoCommand(parent), m_host(host),
       m_kind(strategy ? strategy->kind() : FilterKind::FilterGallery)
 {
     setText(text);
-    if (strategy && !before.empty()) {
-        strategy->apply(before, m_after);
+    cv::Mat before;
+    if (!grabActiveLayer(host, m_layerIndex, before)) return;
+    m_before = before;
+    if (strategy && !m_before.empty()) {
+        strategy->apply(m_before, m_after);
     } else {
-        m_after = before.clone();
+        m_after = m_before.clone();
     }
+}
+
+void FilterCommand::applyToLayer(const cv::Mat& pixels)
+{
+    if (!m_host || pixels.empty()) return;
+    if (m_layerIndex < 0) return;
+    m_host->writeLayerPixels(m_layerIndex, pixels);
 }
 
 void FilterCommand::undo()
 {
-    if (!m_host) return;
-    if (!m_before.empty()) {
-        m_host->replaceCurrentImage(m_before);
-        LOG_INFO("[FilterCommand] undo: kind={}", static_cast<int>(m_kind));
-    }
+    applyToLayer(m_before);
+    LOG_INFO("[FilterCommand] undo: kind={}", static_cast<int>(m_kind));
 }
 
 void FilterCommand::redo()
 {
-    if (!m_host) return;
-    if (m_firstRedo) {
-        // push() triggers redo once; m_after already prepared
-        m_firstRedo = false;
-    }
-    if (!m_after.empty()) {
-        m_host->replaceCurrentImage(m_after);
-        LOG_INFO("[FilterCommand] redo: kind={}", static_cast<int>(m_kind));
-    }
+    applyToLayer(m_after);
+    LOG_INFO("[FilterCommand] redo: kind={}", static_cast<int>(m_kind));
 }
 
 } // namespace filter

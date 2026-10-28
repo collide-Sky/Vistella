@@ -213,6 +213,8 @@ const char* kBwColorNames[6] = {
 
 AdjustmentPanel::AdjustmentPanel(QWidget* parent) : QWidget(parent)
 {
+    //  每个 tab 的调整图层还没建过
+    for (int i = 0; i < kTabCount; ++i) m_adjLayerIndex[i] = -1;
     // 初始化 HSL 8 hue + 8 sat 默认值 0
     m_hsl.hueShifts.resize(8, 0);
     m_hsl.satShifts.resize(8, 0);
@@ -684,88 +686,44 @@ cv::Mat AdjustmentPanel::buildCurrentTabLut() const
 void AdjustmentPanel::applyCurrentTab()
 {
     if (!m_host) return;
-    if (m_host->originalImage().empty()) return;
-
-    // 首次 valueChanged 在 debounce 窗口内, snapshot "before" image
-    //   后续 valueChanged 在同一窗口内只刷新 m_pendingAfter (timer fire 时取 m_current)
-    //   切 tab / 200ms 静默 → commitUndoDebounced → push LayerCommand
-    if (m_pendingBefore.empty() && m_host->undoStack()) {
-        m_pendingBefore = m_host->currentImage().clone();
-    }
-
-    auto* engine = m_host->engineContext();
-    if (!engine) {
-        // 兜底: 走 sync
-        cv::Mat lut = buildCurrentTabLut();
-        if (lut.empty()) return;
-        cv::Mat out;
-        ImageProcessor::applyLut(m_host->originalImage(), out, lut);
-        if (out.empty()) return;
-        m_host->setCurrentImage(out);
-        // 同步模式: 重启 debounce timer (兜底也走 LOD 路径)
-        if (m_commitTimer) m_commitTimer->start();
-        return;
-    }
-
-    // 分配新 task id, 旧 task 完成后主线程发现 id 变了, 直接 return
-    const uint64_t myTaskId = m_host->currentTaskId().fetch_add(1) + 1;
-
-    // 源图用共享引用, 不做整图 clone:
-    //   cv::Mat 是引用计数, 任务持有它就能保证像素缓冲不被回收 (loadFile
-    //   换图时旧缓冲仍在, 不会读到野指针).
-    //   之前每次 slider 变化都 clone 一份全图, 拖一次滑块就是几十份
-    //   (24MP 图一份 72MB), 内存直接被打爆.
-    cv::Mat snapshot = m_host->originalImage();
     cv::Mat lut = buildCurrentTabLut();
     if (lut.empty()) return;
 
-    QPointer<ImageWindow> hostGuard = m_host;
+    auto* stack = m_host->layerStack();
+    if (!stack) return;
 
-    // 提交到 background pool
-    const bool submitted = engine->background().submit_fn(
-        [hostGuard, myTaskId, snapshot = std::move(snapshot),
-         lut = std::move(lut)](vistella::tp::TaskContext& /*ctx*/) mutable -> void
-        {
-            // 后台跑 applyLut
-            cv::Mat out;
-            try {
-                ImageProcessor::applyLut(snapshot, out, lut);
-            } catch (...) {
-                out = cv::Mat();
-            }
-            if (out.empty()) return;
-            if (hostGuard.isNull()) return;  // ImageWindow 已销毁
-
-            // 切回主线程
-            ImageWindow* host = hostGuard.data();
-            QMetaObject::invokeMethod(host,
-                [host, myTaskId, out = std::move(out)]() -> void {
-                    if (host->currentTaskId().load() != myTaskId) return;  // 已被新 task 取代, 丢弃
-                    if (out.empty()) return;
-                    // setCurrentImage 完就 OK, undo 由 debounce timer 推
-                    host->setCurrentImage(out);
-                },
-                Qt::QueuedConnection);
-        },
-        "AdjustmentPanel::applyCurrentTab",
-        vistella::tp::Priority::Normal);
-
-    if (!submitted) {
-        // 提交失败 → 同步兜底
-        cv::Mat out;
-        try {
-            ImageProcessor::applyLut(snapshot, out, lut);
-        } catch (...) {
-            out = cv::Mat();
-        }
-        if (!out.empty()) {
-            m_host->setCurrentImage(out);
-            if (m_commitTimer) m_commitTimer->start();  // 重启 debounce
-        }
-    } else {
-        // 异步提交成功: 重启 debounce timer (200ms 后 commit)
-        if (m_commitTimer) m_commitTimer->start();
+    const int tab = m_currentTab;
+    int layerIdx = m_adjLayerIndex[tab];
+    bool needCreate = false;
+    if (layerIdx < 0 || layerIdx >= stack->count()
+        || !stack->at(layerIdx)
+        || stack->at(layerIdx)->kind != layers::Layer::Adjustment) {
+        needCreate = true;
     }
+
+    if (needCreate) {
+        //  第一次用这个 tab: 新建一个调整图层放在栈顶.
+        //  它套用的是它下面的所有图层, 底图像素不动.
+        layerIdx = stack->addAdjustmentLayer(tabName(tab),
+                                            tabName(tab).toLower(), lut);
+        if (layerIdx < 0) return;
+        m_adjLayerIndex[tab] = layerIdx;
+        m_pendingLut[tab].release();
+    } else {
+        auto l = stack->at(layerIdx);
+        //  debounce 窗口的起点: 记下改值之前的 LUT, 撤销时恢复它
+        if (m_pendingLut[tab].empty()) {
+            m_pendingLut[tab] = l->adjustmentLut.empty() ? cv::Mat()
+                                                          : l->adjustmentLut.clone();
+        }
+        stack->setAdjustmentLut(layerIdx, lut);
+    }
+
+    //  重绘画布 (图层内容变了 -> 合成缓存失效 -> 重新渲染)
+    m_host->refreshCanvasNow();
+
+    //  重启 debounce timer (200ms 静默后提交一条撤销命令)
+    if (m_commitTimer) m_commitTimer->start();
 }
 
 // debounce commit - timer 触发时 push 一条 LayerCommand::SetAdjustmentLut
@@ -776,31 +734,35 @@ void AdjustmentPanel::applyCurrentTab()
 void AdjustmentPanel::commitUndoDebounced()
 {
     if (!m_host || !m_host->undoStack()) return;
-    if (m_pendingBefore.empty()) return;
-    cv::Mat after = m_host->currentImage().clone();
-    if (after.empty()) {
-        m_pendingBefore = cv::Mat();
-        return;
-    }
-    // 同 image 跳过 (没真改)
-    if (m_pendingBefore.size == after.size && m_pendingBefore.type() == after.type()) {
-        // 字节级快速比较 (仅同 size+type)
-        const size_t bytes = m_pendingBefore.total() * m_pendingBefore.elemSize();
-        if (std::memcmp(m_pendingBefore.data, after.data, bytes) == 0) {
-            m_pendingBefore = cv::Mat();
-            return;
-        }
-    }
-    // 选当前 layer (一般 adjustment 在 base layer 上)
     auto* stack = m_host->layerStack();
-    if (!stack) stack = m_host->layerStack();
-    int index = stack ? stack->selection() : 0;
-    if (index < 0) index = 0;
-    // 推 LayerCommand::SetAdjustmentLut (新 overload: 走 host image-based undo)
-    auto* cmd = layers::LayerCommand::makeSetAdjustmentLut(
-        stack, index, m_pendingBefore, after, m_host);
-    m_host->undoStack()->push(cmd);
-    m_pendingBefore = cv::Mat();
+    if (!stack) return;
+    for (int tab = 0; tab < kTabCount; ++tab) {
+        if (m_pendingLut[tab].empty()) continue;
+        const int layerIdx = m_adjLayerIndex[tab];
+        if (layerIdx < 0 || layerIdx >= stack->count()) {
+            m_pendingLut[tab].release();
+            continue;
+        }
+        auto l = stack->at(layerIdx);
+        if (!l) {
+            m_pendingLut[tab].release();
+            continue;
+        }
+        //  LUT 没变就不 push (用户没真改)
+        if (m_pendingLut[tab].size == l->adjustmentLut.size
+            && m_pendingLut[tab].type() == l->adjustmentLut.type()) {
+            const size_t bytes = m_pendingLut[tab].total() * m_pendingLut[tab].elemSize();
+            if (std::memcmp(m_pendingLut[tab].data, l->adjustmentLut.data, bytes) == 0) {
+                m_pendingLut[tab].release();
+                continue;
+            }
+        }
+        //  撤销命令存的是"旧 LUT" —— 恢复它就等于恢复调整前的效果
+        auto* cmd = layers::LayerCommand::makeSetAdjustmentLut(
+            stack, layerIdx, m_pendingLut[tab]);
+        m_host->undoStack()->push(cmd);
+        m_pendingLut[tab].release();
+    }
 }
 
 void AdjustmentPanel::pushUndoCommand()

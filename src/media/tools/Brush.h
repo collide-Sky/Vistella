@@ -3,7 +3,8 @@
 // Brush tool - Brush full implementation
 //   PS-style painting tool: stroke smoothing + pressure dynamics + stamp-based paint.
 //   Owns BrushPreset (current brush config) + StrokeSmoother + PressureCurve.
-//   Strokes are pushed as ImageEditCommand to m_undoStack for undo/redo.
+//   Strokes are painted into the active layer's pixels and pushed as
+//   LayerCommand::SetLayerImage to m_undoStack for undo/redo.
 //
 //   Hooks into ToolState event chain via ImageWindow's eventFilter
 //   (see tools/ToolContext::forwardEvent).
@@ -80,6 +81,7 @@ private:
 
     // Stroke state
     bool                      m_active = false;
+    int                       m_layerIndex = -1;  // 本次笔画写在哪一层 (活动图层)
     cv::Mat                   m_backup;          // pre-stroke image (for undo)
     QPointF                   m_lastStampScene;  // last stamp position (for spacing)
     double                    m_lastStampDist = 0;

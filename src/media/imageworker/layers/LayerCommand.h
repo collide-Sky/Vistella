@@ -47,12 +47,6 @@
 #include <QTransform>
 #include <QPointer>
 
-// 前向声明 (P0-3.3 引入 host 指针做 image-based undo)
-//   不 #include "imagewindow.h" 是为了避免 LayerCommand.h 拉进 media 模块的依赖
-//   undo/redo 内部通过 m_host 调 replaceCurrentImage (ImageWindow 公有方法)
-//   必须放**全局**命名空间, ImageWindow 在全局, 不在 layers::
-class ImageWindow;
-
 namespace layers {
 
 class LayerCommand : public QUndoCommand
@@ -83,6 +77,9 @@ public:
         MoveSmartFilter,        // reorder (m_intVal=newSlot)
         SetSmartFilterEnabled,  // enable/disable (m_boolVal=old enabled)
         SetSmartFilterStrength, // strength (m_floatVal=old strength)
+        // 工具编辑: 替换某图层整层像素
+        //   m_oldMat = 编辑前的像素, m_newMat = 编辑后的像素
+        SetLayerImage,
     };
 
     // Add: 给一个 layer, push 时 add, undo 时 remove
@@ -139,16 +136,6 @@ public:
                                              const QString &oldPath, bool oldEmbed);
     static LayerCommand* makeSetAdjustmentType(LayerStack *stack, int index, const QString &oldType);
     static LayerCommand* makeSetAdjustmentLut(LayerStack *stack, int index, const cv::Mat &oldLut);
-    // 升级版 SetAdjustmentLut
-    //   接受 ImageWindow* host + newImage, undo/redo 走 replaceCurrentImage
-    //   旧版 (无 host) 走原 l->adjustmentLut 路径, 兼容已存在的 P0-3.2 代码
-    //   m_oldMat 重定义为"before image 快照", m_newMat = "after image 快照"
-    //   undo: m_host->replaceCurrentImage(m_oldMat)
-    //   redo: m_host->replaceCurrentImage(m_newMat)
-    static LayerCommand* makeSetAdjustmentLut(LayerStack *stack, int index,
-                                              const cv::Mat &oldImage,
-                                              const cv::Mat &newImage,
-                                              ImageWindow *host);
     //  蒙版 factory
     //   oldMask (空 Mat = 原无蒙版), wasEnabled (原 enabled 状态)
     static LayerCommand* makeAddMask(LayerStack *stack, int index,
@@ -193,6 +180,14 @@ public:
                                                    bool oldEnabled);
     static LayerCommand* makeSetSmartFilterStrength(LayerStack *stack, int filterIdx,
                                                     double oldStrength);
+    // 工具编辑: 替换某图层整层像素 (画笔/修复/红眼 等)
+    //   before: 编辑前的图层像素, after: 编辑后的图层像素
+    //   调用方自己把 after 应用到图层上, 再 push 这条命令;
+    //   undo 写回 before, redo 写回 after.
+    static LayerCommand* makeSetLayerImage(LayerStack *stack, int index,
+                                           const cv::Mat &before,
+                                           const cv::Mat &after,
+                                           const QString &text);
 
     void undo() override;
     void redo() override;
@@ -232,7 +227,6 @@ private:
                                     // P0-3.3: 同时作 "before image 快照" (跟 host 一起用)
     cv::Mat     m_newMat;            // P0-3.3: "after image 快照" (仅 host 模式用)
                                     // 也用于 AddMask 的新蒙版 / SetAdjustmentLut 的新 LUT
-    QPointer<ImageWindow> m_host;    // P0-3.3: image-based undo/redo 目标, 跟 m_stack 互补
 
     // ---- after 状态 (新值) ----
     //   构造时由 captureAfter() 从图层上读出, redo 时原样写回.

@@ -61,11 +61,10 @@ QRect Crop::computeClampedRect(int x1, int y1, int x2, int y2) const
     return QRect(tl, br).normalized();
 }
 
-// TODO(P8.5): applyCrop() pushes a no-op redo command and never calls setCurrentImage, so the crop does nothing -- see docs/DEBT.md#A-CROP
 void Crop::applyCrop(ImageWindow* host)
 {
     if (!host || !m_hasCrop) return;
-    auto& img = host->currentImage();
+    const cv::Mat& img = host->currentImage();
     if (img.empty()) return;
 
     const QRect rect = computeClampedRect(
@@ -82,6 +81,10 @@ void Crop::applyCrop(ImageWindow* host)
     // Crop ROI
     const cv::Rect cvRect(rect.x(), rect.y(), rect.width(), rect.height());
     cv::Mat cropped = img(cvRect).clone();
+
+    //  裁剪改的是整张文档 (几何变了) -> 文档级写入
+    //  ImageEditCommand 的 undo 会把文档恢复成 backup
+    host->setDocumentImage(cropped);
 
     // P2.3: push ImageEditCommand (single push per crop, easy undo)
     if (auto* stack = host->undoStack()) {

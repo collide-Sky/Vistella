@@ -15,10 +15,10 @@
 //     is not QObject so tr() member is unavailable (see Lasso/MagicWand.cpp note)
 //   - Brush size UI upgraded from QSpinBox to QSlider + value label (consistent
 //     with P2.1 MagicWand optionPage style)
-//   - ImageEditCommand undo integration (MosaicTool pattern):
-//     onMousePress snapshots m_current into m_backup, onMouseRelease pushes
-//     a single ImageEditCommand for the entire stroke (avoids per-frame push
-//     which would explode the undo stack on long strokes)
+//   - Undo integration: the stroke is painted into the ACTIVE LAYER's pixels
+//     (not into the composite cache). onMousePress snapshots the layer into
+//     m_backup, onMouseRelease pushes one LayerCommand::SetLayerImage for the
+//     whole stroke (one push per stroke, not per frame).
 //
 #pragma once
 
@@ -85,12 +85,14 @@ protected:
     QPointF m_samplePoint;
     QPointF m_lastDstPos;
     bool    m_dragging = false;
+    //  本次笔画落在哪个图层 (笔画期间图层不会变, 提交时用它对账)
+    int     m_layerIndex = -1;
     int     m_brushSize = 20;
 
 private:
     QPointer<ImageWindow> m_host;
 
-    void paintAt(QImage& img, const QPointF& dst, const QPointF& src);
+    void paintAt(cv::Mat& img, const QPointF& dst, const QPointF& src);
     void commitStroke(const QString& text);
 };
 

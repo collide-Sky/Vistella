@@ -208,9 +208,6 @@ public:
     void undoPublic() { onUndo(); }
     void redoPublic() { onRedo(); }
 
-    // 公开: 给 ImageEditCommand (m_useImage 模式) 用 - 还原 m_current 到指定 Mat
-    // m_w 已经在 ImageEditCommand 里检查过 alive, 这里直接用
-    void replaceCurrentImage(const cv::Mat &img);
 
     // 公开: 给 TextItemCommand 用 - 文字 item 增/删/改
     // 内部委托给 m_textCtrl (TextOverlayController)
@@ -231,12 +228,27 @@ public:
     //   接受变换后 cv::Mat, 同步 m_current + 可选 box 状态 (4 mode 切换时)
     void applyTransformImage(const cv::Mat& img, const transform::TransformBox* newBox = nullptr);
 
-    // 给 TextOverlayController / MosaicTool 用
-    //  返回/接收 cv::Mat& (mutable 引用, 涂抹场景下 in-place 修改)
-    cv::Mat&       currentImage()       { return m_current; }
+    //  合成结果 (m_layerStack->render() 的缓存).
+    //  只读: 像素的唯一真源是图层, m_current 只是渲染器的输出.
+    //  外部要改像素 -> activeLayerImage() / pushLayerImageEdit().
     const cv::Mat& currentImage() const { return m_current; }
-    cv::Mat&       originalImage()       { return m_original; }
+
+    //  文档原图基准 (载入时的像素, 或最近一次文档级变更后的像素).
+    //  只读: 像素级编辑不碰它, 只有 setDocumentImage() 会换.
     const cv::Mat& originalImage() const { return m_original; }
+
+    // ---- 工具编辑目标 (活动图层) ----
+    //   工具编辑必须写进图层, 不能写合成缓存 m_current ——
+    //   缓存会被下一次 render() 覆盖, 用户的笔画会凭空消失.
+    //   activeLayerImage(): 活动图层的可写像素缓冲.
+    //     nullptr = 当前没有可写的 Bitmap 图层, 工具应放弃这次编辑.
+    //   commitLayerEdit(): 提交一次编辑 (通知图层栈 + 重绘画布).
+    //   pushLayerImageEdit(): 把编辑前后的像素作为撤销命令入栈.
+    cv::Mat* activeLayerImage();
+    int      activeLayerIndex() const;
+    void     commitLayerEdit(int index);
+    void     pushLayerImageEdit(int index, const cv::Mat &before,
+                                 const cv::Mat &after, const QString &text);
 
     // AdjustmentPanel 公开访问 (供 MainWindow 等)
     class AdjustmentPanel* adjustmentPanel() { return m_adjustmentPanel; }
@@ -247,9 +259,16 @@ public:
     //   actions call this with dialogId in {"Curves","Levels","B&W",
     //   "ChannelMixer"}.
     void showAdjustDialog(const QString& dialogId);
-    // 公开 (MosaicTool 调, 触发 refreshAll)
-    //   主流做法: 内部 clone m_current, 同步 base layer, invalidate cache, refreshAll
-    void setCurrentImage(const cv::Mat &img);
+    //  文档级变更 (尺寸 / 色彩模式 / 裁切 / 旋转 / 翻转):
+    //    文档本身变了 -> 原图基准和 base layer 一起换.
+    //    之后所有以原图为起点的操作才不会拿旧尺寸的像素去算.
+    //  像素级编辑不走这里 -> activeLayerImage() / pushLayerImageEdit().
+    void setDocumentImage(const cv::Mat &img);
+
+    //  把 pixels 写进指定图层的像素缓冲, 通知图层栈 + 重绘画布.
+    //  滤镜 / 液化的 undo-redo 走这里 —— 像素只落在图层上,
+    //  不再直接改合成缓存 (合成缓存会被下一次 render 冲掉).
+    void writeLayerPixels(int index, const cv::Mat &pixels);
 
     // 给 TextOverlayController 用
     //   sceneRef: 组件 addItem/removeItem 用
@@ -587,6 +606,9 @@ private:
     bool    m_currentDirty = true;
     void    invalidateCurrentCache() { m_currentDirty = true; }
     void    rebuildCurrentCache();
+    //  图层栈是文档像素的容器 —— 文档有像素就必须有图层栈.
+    //  loadFile / setDocumentImage 共用; 裸 new ImageWindow (单测) 也靠它补上.
+    void    ensureLayerStack();
     //  LayerPanel 切图层时通知
     //   当前不直接改渲染 (切 layer 不改像素), 但触发重绘让激活层指示器更新
     //   也给 MainWindow 一个挂钩点 (e.g. 切到 Adjustment 时自动展开属性面板)

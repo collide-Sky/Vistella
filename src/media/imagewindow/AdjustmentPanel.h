@@ -18,9 +18,12 @@
 //   - applyCurrentTab() 调 ImageProcessor::applyLutAsync (callback overload)
 //   - 走 background pool, 完成后 QMetaObject::invokeMethod 切回主线程刷显示
 //
-// 接 Layer 系统 (P0-3.2 简化):
-//   - P0-3.2: 直接调 m_host->setCurrentImage(result) + 推 ImageEditCommand(beforeImage, afterImage)
-//   - P0-3.3 才升级为 LayerCommand::SetAdjustmentLut + SetAdjustmentType
+// 接 Layer 系统:
+//   调整是**非破坏**的 —— 每个 tab 拥有自己的 Adjustment 图层, LUT 是图层的属性,
+//   由图层栈在合成时套用. 底图像素永远不被改写, 所以:
+//     - 连续拖滑块不会在已调整的结果上再调整一次
+//     - 之前的画笔/马赛克涂抹不会被调整覆盖
+//     - 撤销恢复的是 LUT, 不是像素快照 (撤销栈里存的是 256 字节, 不是整图)
 //
 // 设计原则 (一次性到位, P0-3.2 不留补丁):
 //   1. 5 tab 内部参数 cache - 切 tab 不重置其他 tab 缓存
@@ -148,8 +151,8 @@ public:
     const ChannelMixerParams& cm()     const { return m_cm; }
 
     // 应用当前 tab 的调值 (调值变化时调)
-    // 走 background pool async, 完成后切主线程刷显示
-    // 不再立即推 ImageEditCommand, 改走 debounce commit
+    // 写进该 tab 的 Adjustment 图层 (LUT), 合成时由图层栈套用
+    // 不立即推撤销命令, 改走 debounce commit:
     //   200ms 内多次 valueChanged 只 push 一条 undo, 避免拖动时栈爆炸
     void applyCurrentTab();
 
@@ -206,12 +209,17 @@ private:
     // UI 控件
     QTabWidget* m_tabWidget = nullptr;
 
+    //  每个 tab 的调整图层 (LayerKind::Adjustment) 在图层栈里的下标.
+    //   -1 = 这个 tab 还没建过调整图层.
+    //   调整图层放在栈顶, 它套用的对象是它下面的所有图层.
+    int m_adjLayerIndex[kTabCount];
+
     // LOD debounce 状态
-    //   m_pendingBefore: 当前 debounce 窗口的"before" image (首次 valueChanged 时 snapshot)
+    //   m_pendingLut[tab]: 当前 debounce 窗口的"before" LUT (改值前的 LUT)
     //   m_commitTimer: 200ms 单次定时器, 静默期到就 push 一条 LayerCommand
     //   设计: 拖动过程中频繁 applyCurrentTab, 但只 push 一条 undo
     //   200ms 是经验值, 太短可能误合并多条独立操作, 太长用户感知不到撤销生效
-    cv::Mat m_pendingBefore;
+    cv::Mat m_pendingLut[kTabCount];
     QTimer* m_commitTimer = nullptr;
 
     // Curves tab

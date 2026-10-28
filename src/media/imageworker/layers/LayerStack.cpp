@@ -1355,6 +1355,29 @@ void LayerStack::clearSelection()
     emit selectionChanged(-1);
 }
 
+//  工具编辑落在哪一层.
+//    有选中层就用选中层; 没有选中时取最上面的 Bitmap 图层 ——
+//    新打开的文档只有一层, 那层就是活动层 (跟 PS 一致).
+int LayerStack::activeLayerIndex() const
+{
+    if (m_selection >= 0 && m_selection < m_layers.size()) return m_selection;
+    for (int i = m_layers.size() - 1; i >= 0; --i) {
+        if (m_layers[i] && m_layers[i]->kind == Layer::Bitmap) return i;
+    }
+    return -1;
+}
+
+//  活动图层的可写像素缓冲 (工具就地涂抹用).
+//    返回 nullptr = 当前没有可写的 Bitmap 图层, 工具应放弃这次编辑.
+cv::Mat* LayerStack::activeLayerImage()
+{
+    const int idx = activeLayerIndex();
+    if (idx < 0) return nullptr;
+    auto l = m_layers[idx];
+    if (!l || l->kind != Layer::Bitmap || l->image.empty()) return nullptr;
+    return &l->image;
+}
+
 QList<int> LayerStack::selectedIndices() const
 {
     return linkedSelection(m_selection);

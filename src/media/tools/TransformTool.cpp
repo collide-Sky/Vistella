@@ -265,7 +265,7 @@ void TransformTool::commitTransform(ImageWindow* host)
     if (auto *stack = host->undoStack()) {
         stack->push(new transform::TransformCommand(host, before, after, text));
     } else {
-        host->setCurrentImage(after);
+        host->setDocumentImage(after);
     }
 }
 

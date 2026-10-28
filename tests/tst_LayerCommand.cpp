@@ -70,12 +70,17 @@ private slots:
     void test_setAdjustmentType();
     void test_setAdjustmentLut();
     void test_setAdjustmentLutUndo();
-    // ---- P0-3.3 (2026-09-08): 升级版 SetAdjustmentLut (host + newImage) ----
-    void test_setAdjustmentLutWithHost();
+    // ---- 调整图层: LUT 由渲染管线套用, 底图像素不被改写 ----
+    void test_adjustmentLayer_isNonDestructive();
     // ---- undo / redo 语义回归 ----
     void test_undo_emits_layerChanged();
     void test_redo_restores_new_value();
     void test_remove_redo_same_layer();
+    // ---- 工具编辑写图层 (04-02) ----
+    void test_activeLayerIndex();
+    void test_toolEdit_survivesLayerOps();
+    void test_setLayerImage_undoRedo();
+
 
 
 private:
@@ -745,54 +750,48 @@ void tst_LayerCommand::test_setAdjustmentLutUndo()
     undoStack.redo();
     QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(50)), 128);
 }
-void tst_LayerCommand::test_setAdjustmentLutWithHost()
+//  调整图层 (LayerKind::Adjustment) 的 LUT 由渲染管线在合成时套用.
+//  底图像素永远不被改写 —— 连续拖滑块不会在已调整的结果上再调整一次,
+//  之前的画笔/马赛克涂抹也不会被调整覆盖.
+void tst_LayerCommand::test_adjustmentLayer_isNonDestructive()
 {
     LayerStack stack;
-    stack.addAdjustmentLayer(QStringLiteral("A"), QStringLiteral("curves"));
+    cv::Mat base(4, 4, CV_8UC3, cv::Scalar(10, 20, 30));
+    stack.setBaseLayer(base);
+
+    // 反相 LUT
+    cv::Mat lut(256, 1, CV_8U);
+    uchar *p = lut.ptr<uchar>();
+    for (int i = 0; i < 256; ++i) p[i] = static_cast<uchar>(255 - i);
+
+    const int adjIdx = stack.addAdjustmentLayer(QStringLiteral("Inv"),
+                                                    QStringLiteral("curves"), lut);
+    QVERIFY(adjIdx >= 0);
+    QCOMPARE(static_cast<int>(stack.at(adjIdx)->kind),
+             static_cast<int>(layers::Layer::Adjustment));
+
+    // 底图像素没有被改写
+    QCOMPARE(static_cast<int>(stack.baseLayer()->image.at<cv::Vec3b>(0, 0)[0]), 10);
+
+    // 渲染结果套用了 LUT
+    const cv::Mat rendered = stack.render();
+    QVERIFY(!rendered.empty());
+    QCOMPARE(static_cast<int>(rendered.at<cv::Vec3b>(0, 0)[0]), 255 - 10);
+
+    // 撤销命令恢复旧 LUT, 渲染结果跟着回到未调整状态
+    auto oldLut = stack.at(adjIdx)->adjustmentLut.clone();
+    cv::Mat identity(256, 1, CV_8U);
+    uchar *ip = identity.ptr<uchar>();
+    for (int i = 0; i < 256; ++i) ip[i] = static_cast<uchar>(i);
+    QVERIFY(stack.setAdjustmentLut(adjIdx, identity));
     QUndoStack undoStack;
-
-    // 准备测试用 image
-    cv::Mat oldImg(8, 8, CV_8UC3, cv::Scalar(10, 20, 30));
-    cv::Mat newImg(8, 8, CV_8UC3, cv::Scalar(100, 150, 200));
-
-    // ========== 1) host == nullptr, 走原 LUT 路径, 不崩 ==========
-    //   注: Phase 3 简化 SetAdjustmentLut::redo 是 no-op (跟 P0-3.2 factory 行为一致)
-    //   实际主窗口流程: push(cmd 存 old) → setLut(new) → undo 还原 old → setLut(new) → redo no-op
-    //   所以这里只验证 undo 路径, 不验证 redo
-    auto oldLut = stack.at(0)->adjustmentLut.clone();
-    auto *cmdNull = LayerCommand::makeSetAdjustmentLut(&stack, 0, oldLut, oldLut, nullptr);
-    QVERIFY(cmdNull != nullptr);
-    undoStack.push(cmdNull);
-    // 改 layer.adjustmentLut 模拟 apply
-    cv::Mat applyLut(256, 1, CV_8U, cv::Scalar(99));
-    stack.setAdjustmentLut(0, applyLut);
-    QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(100)), 99);
+    undoStack.push(LayerCommand::makeSetAdjustmentLut(&stack, adjIdx, oldLut));
+    QCOMPARE(static_cast<int>(stack.at(adjIdx)->adjustmentLut.at<uchar>(10)), 10);
     undoStack.undo();
-    // 还原 identity
-    QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(100)), 100);
-    // 不测 redo (no-op 设计)
-
-    // ========== 2) 传入 oldImage, command clone 后改原 Mat 不影响 command ==========
-    auto *cmd = LayerCommand::makeSetAdjustmentLut(&stack, 0, oldImg, newImg, nullptr);
-    QVERIFY(cmd != nullptr);
-    // 改原 oldImg, command 内的 m_oldMat 不应受影响
-    oldImg.setTo(cv::Scalar(0, 0, 0));
-    // 这里没法直接访问 m_oldMat (private), 但能确认命令创建成功, 后续 image 验证交给 tst_ImageWorker
-    // cmd 跟 undoStack 没关联, 需要显式 delete
-    delete cmd;
-
-    // ========== 3) QPointer host 行为: QObject 销毁后 QPointer 自动 null ==========
-    //   不能在单测里 new ImageWindow (需要 QApplication + 大量 UI 依赖)
-    //   这里只验证 LayerCommand 接受 nullptr 不崩, undo/redo 不崩
-    auto *cmd2 = LayerCommand::makeSetAdjustmentLut(&stack, 0, oldImg, newImg, nullptr);
-    QVERIFY(cmd2 != nullptr);
-    QCOMPARE(cmd2->text(), QStringLiteral("Edit Adjustment LUT"));
-    // 给 undoStack push 后 cmd2 由 stack 拥有, 不能 delete
-    undoStack.push(cmd2);
-    // undo 不会崩 (m_host 是 null, 走 nullptr 检查返回)
-    undoStack.undo();
-    // redo: no-op 跟 P0-3.2 行为一致
-    undoStack.redo();
+    QCOMPARE(static_cast<int>(stack.at(adjIdx)->adjustmentLut.at<uchar>(10)), 245);
+    const cv::Mat rendered2 = stack.render();
+    QVERIFY(!rendered2.empty());
+    QCOMPARE(static_cast<int>(rendered2.at<cv::Vec3b>(0, 0)[0]), 255 - 10);
 }
 
 // =====================================================================
@@ -882,6 +881,82 @@ void tst_LayerCommand::test_remove_redo_same_layer()
     QCOMPARE(stack.count(), 2);
     QCOMPARE(stack.at(0)->name, QStringLiteral("A"));
     QCOMPARE(stack.at(1)->name, QStringLiteral("C"));
+}
+
+// =====================================================================
+//  工具编辑写图层 (04-02)
+// =====================================================================
+
+//  活动图层的选取规则: 有选中用选中, 没选中取最上面的 Bitmap 图层.
+void tst_LayerCommand::test_activeLayerIndex()
+{
+    LayerStack stack;
+    QCOMPARE(stack.activeLayerIndex(), -1);       // 空栈没有活动图层
+
+    stack.addLayer(QStringLiteral("Base"), makeMat(32, 32));
+    QCOMPARE(stack.activeLayerIndex(), 0);        // 没选中 → 最上面的 Bitmap
+
+    stack.addLayer(QStringLiteral("Top"), makeMat(32, 32));
+    QCOMPARE(stack.activeLayerIndex(), 1);
+
+    stack.setSelection(0);
+    QCOMPARE(stack.activeLayerIndex(), 0);        // 有选中 → 用选中的
+
+    stack.setSelection(1);
+    QCOMPARE(stack.activeLayerIndex(), 1);
+
+    cv::Mat *img = stack.activeLayerImage();
+    QVERIFY(img != nullptr);
+    QCOMPARE(img->cols, 32);
+}
+
+//  工具编辑写进图层: 改图层属性 / 切可见性之后, 笔画不能消失.
+//    以前笔画只写合成缓存 m_current, 任何 invalidate 都会把它冲掉.
+void tst_LayerCommand::test_toolEdit_survivesLayerOps()
+{
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("Base"), makeMat(32, 32));
+
+    cv::Mat *target = stack.activeLayerImage();
+    QVERIFY(target != nullptr);
+    // 模拟画笔: 在图层像素上写一笔
+    target->at<cv::Vec3b>(4, 4) = cv::Vec3b(0, 0, 255);
+
+    // 切可见性 (以前会 invalidate 缓存, 把笔画冲掉)
+    stack.setVisible(0, false);
+    stack.setVisible(0, true);
+    // 改属性
+    stack.setOpacity(0, 0.5f);
+    stack.setOpacity(0, 1.0f);
+
+    // 重新合成: 笔画还在
+    const cv::Mat out = stack.render();
+    QVERIFY(!out.empty());
+    QCOMPARE(int(out.at<cv::Vec3b>(4, 4)[2]), 255);
+}
+
+//  图层像素编辑的撤销/重做: undo 写回编辑前, redo 写回编辑后.
+void tst_LayerCommand::test_setLayerImage_undoRedo()
+{
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("Base"), makeMat(32, 32));
+    QUndoStack undoStack;
+
+    cv::Mat before = stack.at(0)->image.clone();
+    cv::Mat after = before.clone();
+    after.at<cv::Vec3b>(4, 4) = cv::Vec3b(0, 0, 255);
+    // 调用方先应用新像素, 再 push 命令
+    stack.at(0)->image = after.clone();
+
+    undoStack.push(LayerCommand::makeSetLayerImage(
+        &stack, 0, before, after, QStringLiteral("stroke")));
+    QCOMPARE(int(stack.at(0)->image.at<cv::Vec3b>(4, 4)[2]), 255);
+
+    undoStack.undo();
+    QCOMPARE(int(stack.at(0)->image.at<cv::Vec3b>(4, 4)[2]), 200);   // 原色 R=200
+
+    undoStack.redo();
+    QCOMPARE(int(stack.at(0)->image.at<cv::Vec3b>(4, 4)[2]), 255);
 }
 
 QTEST_MAIN(tst_LayerCommand)

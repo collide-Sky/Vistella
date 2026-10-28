@@ -16,6 +16,7 @@
 #include <QWidget>
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include <algorithm>
 
 namespace tools {
 
@@ -64,26 +65,30 @@ void CloneTool::hideBrushCursor(ImageWindow* host)
     if (auto* cur = host->brushCursor()) cur->setVisible(false);
 }
 
-void CloneTool::paintAt(QImage& img, const QPointF& dst, const QPointF& src)
+void CloneTool::paintAt(cv::Mat& img, const QPointF& dst, const QPointF& src)
 {
     // 从 src 周围 brushSize 矩形复制到 dst 周围
+    //   坐标先落到 int 变量再构造 Rect —— 直接写 int(src.x()) 会被解析成函数声明
     const int half = m_brushSize / 2;
-    const QRect srcRect(int(src.x()) - half, int(src.y()) - half,
-                       m_brushSize, m_brushSize);
-    const QRect dstRect(int(dst.x()) - half, int(dst.y()) - half,
-                       m_brushSize, m_brushSize);
+    const int sx = static_cast<int>(src.x()) - half;
+    const int sy = static_cast<int>(src.y()) - half;
+    const int dx = static_cast<int>(dst.x()) - half;
+    const int dy = static_cast<int>(dst.y()) - half;
+    //  cv::Rect(a, b, c, d) 写在声明位置会被解析成函数声明, 用 = cv::Rect(...) 形式
+    const cv::Rect srcRect = cv::Rect(sx, sy, m_brushSize, m_brushSize);
+    const cv::Rect dstRect = cv::Rect(dx, dy, m_brushSize, m_brushSize);
     // 边界保护
-    const QRect imgRect(0, 0, img.width(), img.height());
-    const QRect srcClip = srcRect.intersected(imgRect);
-    const QRect dstClip = dstRect.intersected(imgRect);
-    if (srcClip.isEmpty() || dstClip.isEmpty()) return;
-
-    for (int y = 0; y < srcClip.height(); ++y) {
-        for (int x = 0; x < srcClip.width(); ++x) {
-            const QColor c = img.pixelColor(srcClip.x() + x, srcClip.y() + y);
-            img.setPixelColor(dstClip.x() + x, dstClip.y() + y, c);
-        }
-    }
+    const cv::Rect imgRect = cv::Rect(0, 0, img.cols, img.rows);
+    const cv::Rect srcClip = srcRect & imgRect;
+    const cv::Rect dstClip = dstRect & imgRect;
+    if (srcClip.empty() || dstClip.empty()) return;
+    //  cv::Rect 的 width/height 是字段, 不是函数
+    const int w = std::min(srcClip.width, dstClip.width);
+    const int h = std::min(srcClip.height, dstClip.height);
+    if (w <= 0 || h <= 0) return;
+    // 源和目标可能重叠, 先把源区域拷出来再贴
+    cv::Mat srcRoi = img(cv::Rect(srcClip.x, srcClip.y, w, h)).clone();
+    srcRoi.copyTo(img(cv::Rect(dstClip.x, dstClip.y, w, h)));
 }
 
 void CloneTool::commitStroke(const QString& text)
@@ -94,9 +99,11 @@ void CloneTool::commitStroke(const QString& text)
         return;
     }
     m_strokeOpen = false;
-    cv::Mat current = m_host->currentImage().clone();
-    if (auto* stack = m_host->undoStack()) {
-        stack->push(new ImageEditCommand(m_host, m_backup, current, text));
+    //  笔画画在活动图层上, 撤销命令也是图层级快照
+    cv::Mat* target = m_host->activeLayerImage();
+    if (target && m_layerIndex >= 0) {
+        m_host->commitLayerEdit(m_layerIndex);
+        m_host->pushLayerImageEdit(m_layerIndex, m_backup, *target, text);
     }
     m_backup.release();
 }
@@ -121,24 +128,26 @@ void CloneTool::onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& s
     }
 
     // P2.2: snapshot for undo before first paint of the stroke
-    m_backup = host->currentImage().clone();
+    //  笔画写进活动图层的像素, 不写合成缓存 —— 合成缓存下一次 render 就没了
+    cv::Mat* target = host->activeLayerImage();
+    if (!target) {
+        LOG_WARN("[CloneTool] no writable bitmap layer, skip stroke");
+        return;
+    }
+    m_layerIndex = host->activeLayerIndex();
+    m_backup = target->clone();
     m_strokeOpen = true;
 
     m_lastDstPos = scenePos;
     m_dragging = true;
 
     // 立即在点击处绘制一次 (跟 PS 同款, click 后立刻 paint 一次)
-    auto& img = host->currentImage();
-    if (img.empty()) return;
-    QImage qimg = ImageProcessor::matToQImage(img);
-    if (qimg.isNull()) return;
+    if (target->empty()) return;
 
     // source = sample, dst = scenePos (按 m_lastDstPos 算 offset)
     const QPointF offset = m_lastDstPos - scenePos;
-    paintAt(qimg, scenePos, m_samplePoint + offset);
-
-    cv::Mat newMat = ImageProcessor::qImageToMat(qimg);
-    host->setCurrentImage(newMat);
+    paintAt(*target, scenePos, m_samplePoint + offset);
+    host->commitLayerEdit(m_layerIndex);
     showBrushCursor(host, scenePos);
 }
 
@@ -148,16 +157,12 @@ void CloneTool::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF
     if (!m_dragging || !m_hasSample || !host) return;
 
     // PS 同款: 拖动时连续 paint
-    auto& img = host->currentImage();
-    if (img.empty()) return;
-    QImage qimg = ImageProcessor::matToQImage(img);
-    if (qimg.isNull()) return;
+    cv::Mat* target = host->activeLayerImage();
+    if (!target) return;
 
     const QPointF offset = scenePos - m_lastDstPos;
-    paintAt(qimg, scenePos, m_samplePoint + offset);
-
-    cv::Mat newMat = ImageProcessor::qImageToMat(qimg);
-    host->setCurrentImage(newMat);
+    paintAt(*target, scenePos, m_samplePoint + offset);
+    host->commitLayerEdit(m_layerIndex);
     m_lastDstPos = scenePos;
 }
 

@@ -111,10 +111,14 @@ void MosaicTool::uninstallBrushCursor() {
 void MosaicTool::onSceneClicked(const QPointF& scenePos) {
     if (!m_enabled) return;
     if (!m_host) return;
-    cv::Mat& current = m_host->currentImage();
-    if (current.empty()) return;
+    //  涂抹写进活动图层的像素 —— 合成缓存下一次 render 就没了,
+    //  原图基准也不该被涂抹污染 (它是只读基准)
+    cv::Mat* target = m_host->activeLayerImage();
+    if (!target) return;
+    if (target->empty()) return;
     // 1. snapshot
-    m_backup = current.clone();
+    m_layerIndex = m_host->activeLayerIndex();
+    m_backup = target->clone();
     m_strokeOpen = true;
     // 2. 立即在按下点应用一次
     applyMosaicAtInitial(scenePos);
@@ -122,8 +126,9 @@ void MosaicTool::onSceneClicked(const QPointF& scenePos) {
 
 void MosaicTool::applyMosaicAtInitial(const QPointF& scenePos) {
     if (!m_host) return;
-    cv::Mat& current = m_host->currentImage();
-    cv::Mat& original = m_host->originalImage();
+    cv::Mat* target = m_host->activeLayerImage();
+    if (!target) return;
+    cv::Mat& current = *target;
     if (current.empty()) return;
     const int radius = m_size / 2;
     const int x = int(scenePos.x()) - radius;
@@ -143,8 +148,7 @@ void MosaicTool::applyMosaicAtInitial(const QPointF& scenePos) {
         ImageProcessor::mosaic(target, cx, cy, cw, ch, blk);
     };
     applyMosaic(current);
-    if (!original.empty()) applyMosaic(original);
-    m_host->renderToViewPublic();
+    m_host->commitLayerEdit(m_layerIndex);
 }
 
 // onSceneDragMove - 涂抹 stroke 持续移动 (来自 ImageWindow eventFilter 的 MouseMove)
@@ -152,8 +156,9 @@ void MosaicTool::applyMosaicAtInitial(const QPointF& scenePos) {
 void MosaicTool::onSceneDragMove(const QPointF& scenePos) {
     if (!m_enabled) return;
     if (!m_host) return;
-    cv::Mat& current = m_host->currentImage();
-    if (current.empty()) return;
+    cv::Mat* target = m_host->activeLayerImage();
+    if (!target) return;
+    if (target->empty()) return;
     applyMosaicAt(scenePos);
 }
 
@@ -162,24 +167,23 @@ void MosaicTool::onSceneDragEnd() {
     if (!m_host) return;
     if (!m_strokeOpen) return;
     m_strokeOpen = false;
-    cv::Mat& current = m_host->currentImage();
-    if (current.empty() || m_backup.empty()) {
+    cv::Mat* target = m_host->activeLayerImage();
+    if (!target || target->empty() || m_backup.empty()) {
         m_backup.release();
         return;
     }
-    // 关键: 同时改 m_original, 否则后续 slider 变化会重置 m_current
-    //  (其实 onSceneClicked 已经改了 m_original, 这里主要是 push undo)
-    if (auto* stack = m_host->undoStack()) {
-        stack->push(new ImageEditCommand(m_host, m_backup, current,
-                                         QObject::tr("马赛克涂抹")));
-    }
+    //  涂抹落在活动图层上, 撤销命令是图层级快照
+    m_host->commitLayerEdit(m_layerIndex);
+    m_host->pushLayerImageEdit(m_layerIndex, m_backup, *target,
+                                 QObject::tr("马赛克涂抹"));
     m_backup.release();  // 释放 Mat, 避免内存累积
 }
 
 void MosaicTool::applyMosaicAt(const QPointF& scenePos) {
     if (!m_host) return;
-    cv::Mat& current = m_host->currentImage();
-    cv::Mat& original = m_host->originalImage();
+    cv::Mat* target = m_host->activeLayerImage();
+    if (!target) return;
+    cv::Mat& current = *target;
     if (current.empty()) return;
     const int radius = m_size / 2;
     const int x = int(scenePos.x()) - radius;
@@ -219,15 +223,15 @@ void MosaicTool::applyMosaicAt(const QPointF& scenePos) {
         }
     };
     applyMosaic(current);
-    // 关键: 同时改 m_original, 否则后续 slider 变化会重置 m_current
-    if (!original.empty()) applyMosaic(original);
-    m_host->renderToViewPublic();
+    m_host->commitLayerEdit(m_layerIndex);
 }
 
-// TODO(P8.4): ensureBackup() never snapshots, so the mosaic backup path is dead -- see docs/DEBT.md#A-MOSAICBACKUP
 void MosaicTool::ensureBackup() {
-    // P0-1.2 当前: snapshot 在 onSceneClicked 里做, ensureBackup 留给 P0-1.2 后续
-    if (m_backup.empty() && m_host && !m_host->currentImage().empty()) {
-        m_backup = m_host->currentImage().clone();
+    // snapshot 在 onSceneClicked 里做, ensureBackup 兜底 (活动图层的像素)
+    if (m_backup.empty() && m_host) {
+        if (auto* target = m_host->activeLayerImage()) {
+            m_layerIndex = m_host->activeLayerIndex();
+            m_backup = target->clone();
+        }
     }
 }

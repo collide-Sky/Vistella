@@ -69,7 +69,8 @@ public:
     void beginStroke() { m_strokeOpen = true; ensureBackup(); }
     void endStroke()   { m_strokeOpen = false; }
 
-    // Snapshot used for ImageEditCommand undo. Set by beginStroke().
+    // Snapshot of the active layer's pixels, used by the layer-level undo
+    // command. Set by beginStroke().
     const cv::Mat& backupImage() const { return m_backup; }
 
 signals:
@@ -91,6 +92,8 @@ private:
     QGraphicsEllipseItem*    m_brushCursor = nullptr;  // 未使用, 实际 brush cursor 在 host
     QGraphicsScene*          m_scene = nullptr;
     cv::Mat                  m_backup;
+    //  本次涂抹落在哪个图层 (活动图层的索引)
+    int                      m_layerIndex = -1;
     bool                     m_enabled    = false;
     bool                     m_strokeOpen = false;
     Type                     m_type       = Pixelate;

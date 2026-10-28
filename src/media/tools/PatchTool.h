@@ -73,6 +73,8 @@ private:
     // P2.2: undo snapshot (snapshot before applyPatch, push after)
     cv::Mat m_backup;
     bool    m_strokeOpen = false;
+    //  本次修补落在哪个图层
+    int     m_layerIndex = -1;
 
     void applyPatch(ImageWindow* host, const QPointF& dstA, const QPointF& dstB);
 };

@@ -270,6 +270,17 @@ public:
     int  selection() const { return m_selection; }
     QList<int> selectedIndices() const;   // 当前 + 它的 linked
 
+    // ---- 工具编辑目标 (活动图层) ----
+    //   activeLayerIndex(): 工具编辑落在哪一层.
+    //     有选中层就用选中层; 没有选中时取最上面的 Bitmap 图层
+    //     (新打开的文档只有一层, 那层就是活动层).
+    //   activeLayerImage(): 活动图层的可写像素缓冲, 工具就地涂抹用.
+    //     返回 nullptr = 当前没有可写的 Bitmap 图层, 工具应放弃这次编辑.
+    //   这两个接口是"编辑写图层而不是写合成缓存"的唯一入口:
+    //   直接改 m_current 的编辑会被下一次 render() 冲掉.
+    int   activeLayerIndex() const;
+    cv::Mat* activeLayerImage();
+
     // ---- 渲染 ----
     cv::Mat render() const;                 // 所有可见层按 zOrder + blend 混合
     cv::Mat renderOne(int index) const;     // 单独预览某层 (含 opacity)

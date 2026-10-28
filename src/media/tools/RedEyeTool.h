@@ -68,6 +68,8 @@ private:
 
     // P2.2: undo snapshot
     cv::Mat m_backup;
+    //  本次处理落在哪个图层
+    int m_layerIndex = -1;
 
     void applyRedEyeAt(ImageWindow* host, const QPointF& a, const QPointF& b);
 };

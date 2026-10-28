@@ -337,7 +337,7 @@ public:
     void setFakeImage(int w = 800, int h = 600) {
         // 灰色 cv::Mat,够大让 box.rect() 落入
         cv::Mat fake(h, w, CV_8UC3, cv::Scalar(128, 128, 128));
-        setCurrentImage(fake);
+        setDocumentImage(fake);
     }
 };
 

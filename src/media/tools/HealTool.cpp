@@ -37,7 +37,10 @@ void HealTool::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF&
     showBrushCursor(host, scenePos);
     if (!m_dragging || !m_hasSample || !host) return;
 
-    auto& img = host->currentImage();
+    //  修复结果写回活动图层的像素 (跟 CloneTool 同一套图层路径)
+    cv::Mat* target = host->activeLayerImage();
+    if (!target) return;
+    cv::Mat& img = *target;
     if (img.empty()) return;
 
     // 1. 构造 mask (brush 范围 = 255)
@@ -60,7 +63,7 @@ void HealTool::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF&
     roi.copyTo(img(brushRect));
 
     m_lastDstPos = scenePos;
-    host->setCurrentImage(img);
+    host->commitLayerEdit(m_layerIndex);
 }
 
 } // namespace tools

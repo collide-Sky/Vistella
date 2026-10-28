@@ -71,13 +71,13 @@
 | ID | 位置 | 重复次数 | 问题 | 用户可见影响 | 建议阶段 | 验收方式 | 状态 |
 |---|---|---|---|---|---|---|---|
 | `A-REFRESHDUP` | `src/media/imagewindow.cpp` | `renderToView` **44** 次 / `invalidateCurrentCache` **51** 次 | 53 处手写 `invalidate + render` 组合，**漏一处就是静默 bug** —— 12+ 个操作（刷新智能对象 / 切换嵌入链接 / 改图层名 / 应用智能变换）改完画面不刷新，要等下一次别的操作才变（05-13） | 改了图层/智能对象/蒙版后画面不更新 | P8.4 | 收敛为单一 `invalidateAndRender()` 入口；R4 规则归零 | open |
-| `A-REFRESHDUP2` | `src/media/tools/Brush.cpp` | `renderToViewPublic` **3** 次 | 画笔每帧直接调渲染，绕过统一入口（04-31） | 笔画落笔路径与其它编辑路径行为不一致 | P8.4 | 同上 | open |
+| `A-REFRESHDUP2` | `src/media/tools/Brush.cpp` | `renderToViewPublic` **0** 次 | 画笔改走 `ImageWindow::refreshCanvasNow()` 单一入口；笔画同时写进活动图层而不是合成缓存 | 笔画落笔路径与其它编辑路径行为一致 | P8.4 | 同上 | done |
 
 ### A.2　功能占位（接口在、功能不工作）
 
 | ID | 位置 | 缺什么 | 用户可见影响 | 建议阶段 | 验收方式 | 状态 |
 |---|---|---|---|---|---|---|
-| `A-CROP` | `tools/Crop.cpp:64` | `applyCrop` 只 `clone()` 并 push 一条 redo 恒 no-op 的命令，**从不调 `setCurrentImage()`** → 裁剪工具「什么都没发生」（04-04） | 拖框松手 → 图像尺寸不变，撤销栈多一条空记录 | P8.5 | 裁剪后尺寸真的变 + 可撤销可重做 | open |
+| `A-CROP` | `tools/Crop.cpp` | — | 裁剪走 `setDocumentImage()`（文档级几何变更），`ImageEditCommand` 的 undo 还原原图、redo 重放裁剪结果 | 拖框松手 → 图像尺寸真的变，Ctrl+Z / Ctrl+Y 都能用 | P8.5 | 裁剪后尺寸真的变 + 可撤销可重做 | done |
 | `A-MOVE` | `tools/MoveTool.cpp:17` | 22 行空壳，注释「F-N will wire drag behavior」；不拖图层/文字/选区（04-18） | 移动工具只有状态栏提示，光标是 SizeAll 但拖不动 | P8.5 | 按 V 能拖当前图层/文字 | open |
 | `A-BRUSHOPTIONS` | `ImageOptionBar.cpp:230` | `onToolChanged` 先判 `if (id==Brush && m_mosaic)` 而 `m_mosaic` 恒非空 → 永远显示 Mosaic 页，下面 Brush 分支成**不可达死代码**（04-05） | 选中画笔后**看不到任何画笔选项**，画笔锁死 13px 黑笔 | P8.5 | 选中画笔出现大小/硬度/不透明度/流量/预设 | open |
 | `A-KEYBOARD` | `ToolContext.cpp:106` | `ToolContext::onKeyPress/onKeyRelease` **零调用者**；`ImageCanvas::keyPressed` 信号无订阅者 → 工具键盘逻辑全是死代码（04-07） | 多边形永远闭合不了、钢笔回车提交不了、Esc 取消不了、Shift 等比失效 | P8.5 | 键盘能完成工具关键操作 | open |
@@ -93,7 +93,7 @@
 | `A-TOOLICON` | `media/tools/LeftToolBar.cpp:28/31` | 9 个工具用自绘 SVG，剩下 6 个（Pen/Clone/Heal/Patch/RedEye/MaskBrush）仍用 QStyle 内置图标 | 工具栏图标一半是系统默认样式，和整体风格不一致 | P8.9 | 6 个工具补齐 SVG，或明确统一为同一套图标 | open |
 | `A-ICCTIFFTAG` | `media/icc/IccTiffEmbed.cpp:206` | TIFF 的 ICC tag 条目里 value offset 写死成常量，嵌入的 profile 实际读不出来 | 导出带 ICC 的 TIFF 后再打开，颜色管理失效 | P8.9 | 导出的 TIFF 能被其它软件正确读到 profile | open |
 | `A-HUESATLUT` | `media/imageprocessor.cpp:825` | `applyLut` 接受 hue/sat pairs 但只应用 lightness 的 1D LUT，色相/饱和度滑条**完全无效** | HSL 面板拖 Hue/Saturation 画面没反应 | P8.5 | Hue/Saturation 滑条真的改变画面 | open |
-| `A-MOSAICBACKUP` | `media/imagewindow/MosaicTool.cpp:227` | `ensureBackup()` 是空函数，快照实际在 `onSceneClicked` 里做 | 马赛克没有备份链路，撤销后无法恢复原图 | P8.4 | 马赛克前有真实备份且可恢复 | open |
+| `A-MOSAICBACKUP` | `media/imagewindow/MosaicTool.cpp` | — | `ensureBackup()` 现在快照的是**活动图层**的像素，涂抹落在图层上，撤销走 `LayerCommand::SetLayerImage` | 马赛克有真实备份链路，撤销能还原图层像素 | P8.4 | 马赛克前有真实备份且可恢复 | done |
 | `A-TEXTOVERLAYAPPLY` | `media/imagewindow/TextOverlayController.cpp:244` | `applyStyleToCurrent()` 空实现，保留接口没有调用者 | 文字样式改动没有统一的生效入口 | P8.5 | 文字样式通过该入口生效，或删除该接口 | open |
 | `A-PROJECTFORMAT` | `ImageIOController.cpp:68` | 保存写 `currentImage()`，**无任何工程格式** → 保存后重开只剩一张扁平图，图层/蒙版/智能对象/文字全丢（LYR-23 / §5.2） | 「非破坏修图」定位不成立 | P8.8 | 自定义 .vst 格式往返 | open |
 
@@ -113,10 +113,8 @@
 | `camera_raw/CameraRawLoader.h:8` | 接口齐全，wiring 未做 | `A-CAMERARAW` |
 | `compositor/nodes/LayerStackAdapter.cpp:245` | mask + blend wiring | `A-LAYERMASK` |
 | `imagewindow/ImageIOController.h:35-40` | signals mirror，MainWindow wiring | `A-IMAGESAVESIGNAL` |
-| `imagewindow/MosaicTool.cpp:227` | 占位：P0-1.2 后续轮次用 | `A-MOSAICBACKUP` |
 | `imagewindow/TextOverlayController.cpp:244` | 占位：保留接口 | `A-TEXTOVERLAYAPPLY` |
 | `media/texteditorframe.cpp:101` | 保留接口以便将来扩展 | `A-TEXTEDITORFRAME` |
-| `media/tools/Crop.h:10` | Full mouse press/move/release wiring + applyCrop | `A-CROP` |
 | `media/tools/LeftSidePanel.h:64` | accessors for downstream wiring | 待定 |
 | `media/tools/LeftToolBar.cpp:27` | 后续 P5 接 SVG 图标 | `A-TOOLICON` |
 | `media/tools/LeftToolBar.cpp:31` | 6 个工具暂用 QStyle 占位图标 | `A-TOOLICON` |
