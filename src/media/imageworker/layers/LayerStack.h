@@ -62,6 +62,12 @@ public:
     // ---- 修改操作 (基础) ----
     int  addLayer(const Layer &layer);
     int  addLayer(const QString &name, const cv::Mat &image);
+    // 在指定位置插入图层.
+    //   addLayer 只能追加到末尾, 撤销一次"删除中间图层"时必须把图层放回
+    //   原来的位置, 否则撤销之后层序就变了 (删除 [A,B,C] 的 B, 撤销得到
+    //   [A,B,C] 而不是 [A,C,B]).
+    //   index 取值 [0, count()], count() 表示追加到末尾.
+    int  insertLayer(int index, const Layer &layer);
     // 4 种 per-kind add 工厂
     int  addTextLayer(const QString &name, const QString &text,
                       int fontSize = 24, const QColor &color = QColor(Qt::white),
@@ -107,6 +113,11 @@ public:
 
     bool removeLayer(int index);
     bool duplicateLayer(int index);
+    // 通知外部: 图层内容被直接改写, 需要发 layerChanged.
+    //   LayerStack 自己的 setter 都带 emit, 但有几条路径是直接写 Layer
+    //   字段的 (command 还原快照 / 蒙版恢复 / 类型转换还原), 这些路径
+    //   绕过了 setter, 用这个补发一次, 让画布和图层面板知道内容变了.
+    void notifyLayerChanged(int index);
     bool moveUp(int index);
     bool moveDown(int index);
     bool setVisible(int index, bool visible);
@@ -294,8 +305,12 @@ public:
     //   paths agree pixel-for-pixel on the matrices listed there.
     cv::Mat renderViaCompositor() const;
     bool    compositorEnabled() const;
-    // TODO(P8.4): setCompositorEnabled() has no production caller, so grayscale and RGBA documents render black with no fallback -- see docs/DEBT.md#A-SETCOMPOSITOR
-    void    setCompositorEnabled(bool on);
+    // 打开/关闭 compositor 渲染路径.
+    //   allowFallback: compositor 路径出错 (节点抛异常 / 产出空图) 时是否
+    //   自动回退到 legacy 逐层合成. 默认开着 —— 保守策略, 宁可慢也不能
+    //   让用户看到一张全黑的图.
+    // TODO(P8.4): 设置页没有暴露这个开关, 用户遇到 compositor 渲染异常时没法手动切回 legacy 路径 -- see docs/DEBT.md#A-SETCOMPOSITOR
+    void    setCompositorEnabled(bool on, bool allowFallback = true);
 
     // 画布尺寸
     //   渲染非 Bitmap (text/vector/smart) 时需要知道输出尺寸
@@ -323,9 +338,14 @@ signals:
 private:
     QList<LayerPtr> m_layers;
 
+    // legacy 逐层合成 (compositor 路径的兜底实现)
+    cv::Mat renderLegacy() const;
+
     // switch for renderViaCompositor. Default
     // true since P8.2; see the renderViaCompositor() declaration above.
     bool m_compositorEnabled = true;
+    // compositor 失败时是否回退到 legacy 路径 (默认保守: 开)
+    bool m_compositorFallback = true;
     int  m_selection = -1;
     // Phase 3: 画布尺寸 (无 base layer 时 rasterize text/vector 用)
     cv::Size m_canvasSize = cv::Size(800, 600);

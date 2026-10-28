@@ -70,6 +70,10 @@ public:
     transform::TransformBox* box() { return m_box.get(); }
     const transform::TransformBox* box() const { return m_box.get(); }
 
+    // 给 ImageCanvas 的弱引用: 工具退出后 box 销毁, 画布侧的 weak_ptr 自动失效,
+    // 不会再拿到已析构的 box.
+    std::weak_ptr<transform::TransformBox> boxRef() const { return m_box; }
+
     // 撤销栈用 — 拖动结束时 ImageWindow 抓取
     bool hasPendingTransform() const { return m_pending; }
 
@@ -79,7 +83,7 @@ public:
     void setRotationCallback(RotationCallback cb) { m_rotationCb = std::move(cb); }
 
 private:
-    std::unique_ptr<transform::TransformBox> m_box;
+    std::shared_ptr<transform::TransformBox> m_box;
 
     // 拖动状态
     transform::TransformBox::Handle m_activeHandle = transform::TransformBox::Handle::None;

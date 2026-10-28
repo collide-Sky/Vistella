@@ -210,8 +210,8 @@ void tst_SmartObjectTransform::test_rasterizeWithTransform_applied()
 //     1. backup oldT/oldHas
 //     2. setSmartObjectTransform(newT) — returns true on actual change
 //     3. push makeSetSmartObjectTransform(stack, idx, oldT, oldHas, newT, newHas)
-//   Phase 5 pattern: push + manual setter (push's redo is no-op for transform).
-//   undo restores oldT/oldHas.
+//   调用约定: 先改图层, 再 push command.
+//   undo restores oldT/oldHas, redo 把新变换写回去.
 // =====================================================================
 
 void tst_SmartObjectTransform::test_undoTransform()
@@ -229,19 +229,25 @@ void tst_SmartObjectTransform::test_undoTransform()
     const QTransform newT = QTransform::fromScale(2.0, 2.0);
     const bool     newHad = true;
 
-    auto *cmd = LayerCommand::makeSetSmartObjectTransform(
-        &stack, 0, oldT, oldHad, newT, newHad);
-    QVERIFY(cmd != nullptr);
-    undo.push(cmd);
-    // Apply the new transform manually (Phase 5 pattern).
+    // 调用约定: 先改图层, 再 push command
     QVERIFY(stack.setSmartObjectTransform(0, newT));
     QCOMPARE(stack.at(0)->hasTransform, true);
     QCOMPARE(stack.at(0)->transform, newT);
 
-    // Undo: stores oldT/oldHad, not newT/newHad.
+    auto *cmd = LayerCommand::makeSetSmartObjectTransform(
+        &stack, 0, oldT, oldHad, newT, newHad);
+    QVERIFY(cmd != nullptr);
+    undo.push(cmd);
+
+    // Undo: 还原 oldT/oldHad.
     undo.undo();
     QCOMPARE(stack.at(0)->hasTransform, false);
     QCOMPARE(stack.at(0)->transform, oldT);   // identity in this case
+
+    // Redo: 把新变换写回去
+    undo.redo();
+    QCOMPARE(stack.at(0)->hasTransform, true);
+    QCOMPARE(stack.at(0)->transform, newT);
 
     QFile::remove(path);
 }

@@ -8,6 +8,8 @@
 #include <QObject>
 #include <QString>
 
+#include <opencv2/core.hpp>
+
 class ImageWindow;
 
 class ImageIOController : public QObject {
@@ -44,6 +46,10 @@ private:
     QString promptForSavePath() const;
     QString promptForOpenPath() const;
     bool    writeImage(const QString& path);
+
+    // 写盘用的合成图 = 文档像素 + 文字 item.
+    // 一次性渲染, 不改场景和撤销栈; 合成失败时退回原始像素.
+    bool    buildSaveComposite(cv::Mat& out) const;
 
     ImageWindow* m_host = nullptr;
 };

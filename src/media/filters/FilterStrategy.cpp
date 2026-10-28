@@ -254,18 +254,42 @@ QString PosterizeFilter::paramText() const { return QStringLiteral("levels=%1").
 
 void GradientMapFilter::apply(const cv::Mat& in, cv::Mat& out)
 {
-    // P0 简化: 灰度 -> 灰度反转 (PS 默认黑白渐变映射效果)
+    // 灰度 -> 灰度反转 (PS 默认黑白渐变映射效果)
     if (in.empty()) return;
     cv::Mat gray;
-    if (in.channels() == 3) {
-        cv::cvtColor(in, gray, cv::COLOR_BGR2GRAY);
-    } else {
+    if (in.channels() == 1) {
         gray = in;
+    } else {
+        cv::cvtColor(in, gray, cv::COLOR_BGR2GRAY);   // 3ch / 4ch 都支持
     }
-    out = gray;
-    cv::LUT(gray, cv::Mat(1, 256, CV_8U), out);  // identity LUT placeholder
-    if (in.channels() == 3) {
-        cv::cvtColor(out, out, cv::COLOR_GRAY2BGR);
+
+    // 显式构造 LUT: 之前用未初始化的 cv::Mat(1, 256, CV_8U) 当 LUT,
+    // 里面是随机内存 -> 输出噪点或全黑.
+    cv::Mat lut(1, 256, CV_8U);
+    for (int i = 0; i < 256; ++i) {
+        lut.at<uchar>(0, i) = static_cast<uchar>(255 - i);
+    }
+    cv::Mat mapped;
+    cv::LUT(gray, lut, mapped);
+
+    // 输出通道数跟输入一致 (alpha 原样保留)
+    switch (in.channels()) {
+    case 1:
+        out = mapped;
+        break;
+    case 3:
+        cv::cvtColor(mapped, out, cv::COLOR_GRAY2BGR);
+        break;
+    case 4: {
+        std::vector<cv::Mat> ch;
+        cv::split(in, ch);
+        std::vector<cv::Mat> merged = {mapped, mapped, mapped, ch[3]};
+        cv::merge(merged, out);
+        break;
+    }
+    default:
+        out = mapped;
+        break;
     }
 }
 QString GradientMapFilter::paramText() const { return QStringLiteral("默认黑白"); }

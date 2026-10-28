@@ -6,14 +6,13 @@
 //     - m_currentTextItem (搬过来 = m_current)
 //     - m_handleDragItem (搬过来)
 //     - m_textColor / m_textFont / m_textSize (搬过来)
-//     - createTextItem / connectItemSignals / flattenText / applyStyleToCurrent
+//     - createTextItem / connectItemSignals / renderComposite / applyStyleToCurrent
 //     - onTextFontChanged / onTextSizeChanged / onTextColorClicked
 //     - onMosaicModeToggled 的"锁/解锁文字 item 双击编辑" 副作用
 //   保持原代码语义, 仅**位置**移动, 不**逻辑**删除/简化.
 #include "TextOverlayController.h"
 #include "../imagewindow.h"
 #include "../graphicstextitem.h"
-#include "../imageprocessor.h"
 
 #include <QFont>
 #include <QPainter>
@@ -21,7 +20,10 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QGraphicsScene>
+#include <QStyleOption>
 #include <QTextDocument>
+
+#include <opencv2/imgproc.hpp>
 
 TextOverlayController::TextOverlayController(QObject* parent) : QObject(parent) {}
 TextOverlayController::~TextOverlayController() = default;
@@ -165,46 +167,55 @@ void TextOverlayController::connectItemSignals(GraphicsTextItem* item) {
     });
 }
 
-// 扁平化: 把所有文字 item 用 QPainter 渲染到 QImage, 转 cv::Mat, 烧到 m_current
-// 烧图后 m_items 清空 (字变成图片像素, 不可再编辑/撤销)
-void TextOverlayController::flattenText() {
-    if (!m_host) return;
-    auto& current = m_host->currentImage();
-    if (m_items.isEmpty() || current.empty()) return;
-    // 先让所有 item 退出编辑
-    for (auto* item : m_items) {
-        if (item) item->endEditing();
+// 一次性渲染: 把所有文字 item 叠加到 base 的副本上, 结果放进 out.
+// 场景、文档像素、撤销栈都不动 —— 写盘/导出只拿这份副本, 文档随时可以继续编辑.
+bool TextOverlayController::renderComposite(const cv::Mat& base, cv::Mat& out) {
+    out = base;
+    if (base.empty()) return false;
+    if (base.depth() != CV_8U) return false;      // 16bit 等格式不做叠加
+
+    // 合成画布统一成 BGRA: Format_ARGB32 在小端下的字节序就是 BGRA,
+    // 可以直接包住 cv::Mat 的缓冲.
+    cv::Mat bgra;
+    switch (base.channels()) {
+    case 1: cv::cvtColor(base, bgra, cv::COLOR_GRAY2BGRA); break;
+    case 3: cv::cvtColor(base, bgra, cv::COLOR_BGR2BGRA); break;
+    case 4: bgra = base.clone(); break;            // clone: 画笔不能碰到底图缓冲
+    default: return false;
     }
-    // m_current -> QImage
-    QImage img = ImageProcessor::matToQImage(current);
-    if (img.isNull()) return;
-    QPainter p(&img);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    p.setRenderHint(QPainter::TextAntialiasing, true);
-    // 渲染每个文字 item 到对应 scene 位置
-    for (auto* item : m_items) {
-        if (!item) continue;
-        const QPointF sp = item->scenePos();
-        p.save();
-        p.translate(sp);
-        p.rotate(item->rotation());
-        p.scale(item->scale(), item->scale());
-        item->document()->drawContents(&p);
-        p.restore();
-    }
-    p.end();
-    // QImage -> cv::Mat (通过 host 的 setCurrentImage 触发完整 refreshAll)
-    cv::Mat newMat = ImageProcessor::qImageToMat(img);
-    m_host->setCurrentImage(newMat);
-    // 删除所有 item (从 scene 移除 + delete)
-    for (auto* item : m_items) {
-        if (item) {
-            m_host->sceneRef().removeItem(item);
-            delete item;
+    if (bgra.type() != CV_8UC4 || bgra.empty()) return false;
+
+    QImage work(bgra.data, bgra.cols, bgra.rows,
+                static_cast<int>(bgra.step), QImage::Format_ARGB32);
+    if (work.isNull()) return false;
+
+    if (!m_items.isEmpty()) {
+        // 正在编辑的文字先定稿: 编辑态下 Qt 会在文字外面画一个黑框,
+        // 那个框不该进到写盘结果里.
+        for (auto* item : m_items) {
+            if (item && item->isEditing()) item->endEditing();
         }
+        QPainter p(&work);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setRenderHint(QPainter::TextAntialiasing, true);
+        for (auto* item : m_items) {
+            if (!item) continue;
+            // 用 item 自己的场景变换绘制, 位置/旋转/缩放跟画布上看到的完全一致.
+            item->paintTextContent(&p);
+        }
+        p.end();
     }
-    m_items.clear();
-    setCurrent(nullptr);
+
+    // 回到输出格式: 通道数跟底图一致 (灰度仍是灰度, 带 alpha 的仍带 alpha).
+    cv::Mat workMat(work.height(), work.width(), CV_8UC4,
+                    work.bits(), static_cast<size_t>(work.bytesPerLine()));
+    switch (base.channels()) {
+    case 1: cv::cvtColor(workMat, out, cv::COLOR_BGRA2GRAY); break;
+    case 3: cv::cvtColor(workMat, out, cv::COLOR_BGRA2BGR); break;
+    case 4: out = workMat.clone(); break;
+    default: return false;
+    }
+    return !out.empty();
 }
 
 // 字体变化 -> 应用到 m_current

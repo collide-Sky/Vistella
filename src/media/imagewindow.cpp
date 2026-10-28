@@ -599,6 +599,10 @@ ImageWindow::~ImageWindow()
     if (m_textCtrl) {
         m_textCtrl->removeAllFromSceneAndDelete();
     }
+    // 作废在飞的异步任务: bump task id, 让所有还没回来的回调自己判定过期.
+    //   (关 tab / 关程序时后台 render 可能还在跑, 回调回来时窗口已经没了)
+    m_currentTaskId.fetch_add(1);
+
     // EngineContext 析构会 ~ThreadPool -> shutdown(false)
     //   等所有 worker 退出后再删, 避免后台 task 跑一半 ImageWindow 已经销毁
     m_engine.reset();
@@ -1003,7 +1007,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(), idx, before);
                 m_undoStack->push(cmd);
             }
-            invalidateCurrentCache();
+            refreshCanvasNow();
             statusBar()->showMessage(tr("已转换为智能对象 (嵌入模式)"), 3000);
         });
         // P1.4.3: 智能对象 Rasterize (SmartObject -> Bitmap) - 推 undoStack 走 makeRasterizeSmartObject
@@ -1023,7 +1027,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(), idx, before);
                 m_undoStack->push(cmd);
             }
-            invalidateCurrentCache();
+            refreshCanvasNow();
             statusBar()->showMessage(tr("已栅格化智能对象"), 3000);
         });
         // P1.4.3: 智能对象 Relink (重新链接源文件) - 弹 QFileDialog 选文件, 推 undoStack 走 makeSetSmartObject
@@ -1044,7 +1048,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(), idx, oldPath, oldEmbed);
                 m_undoStack->push(cmd);
             }
-            invalidateCurrentCache();
+            refreshCanvasNow();
             statusBar()->showMessage(tr("已重新链接源文件"), 3000);
         });
         // SmartFilter chain entry (PS-style smart filter)
@@ -1342,6 +1346,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             } else {
                 m_layerStack->mergeIntoGroup(indices);
             }
+            refreshCanvasNow();
             statusBar()->showMessage(
                 tr("已编组 [%1..%2] (入撤销栈)").arg(first).arg(last), 3000);
         });
@@ -1370,6 +1375,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             } else {
                 m_layerStack->flattenGroup(sel);
             }
+            refreshCanvasNow();
             statusBar()->showMessage(
                 tr("已解组 (入撤销栈)"), 3000);
         });
@@ -1963,12 +1969,17 @@ void ImageWindow::rebuildCurrentCache()
         return;
     }
     const uint64_t myTaskId = m_currentTaskId.fetch_add(1) + 1;
+    // QPointer 守卫: 窗口销毁后指针自动置 null, 回调直接返回,
+    // 不会碰到已经析构的 ImageWindow (关 tab / 关程序时在飞的任务会晚到).
+    QPointer<ImageWindow> guard(this);
     m_layerStack->renderAsync(m_engine.get(),
-        [this, myTaskId](cv::Mat result) -> void {
-            if (m_currentTaskId.load() != myTaskId) return;   // 已被新 task 取代, 丢弃
-            m_current = std::move(result);
-            m_currentDirty = false;
-            renderToView();
+        [guard, myTaskId](cv::Mat result) -> void {
+            ImageWindow* self = guard.data();
+            if (!self) return;                                          // 窗口已销毁
+            if (self->m_currentTaskId.load() != myTaskId) return;        // 已被新 task 取代, 丢弃
+            self->m_current = std::move(result);
+            self->m_currentDirty = false;
+            self->renderToView();
         });
 }
 
@@ -2169,7 +2180,7 @@ bool ImageWindow::convertCurrentLayerToSmartObjectWithFilter(filter::FilterKind 
         return false;
     }
     if (auto* sfCmd = lyr::LayerCommand::makeAppendSmartFilter(
-            m_layerStack.get(), idx, filterType, /*oldStrength=*/1.0)) {
+            m_layerStack.get(), newIdx, filterType, /*oldStrength=*/1.0)) {
         stack->push(sfCmd);
     }
 
@@ -2309,7 +2320,8 @@ void ImageWindow::onMosaicModeToggled(bool on)
 // 文字 item 管理 (主流做法: 文字作为 scene item, 永远不烧图)
 //   - createTextItem(scenePos): 创建新 item, 入栈, 进入编辑
 //   - registerTextItem / unregisterTextItem: 维护 m_textItems 列表
-//   - flattenText(): Ctrl+S 前调用, 把所有文字 item 渲染到 m_current, 清空列表
+//   - 写盘/导出时由 ImageIOController 走 TextOverlayController::renderComposite
+//     做一次性合成, 文档像素和撤销栈都不动
 // =============================================================
 
 // 连接文字 item 的信号 (editingFinished + transformFinished) - 撤销栈用
@@ -2344,14 +2356,6 @@ void ImageWindow::registerTextItem(GraphicsTextItem *item)
 void ImageWindow::unregisterTextItem(GraphicsTextItem *item)
 {
     if (m_textCtrl) m_textCtrl->unregisterTextItem(item);
-}
-
-// 扁平化: 把所有文字 item 用 QPainter 渲染到 QImage, 转 cv::Mat, 烧到 m_current
-// 烧图后 m_textItems 清空 (字变成图片像素, 不可再编辑/撤销)
-//   委托给 m_textCtrl
-void ImageWindow::flattenText()
-{
-    if (m_textCtrl) m_textCtrl->flattenText();
 }
 
 // 字体变化 -> 应用到 m_currentTextItem
@@ -2943,7 +2947,7 @@ void ImageWindow::applySmartObjectTransform(int idx, const QTransform& newTransf
             m_layerStack.get(), idx, oldT, oldHad, newT, newHad);
         m_undoStack->push(cmd);
     }
-    invalidateCurrentCache();
+    refreshCanvasNow();
     statusBar()->showMessage(tr("已应用 SmartObject 变换"), 3000);
 }
 
@@ -2957,7 +2961,7 @@ void ImageWindow::onFreeTransform()
     m_ctx->setState(std::make_unique<tools::TransformTool>());
     // P0-6.10: 把 TransformTool 的 box weak ref 给 ImageCanvas, drawForeground 画 10 handle
     if (auto* tool = dynamic_cast<tools::TransformTool*>(m_ctx->currentState())) {
-        if (m_canvas) m_canvas->setTransformBox(tool->box());
+        if (m_canvas) m_canvas->setTransformBox(tool->boxRef());
         // P0-6.12: 注入 rotation 同步 callback → PropertiesDock.setRotation
         if (m_rightDock) {
             if (auto* props = m_rightDock->findChild<docks::PropertiesDock*>()) {

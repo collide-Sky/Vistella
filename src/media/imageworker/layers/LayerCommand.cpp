@@ -27,6 +27,8 @@ LayerCommand::LayerCommand(LayerStack *stack, Op op, const Layer &layer, QUndoCo
     case Remove: setText(QStringLiteral("Remove Layer")); break;
     default:     setText(QStringLiteral("Layer Op")); break;
     }
+    // Add: 调用方已经把这层加进栈了, 它就在栈顶
+    if (op == Add && m_stack) m_index = m_stack->count() - 1;
 }
 
 LayerCommand* LayerCommand::makeRemove(LayerStack *stack, int index)
@@ -34,7 +36,9 @@ LayerCommand* LayerCommand::makeRemove(LayerStack *stack, int index)
     if (!stack) return nullptr;
     auto l = stack->at(index);
     if (!l) return nullptr;
-    return new LayerCommand(stack, Remove, *l);   // 保存完整 layer (含 cv::Mat clone)
+    auto *cmd = new LayerCommand(stack, Remove, *l);   // 保存完整 layer (含 cv::Mat clone)
+    cmd->m_index = index;                              // 记住原位, 撤销时放回原位
+    return cmd;
 }
 
 LayerCommand::LayerCommand(LayerStack *stack, int index, int direction, QUndoCommand *parent)
@@ -47,6 +51,7 @@ LayerCommand::LayerCommand(LayerStack *stack, Op op, int index, float floatVal, 
     : QUndoCommand(parent), m_stack(stack), m_op(op), m_index(index), m_floatVal(floatVal)
 {
     setText(QStringLiteral("Set Opacity"));
+    captureAfter();
 }
 
 LayerCommand::LayerCommand(LayerStack *stack, Op op, int index, bool boolVal, QUndoCommand *parent)
@@ -58,18 +63,21 @@ LayerCommand::LayerCommand(LayerStack *stack, Op op, int index, bool boolVal, QU
     case Linked:  setText(QStringLiteral("Toggle Link")); break;
     default:      setText(QStringLiteral("Layer Bool Op")); break;
     }
+    captureAfter();
 }
 
 LayerCommand::LayerCommand(LayerStack *stack, Op op, int index, int intVal, QUndoCommand *parent)
     : QUndoCommand(parent), m_stack(stack), m_op(op), m_index(index), m_intVal(intVal)
 {
     setText(QStringLiteral("Set Blend"));
+    captureAfter();
 }
 
 LayerCommand::LayerCommand(LayerStack *stack, Op op, int index, const QString &strVal, QUndoCommand *parent)
     : QUndoCommand(parent), m_stack(stack), m_op(op), m_index(index), m_strVal(strVal)
 {
     setText(QStringLiteral("Rename Layer"));
+    captureAfter();
 }
 
 LayerCommand::LayerCommand(LayerStack *stack, int mergeIndex, QUndoCommand *parent)
@@ -82,10 +90,19 @@ LayerCommand::LayerCommand(LayerStack *stack, int mergeIndex, QUndoCommand *pare
     if (target) m_mergeBefore = *target;   // 下层 before
     auto src = m_stack->at(mergeIndex);
     if (src) {
+        m_mergeUpper = *src;               // 上层: 撤销时插回原来的位置
         // 计算 mergeAfter: target 跟 src 按 src.opacity blend
+        //   两层的尺寸/类型对不齐时 addWeighted 会抛 cv::Exception,
+        //   先判一次, 对不齐就退化成"以下层为准", 至少不崩.
         cv::Mat merged;
         const float a = src->opacity;
-        cv::addWeighted(m_mergeBefore.image, 1.0f - a, src->image, a, 0.0, merged);
+        if (!m_mergeBefore.image.empty() && !src->image.empty()
+            && m_mergeBefore.image.size() == src->image.size()
+            && m_mergeBefore.image.type() == src->image.type()) {
+            cv::addWeighted(m_mergeBefore.image, 1.0f - a, src->image, a, 0.0, merged);
+        } else {
+            merged = m_mergeBefore.image.clone();
+        }
         m_mergeAfter = m_mergeBefore;
         m_mergeAfter.image = merged;
     }
@@ -112,6 +129,7 @@ LayerCommand* LayerCommand::makeMergeIntoGroup(LayerStack *stack,
     auto *cmd = new LayerCommand(stack, Group, -1);
     cmd->setText(QStringLiteral("Group Layers"));
     cmd->m_groupIndices = indices;
+    cmd->m_groupChildCount = indices.size();
     // Apply merge now so the caller doesn't have to.
     cmd->m_index = stack ? stack->mergeIntoGroup(indices) : -1;
     return cmd;
@@ -127,6 +145,7 @@ LayerCommand* LayerCommand::makeFlattenGroup(LayerStack *stack, int groupIdx)
     if (stack && groupIdx >= 0 && groupIdx < stack->count()) {
         const LayerId gid = stack->idOf(groupIdx);
         cmd->m_flattenChildren = stack->groupChildrenOf(gid);  // deep copy
+        cmd->m_groupChildCount = static_cast<int>(cmd->m_flattenChildren.size());
         stack->flattenGroup(groupIdx);
     }
     return cmd;
@@ -168,6 +187,8 @@ LayerCommand::LayerCommand(LayerStack *stack, Op op, int index)
     : QUndoCommand(), m_stack(stack), m_op(op), m_index(index)
 {
     // 留给 factory 设置 m_strVal / m_oldMat / m_oldColor
+    // 新值从图层上读 (调用方已经先改过图层了)
+    captureAfter();
 }
 
 // =====================================================================
@@ -396,388 +417,384 @@ LayerCommand* LayerCommand::makeSetSmartFilterStrength(LayerStack *stack, int fi
 // =====================================================================
 //  undo / redo
 // =====================================================================
+//
+//  统一模型:
+//    undo() → applyState(false) 应用"旧值"
+//    redo() → applyState(true)  应用"新值"
+//  两者走同一套 LayerStack 公开 API, 末尾统一 notifyChanged():
+//    发 layerChanged (图层面板刷新) + 作废渲染缓存 + 重绘画布.
+//
+//  首个 redo 的特殊性:
+//    QUndoStack::push 会立刻调一次 redo(). 大部分 Op 的"向前"动作是调用方
+//    自己做的 (先 setOpacity 再 push), 所以首个 redo 必须是 no-op, 否则会
+//    重复应用一次. Remove / Merge 是例外 —— 它们的向前动作由 command 自己
+//    执行, 首个 redo 必须真的做.
+//
+//  状态变更都落在 LayerStack 的 API 上, 由 LayerStack 负责发信号;
+//  少数直接改 Layer 字段的路径 (类型转换还原 / 蒙版还原) 由 notifyChanged()
+//  统一补发一次 layerChanged.
 
 void LayerCommand::undo()
 {
     if (!m_stack) return;
+    applyState(false);
+    notifyChanged();
+}
+
+void LayerCommand::redo()
+{
+    if (!m_stack) return;
+    const bool first = m_firstRedo;
+    m_firstRedo = false;
+    // 调用方已经应用过新值的 Op: 首个 redo 不能再应用一次
+    if (first && !selfApplied()) return;
+    applyState(true);
+    notifyChanged();
+}
+
+//  这个 Op 的"向前"动作是不是由 command 自己执行.
+//    Remove / Merge: 是 —— 调用方只 push, 动作留给 command.
+//    其余: 否 —— 调用方已经先改过图层了.
+bool LayerCommand::selfApplied() const
+{
+    return m_op == Remove || m_op == Merge;
+}
+
+//  构造时从图层上读出"新值".
+//    调用方的约定是"先改图层, 再 push command", 所以构造时图层上已经是
+//    新值, 这里读出来存着, redo 时原样写回去.
+void LayerCommand::captureAfter()
+{
+    if (!m_stack || m_index < 0) return;
+    auto l = m_stack->at(m_index);
+    if (!l) return;
+    switch (m_op) {
+    case Opacity:      m_floatNew = l->opacity; break;
+    case Visible:      m_boolNew  = l->visible; break;
+    case Locked:       m_boolNew  = l->locked; break;
+    case Linked:       m_boolNew  = l->isLinked; break;
+    case Blend:        m_intNew   = static_cast<int>(l->blend); break;
+    case Rename:       m_strNew   = l->name; break;
+    case SetText:      m_strNew   = l->text; break;
+    case SetTextFont:
+        m_strNew   = l->fontFamily;
+        m_intNew   = l->fontSize;
+        m_newColor = l->textColor;
+        break;
+    case SetSmartObject:
+        m_strNew  = l->sourceFilePath;
+        m_boolNew = l->sourceEmbedded;
+        break;
+    case SetAdjustmentType: m_strNew = l->adjustmentType; break;
+    case SetAdjustmentLut:
+        // host 模式的新图由 factory 单独存 (m_newMat), 这里只管 legacy 模式
+        if (!m_host) m_newMat = l->adjustmentLut.clone();
+        break;
+    case AddMask:
+    case ClearMask:
+        m_newMat  = l->layerMask.clone();
+        m_boolNew = l->maskEnabled;
+        break;
+    case EnableMask:         m_boolNew = l->maskEnabled; break;
+    case ToggleSmartObjectEmbed: m_boolNew = l->sourceEmbedded; break;
+    case ConvertToSmartObject:
+    case RasterizeSmartObject:
+        m_afterLayer = *l;
+        break;
+    case SetSmartObjectTransform:
+        m_newTransform    = l->transform;
+        m_newHasTransform = l->hasTransform;
+        break;
+    case AppendSmartFilter:
+        // 重新挂回链上时要用完整的 filter 图层
+        m_layer   = *l;
+        m_intNew  = l->filterSlotIndex;
+        break;
+    case RemoveSmartFilter:
+        // 结构操作: 新状态 = "filter 已经不在栈里", 没有可读的新值
+        break;
+    case MoveSmartFilter:
+        m_intNew = l->filterSlotIndex;
+        break;
+    case SetSmartFilterEnabled:
+        m_boolNew = l->opacity > 0.0f;
+        break;
+    case SetSmartFilterStrength:
+        m_doubleNew = l->filterStrength;
+        break;
+    default:
+        break;
+    }
+}
+
+//  按 Op 应用"旧值"(after=false) 或"新值"(after=true).
+//    值的来源:
+//      - 旧值: 调用方 push 时传进来的 (m_floatVal / m_boolVal / m_intVal /
+//              m_strVal / m_oldColor / m_oldMat / m_oldTransform ...)
+//      - 新值: 构造时 captureAfter() 从图层上读出来的 (m_floatNew / ...)
+void LayerCommand::applyState(bool after)
+{
+    if (!m_stack) return;
     switch (m_op) {
     case Add: {
-        // undo REMOVES the layer
-        //   Caller is expected to pre-addLayer before push (see
-        //   ImageWindow::applyLayerOp + LayerPanel::duplicateLayer
-        //   patterns: caller does addLayer/duplicateLayer first, then
-        //   pushes LayerCommand(Add) to capture the new layer for undo).
-        //   This means push's redo() must be a no-op (the layer is already
-        //   in the stack), and undo() removes it.
-        m_stack->removeLayer(m_stack->count() - 1);
+        // 调用方已经把图层加在栈顶; 撤销 = 删掉它, 重做 = 放回原位
+        if (after) m_stack->insertLayer(m_index, m_layer);
+        else      m_stack->removeLayer(m_index);
         break;
     }
     case Remove: {
-        // Restore
-        m_stack->addLayer(m_layer);
+        // 向前 = 删掉这层 (由 command 自己执行), 撤销 = 放回原来的位置
+        if (after) m_stack->removeLayer(m_index);
+        else      m_stack->insertLayer(m_index, m_layer);
         break;
     }
     case Move: {
-        // undo reverses the move applied by the
-        //   makeMoveUp / makeMoveDown factory. m_index = pre-move index.
-        //   redo is a no-op (factory already applied the move).
-        //   forward was moveUp(m_index):   undo = moveDown(m_index + 1)
-        //   forward was moveDown(m_index): undo = moveUp(m_index - 1)
-        //   The m_index + 1 / m_index - 1 shift accounts for the layer's
-        //   new position after the forward move.
-        if (m_intVal > 0 && m_index >= 0) m_stack->moveDown(m_index + 1);
-        else if (m_intVal < 0)            m_stack->moveUp(m_index - 1);
-        break;
-    }
-    case Opacity: {
-        // m_floatVal = old value (push 时存的)
-        // undo 走旧值, redo 走新值 (m_floatNew)
-        auto l = m_stack->at(m_index);
-        if (l) l->opacity = m_floatVal;
-        break;
-    }
-    case Visible: {
-        auto l = m_stack->at(m_index);
-        if (l) l->visible = m_boolVal;
-        break;
-    }
-    case Locked: {
-        auto l = m_stack->at(m_index);
-        if (l) l->locked = m_boolVal;
-        break;
-    }
-    case Linked: {
-        auto l = m_stack->at(m_index);
-        if (l) l->isLinked = m_boolVal;
-        break;
-    }
-    case Blend: {
-        auto l = m_stack->at(m_index);
-        if (l) l->blend = static_cast<Layer::BlendMode>(m_intVal);
-        break;
-    }
-    case Rename: {
-        auto l = m_stack->at(m_index);
-        if (l) l->name = m_strVal;
-        break;
-    }
-    case Merge: {
-        // 拆分: 把上层恢复, 下层还原
-        //   现在下层 image 是 m_mergeAfter.image, 上层已删
-        //   undo: 下层还原 m_mergeBefore.image, 上层 addLayer(upperLayer)
-        //   Phase 1 简化: 不知道 upper 的原 Layer (没存), 不可逆 undo
-        //   简化: 仅恢复下层 image, 不重建上层
-        if (auto target = m_stack->at(m_index - 1)) {
-            target->image = m_mergeBefore.image.clone();
+        // m_index = 移动前的下标, m_intVal = 方向 (+1 上 / -1 下)
+        if (after) {
+            if (m_intVal > 0)      m_stack->moveUp(m_index);
+            else if (m_intVal < 0) m_stack->moveDown(m_index);
+        } else {
+            if (m_intVal > 0)      m_stack->moveDown(m_index + 1);
+            else if (m_intVal < 0) m_stack->moveUp(m_index - 1);
         }
         break;
     }
-    case Group: {
-        // undo mergeIntoGroup = flattenGroup
-        if (m_stack && m_index >= 0 && m_index < m_stack->count()) {
-            if (auto l = m_stack->at(m_index); l && l->kind == Layer::Group) {
-                m_stack->flattenGroup(m_index);
+    case Opacity:
+        m_stack->setOpacity(m_index, after ? m_floatNew : m_floatVal);
+        break;
+    case Visible:
+        m_stack->setVisible(m_index, after ? m_boolNew : m_boolVal);
+        break;
+    case Locked:
+        m_stack->setLocked(m_index, after ? m_boolNew : m_boolVal);
+        break;
+    case Linked:
+        m_stack->setLinked(m_index, after ? m_boolNew : m_boolVal);
+        break;
+    case Blend:
+        m_stack->setBlend(m_index,
+                          static_cast<Layer::BlendMode>(after ? m_intNew : m_intVal));
+        break;
+    case Rename:
+        m_stack->rename(m_index, after ? m_strNew : m_strVal);
+        break;
+    case Merge: {
+        // 向前: 下层写合并结果, 上层删掉
+        // 撤销: 下层还原, 上层插回原来的位置
+        if (after) {
+            if (auto t = m_stack->at(m_index - 1)) {
+                t->image = m_mergeAfter.image.clone();
             }
+            m_stack->removeLayer(m_index);
+        } else {
+            if (auto t = m_stack->at(m_index - 1)) {
+                t->image = m_mergeBefore.image.clone();
+            }
+            m_stack->insertLayer(m_index, m_mergeUpper);
+        }
+        // 下层是被直接改写的, 补发一次信号
+        m_stack->notifyLayerChanged(m_index - 1);
+        break;
+    }
+    case Group: {
+        // 向前: 把连续的子层重新打包成一个 Group
+        // 撤销: 解散这个 Group, 子层回到栈里
+        if (after) {
+            QList<int> idx;
+            for (int i = 0; i < m_groupChildCount; ++i) idx.append(m_index + i);
+            const int g = m_stack->mergeIntoGroup(idx);
+            if (g >= 0) m_index = g;
+        } else {
+            m_stack->flattenGroup(m_index);
         }
         break;
     }
     case Ungroup: {
-        // undo flattenGroup = remove the
-        //   N children currently in m_layers at [atIndex, atIndex+N) and
-        //   reinsertGroup a fresh Group container there. flattenGroup
-        //   left the children in m_layers; we must remove them before
-        //   reinsertGroup (which inserts rather than replaces) so the
-        //   final stack matches pre-flatten state.
-        if (m_stack && !m_flattenChildren.empty() && m_flattenAtIndex >= 0
-            && m_flattenAtIndex <= m_stack->count()) {
-            const int n = static_cast<int>(m_flattenChildren.size());
+        // 向前: 解散 Group (子层摊平回栈里)
+        // 撤销: 把子层收回去, 重新立一个 Group
+        if (after) {
+            m_stack->flattenGroup(m_index);
+        } else if (!m_flattenChildren.empty() && m_flattenAtIndex >= 0
+                   && m_flattenAtIndex <= m_stack->count()) {
+            const int n = m_groupChildCount > 0
+                        ? m_groupChildCount
+                        : static_cast<int>(m_flattenChildren.size());
             for (int i = 0; i < n; ++i) {
                 if (m_flattenAtIndex >= m_stack->count()) break;
                 m_stack->removeLayer(m_flattenAtIndex);
             }
-            m_stack->reinsertGroup(m_flattenAtIndex, std::move(m_flattenChildren));
-            m_flattenChildren.clear();   // moved-from guard for repeat undo
+            // 传副本而不是 move: 命令要留着这份快照, 否则 undo→redo→undo
+            // 第二遍就还原不回来
+            m_stack->reinsertGroup(m_flattenAtIndex, m_flattenChildren);
         }
         break;
     }
-    case SetText: {
-        auto l = m_stack->at(m_index);
-        if (l) l->text = m_strVal;
+    case SetText:
+        m_stack->setText(m_index, after ? m_strNew : m_strVal);
         break;
-    }
-    case SetTextFont: {
-        auto l = m_stack->at(m_index);
-        if (l) {
-            l->fontFamily = m_strVal;
-            l->fontSize = m_intVal;
-            l->textColor = m_oldColor;
-        }
+    case SetTextFont:
+        m_stack->setTextFont(m_index,
+                             after ? m_strNew : m_strVal,
+                             after ? m_intNew : m_intVal,
+                             after ? m_newColor : m_oldColor);
         break;
-    }
-    case SetSmartObject: {
-        auto l = m_stack->at(m_index);
-        if (l) {
-            l->sourceFilePath = m_strVal;
-            l->sourceEmbedded = m_boolVal;
-        }
+    case SetSmartObject:
+        m_stack->setSmartObjectSource(m_index,
+                                      after ? m_strNew : m_strVal,
+                                      after ? m_boolNew : m_boolVal);
         break;
-    }
-    case SetAdjustmentType: {
-        auto l = m_stack->at(m_index);
-        if (l) l->adjustmentType = m_strVal;
+    case SetAdjustmentType:
+        m_stack->setAdjustmentType(m_index, after ? m_strNew : m_strVal);
         break;
-    }
     case SetAdjustmentLut: {
         // 分支: m_host 非空 → 走 image-based undo (AdjustmentPanel 用法)
-        //   m_host 走 replaceCurrentImage 恢复 image (跟 ImageEditCommand::undo 等价, 但用 layer 命名空间)
-        //   m_host 为空 → 走原 l->adjustmentLut 路径 (P0-3.2 之前的用法, 兼容)
+        //   m_host 走 replaceCurrentImage 恢复 image (跟 ImageEditCommand 等价)
+        //   m_host 为空 → 走 layer.adjustmentLut 路径 (兼容已有调用)
         if (m_host) {
-            if (!m_oldMat.empty()) m_host->replaceCurrentImage(m_oldMat);
+            const cv::Mat &img = after ? m_newMat : m_oldMat;
+            if (!img.empty()) m_host->replaceCurrentImage(img);
         } else {
             auto l = m_stack->at(m_index);
-            if (l && !m_oldMat.empty()) l->adjustmentLut = m_oldMat.clone();
+            if (l) {
+                const cv::Mat &lut = after ? m_newMat : m_oldMat;
+                l->adjustmentLut = lut.empty() ? cv::Mat() : lut.clone();
+                m_stack->notifyLayerChanged(m_index);
+            }
         }
         break;
     }
     case AddMask: {
-        // undo: 恢复原 mask (无就置空) + 原 enabled
-        auto l = m_stack->at(m_index);
-        if (l) {
-            l->layerMask = m_oldMat.empty() ? cv::Mat() : m_oldMat.clone();
-            l->maskEnabled = m_boolVal;
+        // 向前: 挂上新蒙版; 撤销: 还原原来的蒙版 + 开关
+        if (after) {
+            if (!m_newMat.empty()) m_stack->addMask(m_index, m_newMat);
+        } else {
+            auto l = m_stack->at(m_index);
+            if (l) {
+                l->layerMask = m_oldMat.empty() ? cv::Mat() : m_oldMat.clone();
+                l->maskEnabled = m_boolVal;
+                m_stack->notifyLayerChanged(m_index);
+            }
         }
         break;
     }
     case ClearMask: {
-        // undo: 恢复 mask + enabled
-        auto l = m_stack->at(m_index);
-        if (l) {
-            l->layerMask = m_oldMat.empty() ? cv::Mat() : m_oldMat.clone();
-            l->maskEnabled = m_boolVal;
+        // 向前: 清掉蒙版; 撤销: 还原原来的蒙版 + 开关
+        if (after) {
+            m_stack->clearMask(m_index);
+        } else {
+            auto l = m_stack->at(m_index);
+            if (l) {
+                l->layerMask = m_oldMat.empty() ? cv::Mat() : m_oldMat.clone();
+                l->maskEnabled = m_boolVal;
+                m_stack->notifyLayerChanged(m_index);
+            }
         }
         break;
     }
-    case EnableMask: {
-        auto l = m_stack->at(m_index);
-        if (l) l->maskEnabled = m_boolVal;
+    case EnableMask:
+        m_stack->enableMask(m_index, after ? m_boolNew : m_boolVal);
         break;
-    }
     case ToggleSmartObjectEmbed: {
-        // undo: 还原 old embedded
         auto l = m_stack->at(m_index);
         if (l && l->kind == Layer::SmartObject) {
-            l->sourceEmbedded = m_boolVal;
-            // 注: cache 文件可能已不一致, 但 render 时会重新复制/删除
+            l->sourceEmbedded = after ? m_boolNew : m_boolVal;
+            m_stack->notifyLayerChanged(m_index);
         }
         break;
     }
-    case ConvertToSmartObject: {
-        // undo: restore Bitmap state captured in m_layer.
-        //   m_layer holds the Bitmap (image + name + visibility / opacity / etc.)
-        //   Use replace semantics: write m_layer fields into the live layer.
-        auto l = m_stack->at(m_index);
-        if (l) {
-            l->kind = m_layer.kind;
-            l->name = m_layer.name;
-            l->image = m_layer.image.clone();
-            l->sourceFilePath = m_layer.sourceFilePath;
-            l->sourceEmbedded = m_layer.sourceEmbedded;
-            l->transform = m_layer.transform;
-            l->hasTransform = m_layer.hasTransform;
-        }
-        break;
-    }
+    case ConvertToSmartObject:
     case RasterizeSmartObject: {
-        // undo: restore SmartObject state captured in m_layer.
+        // 这两个是"整层状态切换", 直接把快照写回图层
+        const Layer &snap = after ? m_afterLayer : m_layer;
         auto l = m_stack->at(m_index);
         if (l) {
-            l->kind = m_layer.kind;
-            l->sourceFilePath = m_layer.sourceFilePath;
-            l->sourceEmbedded = m_layer.sourceEmbedded;
-            l->transform = m_layer.transform;
-            l->hasTransform = m_layer.hasTransform;
-            // image is irrelevant for SmartObject (rendered from source) — drop.
-            l->image = cv::Mat();
+            l->kind = snap.kind;
+            l->name = snap.name;
+            l->image = snap.image.clone();
+            l->sourceFilePath = snap.sourceFilePath;
+            l->sourceEmbedded = snap.sourceEmbedded;
+            l->transform = snap.transform;
+            l->hasTransform = snap.hasTransform;
+            m_stack->notifyLayerChanged(m_index);
         }
         break;
     }
     case SetSmartObjectTransform: {
         auto l = m_stack->at(m_index);
         if (l) {
-            l->transform = m_oldTransform;
-            l->hasTransform = m_oldHasTransform;
+            l->transform    = after ? m_newTransform : m_oldTransform;
+            l->hasTransform = after ? m_newHasTransform : m_oldHasTransform;
+            m_stack->notifyLayerChanged(m_index);
         }
         break;
     }
     case AppendSmartFilter: {
-        // undo: drop the appended filter sub-layer.
-        //   We rely on m_stack->removeSmartFilter which cleans chain
-        //   bookkeeping. The filter's parent is m_layer.parentSmartIndex
-        //   captured at push time. If the index has shifted (e.g. another
-        //   layer was inserted before), fall back to m_index lookup of
-        //   a SmartFilter layer with parentSmartIndex stored in m_strVal
-        //   hint — for simplicity we trust m_index here since the chain
-        //   API doesn't reorder.
-        auto l = m_stack->at(m_index);
-        if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
-            m_stack->removeSmartFilter(l->parentSmartIndex, m_index);
+        // 向前: 把 filter 子层挂回父 SmartObject 的链上
+        // 撤销: 从链上摘掉
+        if (after) {
+            const int idx = m_stack->reinsertSmartFilter(m_layer, m_layer.filterSlotIndex);
+            if (idx >= 0) m_index = idx;
+        } else {
+            auto l = m_stack->at(m_index);
+            if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
+                m_stack->removeSmartFilter(l->parentSmartIndex, m_index);
+            }
         }
         break;
     }
     case RemoveSmartFilter: {
-        // undo: re-insert the SmartFilter at the captured slot position
-        //   in its parent SmartObject's chain.
-        if (m_layer.kind == Layer::SmartFilter && m_layer.parentSmartIndex >= 0) {
-            m_stack->reinsertSmartFilter(m_layer, m_layer.filterSlotIndex);
+        // 向前: 把 filter 子层摘掉
+        // 撤销: 挂回链上原来的槽位
+        if (after) {
+            auto l = m_stack->at(m_index);
+            if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
+                m_stack->removeSmartFilter(l->parentSmartIndex, m_index);
+            }
+        } else {
+            const int idx = m_stack->reinsertSmartFilter(m_layer, m_layer.filterSlotIndex);
+            if (idx >= 0) m_index = idx;
         }
         break;
     }
     case MoveSmartFilter: {
-        // undo: move filter back to m_oldSlot.
         auto l = m_stack->at(m_index);
         if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
-            m_stack->moveSmartFilter(l->parentSmartIndex, m_index, m_oldSlot);
+            m_stack->moveSmartFilter(l->parentSmartIndex, m_index,
+                                      after ? m_intNew : m_oldSlot);
         }
         break;
     }
     case SetSmartFilterEnabled: {
-        // undo: restore old opacity (enabled = opacity 1, disabled = 0).
         auto l = m_stack->at(m_index);
-        if (l && l->kind == Layer::SmartFilter) {
-            l->opacity = m_boolVal ? 1.0f : 0.0f;
+        if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
+            m_stack->setSmartFilterEnabled(l->parentSmartIndex, m_index,
+                                            after ? m_boolNew : m_boolVal);
         }
         break;
     }
     case SetSmartFilterStrength: {
         auto l = m_stack->at(m_index);
-        if (l && l->kind == Layer::SmartFilter) {
-            l->filterStrength = m_floatVal;
+        if (l && l->kind == Layer::SmartFilter && l->parentSmartIndex >= 0) {
+            m_stack->setSmartFilterStrength(l->parentSmartIndex, m_index,
+                                             after ? m_doubleNew
+                                                   : static_cast<double>(m_floatVal));
         }
         break;
     }
     }
 }
 
-void LayerCommand::redo()
+//  undo / redo 末尾的统一出口.
+//    状态变更本身已经发过 layerChanged (setter 路径自带, 直接改字段的路径
+//    在 applyState 里补发), 这里负责把画布刷新出来 —— 撤销/重做之后用户
+//    必须立刻看到结果, 否则画面停在旧帧.
+void LayerCommand::notifyChanged()
 {
     if (!m_stack) return;
-    switch (m_op) {
-    case Add: {
-        // redo is a no-op because the caller
-        //   has already pre-added the layer (see LayerPanel/ImageWindow
-        //   pattern: addLayer/duplicateLayer first, then push the Add
-        //   LayerCommand). Matches Group/Ungroup factory pattern.
-        //
-        //   Without this no-op, every duplicateLayer / NewBitmap op
-        //   added the layer twice (count++ twice: once by caller, once
-        //   by Add::redo), bug reported by tst_LayerCommand's
-        //   test_addAfterDuplicate_bugReproducer.
-        break;
-    }
-    case Remove: {
-        // 找到原 layer (用 image 对比简单点; Phase 1 简化: 按 m_layer.image dataPtr)
-        for (int i = 0; i < m_stack->count(); ++i) {
-            auto l = m_stack->at(i);
-            if (l && l.get() && m_layer.image.data == l->image.data) {
-                m_stack->removeLayer(i);
-                break;
-            }
-        }
-        break;
-    }
-    case Move: {
-        // redo is a no-op. Callers go through
-        //   makeMoveUp / makeMoveDown factories which apply the move
-        //   themselves (factory pattern, matches Group/Ungroup/SetText).
-        //   Direct push(new LayerCommand(stack, index, direction)) without
-        //   factory is now a no-op too (kept for source compatibility).
-        break;
-    }
-    case Opacity: {
-        // m_floatVal = old value, redo 路径在 mainwindow 实际调 stack.setOpacity (新值)
-        //   LayerCommand::redo 自己不改 opacity (避免和 mainwindow 的 setOpacity 双调)
-        //   Phase 1 简化: redo no-op, undo 还原 old value
-        break;
-    }
-    case Visible: {
-        // redo is a no-op. Caller did
-        //   setVisible(newValue) before pushing; pushing a redo that
-        //   reverts to m_boolVal (the old value) would silently undo the
-        //   caller's setVisible. Matches Opacity/SetText pattern.
-        break;
-    }
-    case Locked: {
-        // redo is a no-op (matches Visible)
-        break;
-    }
-    case Linked: {
-        // redo is a no-op (matches Visible)
-        break;
-    }
-    case Blend: {
-        // redo is a no-op. Caller did
-        //   setBlend(newMode) before pushing; a redo that reverts to
-        //   m_intVal (the old mode) would silently undo the caller.
-        break;
-    }
-    case Rename: {
-        // redo is a no-op. Caller did
-        //   rename(newName) before pushing; a redo that reverts to
-        //   m_strVal (the old name) would silently undo the caller.
-        break;
-    }
-    case Merge: {
-        m_stack->mergeDown(m_index);
-        break;
-    }
-    case Group: {
-        // redo is a no-op because the factory
-        //   already applied mergeIntoGroup. Matches SmartFilter pattern.
-        break;
-    }
-    case Ungroup: {
-        // redo is a no-op because the factory
-        //   already applied flattenGroup. Matches SmartFilter pattern.
-        break;
-    }
-    case SetText:
-    case SetTextFont:
-    case SetSmartObject:
-    case SetAdjustmentType:
-    case AddMask:
-    case ClearMask:
-    case EnableMask:
-    case ToggleSmartObjectEmbed:
-    case ConvertToSmartObject:
-    case RasterizeSmartObject:
-    case SetSmartObjectTransform:
-        // Phase 3/4/5 简化: redo no-op (跟 Opacity 一致)
-        //   真实 mainwindow 流程: push(cmd 存 old) → setXxx(new) → undo 还原 old → setXxx(new) → redo no-op
-        break;
-    case SetAdjustmentLut:
-        // redo is a no-op for both host and
-        //   legacy paths. The caller (AdjustmentPanel::applyCurrentTab +
-        //   commitUndoDebounced) has already applied m_newMat via
-        //   setCurrentImage before pushing this command. Without the
-        //   no-op, push's redo would re-apply m_newMat (double-apply).
-        //   Matches the Phase 3/4/5 simplification pattern used by
-        //   Visible/Locked/Linked/Blend/Rename/Move/Group/Ungroup/Opacity.
-        //
-        //   Legacy path (host == null) was already a no-op; this comment
-        //   brings the host path in line.
-        //
-        //   Trade-off: redo after undo is a no-op, so user cannot redo
-        //   to restore m_newMat. Same as SetText / Opacity trade-off.
-        break;
-    case AppendSmartFilter:
-    case RemoveSmartFilter:
-    case MoveSmartFilter:
-    case SetSmartFilterEnabled:
-    case SetSmartFilterStrength:
-        // Phase 1 simplification (matches other factories): redo no-op.
-        //   The UI applies the change before push, so redo doesn't need
-        //   to re-apply. Undo reverses via the captured state.
-        break;
+    // LayerStack 的 parent 就是 ImageWindow (ImageWindow 构造时这么挂的);
+    // 单测里 LayerStack 没有 parent, 这里自然跳过.
+    if (auto *host = qobject_cast<ImageWindow *>(m_stack->parent())) {
+        host->refreshCanvasNow();
     }
 }
 

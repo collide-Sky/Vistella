@@ -95,6 +95,22 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     // P7.1: PS-style double-click swap on fg/bg swatch (event filter).
     if (ui->fgSwatch) ui->fgSwatch->installEventFilter(this);
     if (ui->bgSwatch) ui->bgSwatch->installEventFilter(this);
+
+    // button click -> Mediator.switchTool.
+    //   连接放在构造期: 按钮本身跟文档无关, 每次 attach 再连一遍会叠加,
+    //   一次点击就会触发 N 次切工具.
+    for (auto it = m_buttons.begin(); it != m_buttons.end(); ++it) {
+        const mediators::ToolId id = it.key();
+        connect(it.value(), &QToolButton::clicked, this, [this, id](bool checked) {
+            // checked 来自 click 触发 (按钮 toggle 状态)
+            if (checked && m_toolMed) {
+                m_toolMed->switchTool(id);
+            } else if (!checked) {
+                // 再点一次 -> 切回 None 状态
+                if (m_toolMed) m_toolMed->switchTool(mediators::ToolId::None);
+            }
+        });
+    }
 }
 
 LeftToolBar::~LeftToolBar()
@@ -211,36 +227,24 @@ ToolState* LeftToolBar::createMaskBrushTool()  { return createToolState(mediator
 
 void LeftToolBar::attach(mediators::ToolMediator* toolMed, ToolContext* ctx)
 {
+    // 先断开上一个文档: 不 detach 的话旧连接会留着, 一次点击触发 N 次切工具,
+    // 而且旧文档销毁后连接里的裸指针就悬垂了.
+    detach();
+
     m_toolMed = toolMed;
     m_ctx = ctx;
 
-    // 1. 监听 Mediator 切工具 → 同步 button 高亮 + ctx setState
+    // 监听 Mediator 切工具 -> 同步 button 高亮 + ctx setState
     if (m_toolMed) {
-        connect(m_toolMed, &mediators::ToolMediator::toolSwitched,
+        connect(m_toolMed.data(), &mediators::ToolMediator::toolSwitched,
                 this, &LeftToolBar::onToolMediatorSwitched);
-    }
-
-    // 2. button click → Mediator.switchTool (Mediator 转发给 ctx setState)
-    for (auto it = m_buttons.begin(); it != m_buttons.end(); ++it) {
-        const mediators::ToolId id = it.key();
-        QToolButton* btn = it.value();
-        connect(btn, &QToolButton::clicked, this, [this, id, btn](bool checked) {
-            // checked 来自 click 触发 (按钮 toggle 状态)
-            if (checked && m_toolMed) {
-                m_toolMed->switchTool(id);
-            } else if (!checked) {
-                // 再点一次 → 切回 None 状态
-                if (m_toolMed) m_toolMed->switchTool(mediators::ToolId::None);
-            }
-            (void)btn;
-        });
     }
 }
 
 void LeftToolBar::detach()
 {
     if (m_toolMed) {
-        disconnect(m_toolMed, nullptr, this, nullptr);
+        disconnect(m_toolMed.data(), nullptr, this, nullptr);
     }
     m_toolMed = nullptr;
     m_ctx = nullptr;

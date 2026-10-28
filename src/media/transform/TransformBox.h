@@ -32,6 +32,9 @@
 
 namespace transform {
 
+// 纯值类型 (可拷贝): TransformCommand 按值存变换前后的 box 状态.
+//   生命周期由 TransformTool (shared_ptr) 管理, 画布侧用 weak_ptr 观察 ——
+//   工具退出后 weak_ptr 失效, 画布不会再拿到已析构的 box.
 class TransformBox
 {
 public:
@@ -124,11 +127,8 @@ private:
     //   dragHandle Scale/Skew mode 第一次进入会 snapshot m_rect 到 m_dragOrigRect
     //   (m_dragging=true), 后续 m_rect 一直被更新到 newPos 后状态. commit
     //   时 caller 调 origRect() 拿 pre-drag state 算非 identity 矩阵.
-    //   注: TransformBox 不是 Q_OBJECT 派生, 加字段不影响 QString d-pointer
-    //   共享路径 (跟 P3.1.3 root cause 无关 — 那种 crash 限于 QWidget/QObject 类).
     QRectF m_dragOrigRect;
     bool   m_dragging = false;
-
     // 同步 m_corners 跟 m_rect (Scale/Skew 时, m_corners 跟 m_rect 4 角一致)
     void syncCornersFromRect();
 };

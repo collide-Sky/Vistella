@@ -3,10 +3,10 @@
 // ImageIOController - full impl
 //   接管 imagewindow.cpp 中所有"打开/保存/另存为/关闭"逻辑:
 //     - onOpen: QFileDialog -> m_host->loadFile + RecentManager::touchOpen
-//     - onSave: 委托 onSaveAs 如果 m_host->filePath() 空; flattenText + ImageProcessor::saveImage
+//     - onSave: 委托 onSaveAs 如果 m_host->filePath() 空;
+//               写盘内容 = buildSaveComposite (文档像素 + 文字 item 一次性合成)
 //               + m_host->markSaved() + RecentManager::touchEdit + m_host->emitEditTimeShouldUpdate()
-//     - onSaveAs: QFileDialog -> flattenText + ImageProcessor::saveImage
-//                 + m_host->setFilePath(path) (emit filePathChanged)
+//     - onSaveAs: QFileDialog -> 写合成图 + m_host->setFilePath(path) (emit filePathChanged)
 //                 + m_host->markSaved() + RecentManager::touchEdit + m_host->emitEditTimeShouldUpdate()
 //     - onClose: m_host->emitCloseRequested() (MainWindow 听 ImageWindow::closeRequested)
 //     - loadFile: 薄包装, 调 m_host->loadFile(path, err)
@@ -65,24 +65,45 @@ void ImageIOController::onOpen()
 }
 
 // 保存: 已有路径直接覆盖, 没路径走 onSaveAs
-//   主流做法: 保存前先扁平化所有文字图层 (扁平化后字变成图片像素, 不可撤销/编辑)
-// TODO(P8.8): save writes the flattened composite, so layers, masks and text are lost on reopen -- see docs/DEBT.md#A-PROJECTFORMAT
+//   写盘内容 = 文档像素 + 文字 item 的一次性合成图, 场景和撤销栈不受影响.
 void ImageIOController::onSave()
 {
     if (!m_host) return;
     // 强拷贝 m_host->filePath(): 避免 inline accessor 返 QString 引用被覆盖
     const QString fp = QString(m_host->filePath());
     if (fp.isEmpty()) { onSaveAs(); return; }
-    // 主流做法: 保存前先扁平化所有文字图层 (扁平化后字变成图片像素, 不可撤销/编辑)
-    if (m_host->textOverlay()) m_host->textOverlay()->flattenText();
+    cv::Mat composite;
+    if (!buildSaveComposite(composite)) {
+        QMessageBox::warning(m_host, tr("保存失败"), tr("当前图像没有可写出的像素."));
+        return;
+    }
     QString err;
-    if (!ImageProcessor::saveImage(m_host->currentImage(), fp, &err)) {
+    if (!ImageProcessor::saveImage(composite, fp, &err)) {
         QMessageBox::warning(m_host, tr("保存失败"), err);
         return;
     }
     m_host->markSaved();
     RecentManager::instance().touchEdit(fp);
     m_host->emitEditTimeShouldUpdate();
+}
+
+// 写盘用的合成图: 文档像素 + 文字 item.
+// 文字 item 只在这一次渲染里出现, 文档本身不变 —— 保存后还能继续编辑文字和图层.
+bool ImageIOController::buildSaveComposite(cv::Mat& out) const
+{
+    if (!m_host) return false;
+    out = m_host->currentImage();
+    if (out.empty()) return false;
+    auto* text = m_host->textOverlay();
+    if (!text) return true;
+    cv::Mat merged;
+    if (!text->renderComposite(out, merged)) {
+        // 通道/位深不受支持时退回原始像素, 至少不丢文档本身
+        LOG_WARN("[ImageIO] text overlay not composited, saving raw pixels");
+        return true;
+    }
+    out = merged;
+    return true;
 }
 
 // 另存为: QFileDialog 选新路径 -> 写图 -> 触发 m_host 改路径 (emit filePathChanged) + markSaved
@@ -99,10 +120,13 @@ void ImageIOController::onSaveAs()
         m_host, tr("另存为"), suggest,
         tr("图像 (*.png *.jpg *.bmp);; 全部文件 (*)"));
     if (path.isEmpty()) return;
-    // 主流做法: 保存前先扁平化所有文字图层
-    if (m_host->textOverlay()) m_host->textOverlay()->flattenText();
+    cv::Mat composite;
+    if (!buildSaveComposite(composite)) {
+        QMessageBox::warning(m_host, tr("保存失败"), tr("当前图像没有可写出的像素."));
+        return;
+    }
     QString err;
-    if (!ImageProcessor::saveImage(m_host->currentImage(), path, &err)) {
+    if (!ImageProcessor::saveImage(composite, path, &err)) {
         QMessageBox::warning(m_host, tr("保存失败"), err);
         return;
     }
@@ -126,8 +150,6 @@ void ImageIOController::onClose()
 void ImageIOController::onExport()
 {
     if (!m_host) return;
-    // 主流做法: 保存前先扁平化所有文字图层
-    if (m_host->textOverlay()) m_host->textOverlay()->flattenText();
 
     const QString fp = QString(m_host->filePath());
     const QString suggest = fp.isEmpty()
@@ -145,8 +167,14 @@ void ImageIOController::onExport()
         tr("PNG (*.png);; JPEG (*.jpg *.jpeg);; TIFF (*.tif *.tiff);; WebP (*.webp);; BMP (*.bmp);; GIF (*.gif);; 全部文件 (*)"));
     if (path.isEmpty()) return;
 
+    // 路径定了之后再合成: 用户取消或中途失败时文档一点都没被动过.
+    cv::Mat img;
+    if (!buildSaveComposite(img)) {
+        QMessageBox::warning(m_host, tr("导出失败"), tr("当前图像没有可写出的像素."));
+        return;
+    }
+
     // P0-8.2: resize (按 percent)
-    cv::Mat img = m_host->currentImage();
     if (opts.resizePercent > 0 && opts.resizePercent < 100) {
         const double scale = opts.resizePercent / 100.0;
         cv::Mat resized;

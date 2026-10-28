@@ -20,6 +20,8 @@
 #include <QFileInfo>
 #include <QPainterPath>
 #include <QStandardPaths>
+
+#include "logger.h"
 #include <QDir>
 #include <QUuid>
 #include <QCryptographicHash>
@@ -199,6 +201,27 @@ int LayerStack::appendLayerPtr(LayerPtr layer)
 int LayerStack::addLayer(const QString &name, const cv::Mat &image)
 {
     return addLayer(Layer(name, image));
+}
+
+//  在指定位置插入图层.
+//    addLayer 只能追加到末尾; 撤销一次"删除中间图层"时必须把图层放回
+//    原来的位置, 否则撤销之后层序就变了.
+int LayerStack::insertLayer(int index, const Layer &layer)
+{
+    if (index < 0 || index > m_layers.size()) return -1;
+    m_layers.insert(index, std::make_shared<Layer>(layer));
+    reassignZOrder();
+    emit layerAdded(index);
+    emit countChanged();
+    return index;
+}
+
+//  补发 layerChanged.
+//    setter 路径自带 emit; 直接改 Layer 字段的路径 (command 还原快照 /
+//    蒙版恢复 / 类型转换还原) 绕过 setter, 用这个让宿主知道内容变了.
+void LayerStack::notifyLayerChanged(int index)
+{
+    emit layerChanged(index);
 }
 
 // =====================================================================
@@ -1555,6 +1578,13 @@ cv::Mat LayerStack::render() const
     //   node type. setCompositorEnabled(false) falls back to the legacy
     //   per-layer loop below.
     if (m_compositorEnabled) return renderViaCompositor();
+    return renderLegacy();
+}
+
+// legacy 逐层合成: 找 base layer 作 canvas, 然后按 zOrder asc 逐层混合.
+//   compositor 路径失败时也走这里 (见 renderViaCompositor 的回退分支).
+cv::Mat LayerStack::renderLegacy() const
+{
     if (m_layers.isEmpty()) return cv::Mat();
 
     // Step 1: 找 base layer (kind=Bitmap 且 image 非空) 作 canvas
@@ -1756,21 +1786,37 @@ cv::Mat LayerStack::renderViaCompositor() const
 {
     if (m_layers.isEmpty()) return cv::Mat();
 
-    compositor::LayerStackAdapter::Result built =
-        compositor::LayerStackAdapter::build(const_cast<LayerStack&>(*this));
-    // outputNode is never 0: the adapter always builds an explicit root
-    // (the base bitmap, or a SolidCanvasNode for the no-base case), so
-    // there is no "nothing renderable" branch to fall back on here.
+    try {
+        compositor::LayerStackAdapter::Result built =
+            compositor::LayerStackAdapter::build(const_cast<LayerStack&>(*this));
+        // outputNode is never 0: the adapter always builds an explicit root
+        // (the base bitmap, or a SolidCanvasNode for the no-base case), so
+        // there is no "nothing renderable" branch to fall back on here.
 
-    // Canvas geometry comes from the adapter, which already had to
-    // resolve the compositing root — see LayerStackAdapter::Result.
-    compositor::TileGrid grid(built.canvasSize.width, built.canvasSize.height);
-    compositor::RenderGraph rg(&built.graph, built.outputNode, &grid);
-    return rg.execute();
+        // Canvas geometry comes from the adapter, which already had to
+        // resolve the compositing root — see LayerStackAdapter::Result.
+        compositor::TileGrid grid(built.canvasSize.width, built.canvasSize.height);
+        compositor::RenderGraph rg(&built.graph, built.outputNode, &grid);
+        cv::Mat out = rg.execute();
+        if (!out.empty()) return out;
+        LOG_WARN("[LayerStack] compositor produced an empty canvas");
+    } catch (const cv::Exception& e) {
+        LOG_WARN("[LayerStack] compositor render failed: {}", e.what());
+    } catch (const std::exception& e) {
+        LOG_WARN("[LayerStack] compositor render failed: {}", e.what());
+    }
+
+    // 回退: 走 legacy 逐层合成, 宁可慢也不能让用户看到一张全黑的图
+    if (m_compositorFallback) return renderLegacy();
+    return cv::Mat();
 }
 
 bool LayerStack::compositorEnabled() const { return m_compositorEnabled; }
-void LayerStack::setCompositorEnabled(bool on) { m_compositorEnabled = on; }
+void LayerStack::setCompositorEnabled(bool on, bool allowFallback)
+{
+    m_compositorEnabled = on;
+    m_compositorFallback = allowFallback;
+}
 
 void LayerStack::renderAsync(vistella::tp::EngineContext *engine,
                               RenderCallback callback) const
@@ -1789,11 +1835,17 @@ void LayerStack::renderAsync(vistella::tp::EngineContext *engine,
         return;
     }
     const bool submitted = engine->background().submit_fn(
-        [self, cb, ctx](vistella::tp::TaskContext & /*taskCtx*/) -> void {
+        [self, cb](vistella::tp::TaskContext & /*taskCtx*/) -> void {
             cv::Mat result = self->render();
             // 跨线程切回主线程: Qt::QueuedConnection 必走主线程事件循环
             // 闭包捕获 cb + result, 用 std::move 避免 cv::Mat copy
-            QMetaObject::invokeMethod(ctx,
+            //
+            // 接收者用 LayerStack 自己 (不是 QCoreApplication):
+            //   队列事件挂在接收者上, LayerStack 销毁时 Qt 会自动撤掉这个事件,
+            //   回调就不会落到已经销毁的窗口上.
+            //   之前用 QCoreApplication::instance() 当接收者, 事件没人管,
+            //   关掉 tab 之后回调照样跑 -> UAF.
+            QMetaObject::invokeMethod(const_cast<LayerStack*>(self),
                 [cb, result = std::move(result)]() -> void {
                     cb(result);
                 },

@@ -185,9 +185,12 @@ void ModeSelectorBar::rebuildPages()
 
 void ModeSelectorBar::attach(ToolContext* ctx)
 {
+    // 先断开上一个文档, 否则旧连接留着会重复响应
+    detach();
+
     m_ctx = ctx;
     if (m_ctx) {
-        connect(m_ctx, &ToolContext::toolChanged,
+        connect(m_ctx.data(), &ToolContext::toolChanged,
                 this, &ModeSelectorBar::onToolChanged);
         onToolChanged(m_ctx->currentToolId());
     }
@@ -196,7 +199,7 @@ void ModeSelectorBar::attach(ToolContext* ctx)
 void ModeSelectorBar::detach()
 {
     if (m_ctx) {
-        disconnect(m_ctx, nullptr, this, nullptr);
+        disconnect(m_ctx.data(), nullptr, this, nullptr);
     }
     m_ctx = nullptr;
 }

@@ -14,6 +14,9 @@
 #include <QGraphicsView>
 #include <QPointer>
 #include <QPointF>
+#include <memory>
+
+#include "../transform/TransformBox.h"
 
 class QGraphicsScene;
 class QGraphicsPixmapItem;
@@ -26,7 +29,6 @@ class QPainter;
 class ImageWindow;
 
 namespace selection { class SelectionModel; class MarchingAnts; }
-namespace transform { class TransformBox; }
 
 class ImageCanvas : public QGraphicsView {
     Q_OBJECT
@@ -65,10 +67,10 @@ public:
     bool isMaskOverlayVisible() const { return m_showMaskOverlay; }
 
     // 自由变换 box (10 handle 渲染)
-    //   m_box 是 weak ref, ImageWindow 持有所有权
-    //   当 m_box != nullptr 时, drawForeground 画 8 handle + 1 center + 1 rotation handle
-    void setTransformBox(transform::TransformBox* box);
-    transform::TransformBox* transformBox() const { return m_box; }
+    //   m_box 是弱引用: box 由 TransformTool 持有, 工具退出即销毁.
+    //   用 weak_ptr: box 销毁后 lock() 失败, drawForeground 不会再画野指针.
+    //   当 box 有效时, drawForeground 画 8 handle + 1 center + 1 rotation handle
+    void setTransformBox(std::weak_ptr<transform::TransformBox> box);
     selection::SelectionModel* selectionModel() const { return m_sel; }
     selection::MarchingAnts*   marchingAnts()   const { return m_ants; }
 
@@ -157,8 +159,8 @@ private:
     // P0-4.3: selection rendering
     selection::SelectionModel* m_sel  = nullptr;     // weak ref
     selection::MarchingAnts*   m_ants = nullptr;     // owned
-    // P0-6.10: 自由变换 box (weak ref, ImageWindow::m_box 持所有权)
-    transform::TransformBox*   m_box  = nullptr;
+    // P0-6.10: 自由变换 box (弱引用, TransformTool 持有所有权)
+    std::weak_ptr<transform::TransformBox> m_box;
 
     // mask overlay visibility (PS-style "Show Selection Overlay"
     //   default off; flip on via menu / keyboard shortcut). When enabled,

@@ -11,6 +11,7 @@
 #include <QBrush>
 #include <QColor>
 #include <QGraphicsSceneMouseEvent>
+#include <QGraphicsScene>
 #include <QFocusEvent>
 #include <QStyleOptionGraphicsItem>
 #include <QTextDocument>
@@ -389,6 +390,28 @@ void GraphicsTextItem::paint(QPainter *p, const QStyleOptionGraphicsItem *opt, Q
         p->setPen(QPen(QColor(255, 255, 255), 2));
         p->drawEllipse(QPointF(r.center().x(), r.top() - 32), 10, 10);
     }
+}
+
+// =============================================================
+// 文字内容渲染 (写盘/导出合成用)
+// =============================================================
+
+// 按当前场景变换把文字画到 painter 上.
+// 走 QGraphicsTextItem::paint 而不是 GraphicsTextItem::paint, 所以不会带出
+// 选框和 8 个 handles —— 写盘出来的图只有文字本身.
+void GraphicsTextItem::paintTextContent(QPainter *p)
+{
+    if (!p) return;
+    p->save();
+    // painter 切到 item 局部坐标系, 之后基类 paint 画在哪就是哪.
+    p->setTransform(sceneTransform());
+    // QGraphicsTextItem::paint 只看 option->state (选中标记会被它自己清掉),
+    // 其余字段不参与绘制, 所以默认构造的 option 就够用.
+    QStyleOptionGraphicsItem opt;
+    opt.state = QStyle::State_None;
+    opt.exposedRect = boundingRect();
+    QGraphicsTextItem::paint(p, &opt, nullptr);
+    p->restore();
 }
 
 // =============================================================

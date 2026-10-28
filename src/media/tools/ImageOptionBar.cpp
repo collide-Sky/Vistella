@@ -70,18 +70,38 @@ void ImageOptionBar::attach(ToolContext* ctx,
                             TextOverlayController* textCtrl,
                             BrushOptionsPanel* brushOpt)
 {
+    // 先断开上一个文档: 不 detach 的话旧连接会留着, 一次点击触发 N 次,
+    // 而且旧文档销毁后页面里的裸指针就悬垂了.
+    detach();
+
     m_ctx = ctx;
     m_mosaic = mosaic;
     m_textCtrl = textCtrl;
     m_brushOpt = brushOpt;  // weak ref, optional
 
+    // 已经建好的 Mosaic/Text 页面重新绑到新文档 (页面数量不变,
+    // ToolId -> page index 的映射要保持). 页面里只存当前文档的指针,
+    // 换文档时立刻换掉, 旧 tool/controller 随文档销毁后不会有人再碰.
+    if (m_mosaicPageIdx >= 0) {
+        if (auto* page = qobject_cast<MosaicOptionPanel*>(
+                ui->stackedWidget->widget(m_mosaicPageIdx))) {
+            page->setTool(m_mosaic.data());
+        }
+    }
+    if (m_textPageIdx >= 0) {
+        if (auto* page = qobject_cast<TextOptionPanel*>(
+                ui->stackedWidget->widget(m_textPageIdx))) {
+            page->setController(m_textCtrl.data());
+        }
+    }
+
     if (m_ctx) {
-        connect(m_ctx, &ToolContext::toolChanged,
+        connect(m_ctx.data(), &ToolContext::toolChanged,
                 this, &ImageOptionBar::onToolChanged);
         // P5.1: MosaicTool mode changes while on Brush tool must reroute
         //   so we never get stuck showing the wrong page.
         if (m_mosaic) {
-            connect(m_mosaic, &MosaicTool::modeChanged,
+            connect(m_mosaic.data(), &MosaicTool::modeChanged,
                     this, &ImageOptionBar::onMosaicModeChanged);
         }
         // BrushOptionsPanel <-> ToolContext.brushSharedState
@@ -89,7 +109,7 @@ void ImageOptionBar::attach(ToolContext* ctx,
         if (m_brushOpt) {
             connect(m_brushOpt, &BrushOptionsPanel::sharedStateChanged,
                     this, &ImageOptionBar::onBrushSharedStateChangedFromPanel);
-            connect(m_ctx, &ToolContext::brushSettingsChanged,
+            connect(m_ctx.data(), &ToolContext::brushSettingsChanged,
                     this, &ImageOptionBar::onToolContextBrushStateChanged);
         }
         // Synchronize initial state (None / Brush / Text depending on
@@ -101,13 +121,27 @@ void ImageOptionBar::attach(ToolContext* ctx,
 void ImageOptionBar::detach()
 {
     if (m_ctx) {
-        disconnect(m_ctx, nullptr, this, nullptr);
+        disconnect(m_ctx.data(), nullptr, this, nullptr);
     }
     if (m_mosaic) {
-        disconnect(m_mosaic, nullptr, this, nullptr);
+        disconnect(m_mosaic.data(), nullptr, this, nullptr);
     }
     if (m_brushOpt) {
         disconnect(m_brushOpt, nullptr, this, nullptr);
+    }
+    // 页面里的裸指针要一起断开: 文档销毁后 tool/controller 也没了,
+    // 页面还指着就是悬垂指针.
+    if (m_mosaicPageIdx >= 0) {
+        if (auto* page = qobject_cast<MosaicOptionPanel*>(
+                ui->stackedWidget->widget(m_mosaicPageIdx))) {
+            page->setTool(nullptr);
+        }
+    }
+    if (m_textPageIdx >= 0) {
+        if (auto* page = qobject_cast<TextOptionPanel*>(
+                ui->stackedWidget->widget(m_textPageIdx))) {
+            page->setController(nullptr);
+        }
     }
     m_ctx = nullptr;
     m_mosaic = nullptr;

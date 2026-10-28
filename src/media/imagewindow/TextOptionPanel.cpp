@@ -21,9 +21,21 @@
 #include <QFontDatabase>
 
 TextOptionPanel::TextOptionPanel(TextOverlayController* ctrl, QWidget* parent)
-    : QWidget(parent), m_ctrl(ctrl)
+    : QWidget(parent)
 {
     setupUi();
+    setController(ctrl);
+}
+
+TextOptionPanel::~TextOptionPanel() = default;
+
+void TextOptionPanel::setController(TextOverlayController* ctrl)
+{
+    if (m_ctrl == ctrl) return;
+    if (m_ctrl) {
+        disconnect(m_ctrl, nullptr, this, nullptr);
+    }
+    m_ctrl = ctrl;
     if (m_ctrl) {
         // Listen for current item changes (PropertiesDock setCurrent
         // triggers a sync).
@@ -32,8 +44,6 @@ TextOptionPanel::TextOptionPanel(TextOverlayController* ctrl, QWidget* parent)
     }
     refreshFromController();
 }
-
-TextOptionPanel::~TextOptionPanel() = default;
 
 void TextOptionPanel::setupUi()
 {

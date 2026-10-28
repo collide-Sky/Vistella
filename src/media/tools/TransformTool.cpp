@@ -31,7 +31,7 @@ TransformTool::TransformTool() = default;
 void TransformTool::onEnter(ImageWindow* host)
 {
     m_host = host;
-    m_box = std::make_unique<transform::TransformBox>();
+    m_box = std::make_shared<transform::TransformBox>();
     // 初始化 box 用选区 bbox (无选区用 image 整图, host=nullptr 也 fallback)
     QRectF initRect;
     if (host) {

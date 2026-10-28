@@ -39,6 +39,10 @@ public:
     // changes such as undo/redo that may flip tool internal state).
     void refreshFromTool();
 
+    // 重新绑定到另一个 MosaicTool (换文档时用).
+    //   传 nullptr = 解绑: 旧 tool 随文档一起销毁, 页面不能再碰它.
+    void setTool(MosaicTool* tool);
+
 private slots:
     void onSizeSliderChanged(int v);
     void onModeButtonToggled(bool on);

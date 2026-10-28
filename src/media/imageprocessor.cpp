@@ -376,12 +376,15 @@ cv::Mat ImageProcessor::qTransformToAffine(const QTransform &t)
 {
     // QTransform 3x3 → cv::Mat 2x3 (CV_64F)
     //   QTransform isAffine() 验证 (PS transform 永远 affine, 不该是 perspective)
+    // Qt 的映射约定: x' = m11*x + m21*y + dx, y' = m12*x + m22*y + dy
+    // cv::Mat 2x3 的约定: x' = M00*x + M01*y + M02, y' = M10*x + M11*y + M12
+    // 所以 m21 要放在 M01, m12 要放在 M10 —— 写反了就是转置, 旋转/斜切方向会反.
     Q_ASSERT(t.isAffine());
     cv::Mat M(2, 3, CV_64F);
     M.at<double>(0, 0) = t.m11();
-    M.at<double>(0, 1) = t.m12();
+    M.at<double>(0, 1) = t.m21();
     M.at<double>(0, 2) = t.dx();
-    M.at<double>(1, 0) = t.m21();
+    M.at<double>(1, 0) = t.m12();
     M.at<double>(1, 1) = t.m22();
     M.at<double>(1, 2) = t.dy();
     return M;

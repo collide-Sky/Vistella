@@ -242,11 +242,10 @@ void tst_SmartObject_v2::test_transform_undo()
     QCOMPARE(stack.at(0)->hasTransform, false);
     QCOMPARE(stack.at(0)->transform, QTransform());
 
-    // Redo: no-op for transform (Phase 5 convention), but stack state
-    // should still match the post-push value because we applied manually
-    // before push and undo reverted it.
+    // Redo: 把变换写回去 —— 撤销之后重做必须恢复新状态
     undo.redo();
-    QCOMPARE(stack.at(0)->hasTransform, false);
+    QCOMPARE(stack.at(0)->hasTransform, true);
+    QCOMPARE(stack.at(0)->transform, t);
 
     QFile::remove(path);
 }

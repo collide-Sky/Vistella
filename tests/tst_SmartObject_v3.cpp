@@ -179,21 +179,23 @@ void tst_SmartObject_v3::test_mainwindow_relinkSmartObject()
     const bool    savedOldEmbed = stack.at(0)->sourceEmbedded;
 
     QUndoStack undo;
+    // 调用约定: 先改图层, 再 push command (跟 onSmartObjectRelink slot 一致)
+    QVERIFY(stack.setSmartObjectSource(0, newPath, false));
+    QCOMPARE(stack.at(0)->sourceFilePath, newPath);
+
     auto *cmd = LayerCommand::makeSetSmartObject(&stack, 0, savedOldPath, savedOldEmbed);
     QVERIFY(cmd != nullptr);
     undo.push(cmd);
-    QVERIFY(stack.setSmartObjectSource(0, newPath, false));
-    QCOMPARE(stack.at(0)->sourceFilePath, newPath);
 
     // undo: 还原旧 path
     undo.undo();
     QCOMPARE(stack.at(0)->sourceFilePath, savedOldPath);
     QCOMPARE(stack.at(0)->sourceEmbedded, savedOldEmbed);
 
-    // redo: no-op (Phase 5 convention - mainwindow slot 模式: push + 手动调 setter)
-    // 实际 redo 不重做 setSmartObjectSource, 跟 v2 transform 用例一致
+    // redo: 写回新 path
     undo.redo();
-    QCOMPARE(stack.at(0)->sourceFilePath, savedOldPath);
+    QCOMPARE(stack.at(0)->sourceFilePath, newPath);
+    QCOMPARE(stack.at(0)->sourceEmbedded, false);
 
     QFile::remove(oldPath);
     QFile::remove(newPath);

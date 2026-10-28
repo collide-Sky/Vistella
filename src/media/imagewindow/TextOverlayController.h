@@ -11,6 +11,8 @@
 #include <QPointF>
 #include <QString>
 
+#include <opencv2/core.hpp>
+
 class ImageWindow;
 class GraphicsTextItem;
 
@@ -93,9 +95,14 @@ public:
     // 同步过来).
     GraphicsTextItem* createTextItem(const QPointF& scenePos);
 
-    // Bake all current text items into the host's current image.
-    // After flatten the items list is cleared.
-    void flattenText();
+    // 把所有文字 item 叠加到 base 的一份副本上, 结果写进 out.
+    // 场景里的 item、文档像素和撤销栈都不受影响 —— 写盘/导出走一次性渲染,
+    // 不再往文档里烧像素.
+    // 正在编辑的文字会先结束编辑 (把刚输入的内容定稿), 撤销栈只多一条
+    // "文字改动" 记录.
+    // 返回 false 表示这次没能合成 (base 为空 / 通道或位深不受支持), 调用方
+    // 应保留原始像素.
+    bool renderComposite(const cv::Mat& base, cv::Mat& out);
 
     // Apply the current style (font/size/color) to the focused item.
     void applyStyleToCurrent();

@@ -21,7 +21,9 @@
 
 #include <QWidget>
 #include <QHash>
+#include <QPointer>
 #include "../mediators/ToolMediator.h"
+#include "ToolContext.h"
 
 class QToolButton;
 
@@ -30,7 +32,6 @@ namespace Ui { class LeftToolBar; }
 namespace tools {
 
 class ToolState;
-class ToolContext;
 
 class LeftToolBar : public QWidget
 {
@@ -100,8 +101,10 @@ private:
 
     QHash<mediators::ToolId, QToolButton*> m_buttons;
 
-    mediators::ToolMediator* m_toolMed = nullptr;  // weak ref
-    ToolContext*             m_ctx     = nullptr;  // weak ref
+    // 文档级 weak ref: 换文档时 attach() 会重新绑定, 文档销毁后自动置 null,
+    // 不会再拿着已析构 ImageWindow 的指针.
+    QPointer<mediators::ToolMediator> m_toolMed;
+    QPointer<ToolContext>              m_ctx;
 
     // P7.1: fg/bg state.
     QColor m_fgColor = Qt::black;

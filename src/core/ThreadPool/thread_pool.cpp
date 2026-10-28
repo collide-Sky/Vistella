@@ -196,6 +196,12 @@ void ThreadPool::attach_continuation(Task* parent, TaskPtr cont) {
 }
 
 void ThreadPool::run_task(Task* t) {
+    // 任务对象的唯一持有者是 pool: submit() 已经 release 掉了 TaskPtr.
+    // 所以谁把它从队列里取出来, 谁就负责在跑完后销毁 —— 否则每个任务
+    // 都泄漏一份 (任务里捕获的 cv::Mat clone 一起漏).
+    // 用 unique_ptr 兜住: fn 抛异常时也不会漏.
+    std::unique_ptr<Task> owned(t);
+
     if (t->expired() || t->is_cancelled()) {
         if (t->expired())
             stats_.expired.fetch_add(1, std::memory_order_relaxed);
@@ -231,6 +237,7 @@ void ThreadPool::run_task(Task* t) {
     stats_.running.fetch_sub(1, std::memory_order_relaxed);
     stats_.completed.fetch_add(1, std::memory_order_relaxed);
 
+    // 先把 continuation 摘走, 再让 owned 析构 (t 被销毁).
     schedule_continuations(t);
 }
 

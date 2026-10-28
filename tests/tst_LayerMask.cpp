@@ -201,17 +201,23 @@ void tst_LayerMask::test_addMaskUndo()
     QUndoStack undo;
     auto oldMask = stack.at(0)->layerMask.clone();
     bool oldEnabled = stack.at(0)->maskEnabled;
-    auto *cmd = LayerCommand::makeAddMask(&stack, 0, oldMask, oldEnabled);
-    undo.push(cmd);
-    // push 即 redo — no-op, mainwindow 会调 addMask
+
+    // 调用约定: 先改图层, 再 push command
     cv::Mat newMask = makeHalfMask();
     stack.addMask(0, newMask);
     QVERIFY(stack.at(0)->maskEnabled);
     QVERIFY(!stack.at(0)->layerMask.empty());
+
+    auto *cmd = LayerCommand::makeAddMask(&stack, 0, oldMask, oldEnabled);
+    undo.push(cmd);
     // undo: 还原
     undo.undo();
     QVERIFY(stack.at(0)->layerMask.empty());
     QCOMPARE(stack.at(0)->maskEnabled, false);
+    // redo: 挂回新蒙版
+    undo.redo();
+    QVERIFY(stack.at(0)->maskEnabled);
+    QVERIFY(!stack.at(0)->layerMask.empty());
 }
 
 void tst_LayerMask::test_clearMaskUndo()
@@ -222,13 +228,20 @@ void tst_LayerMask::test_clearMaskUndo()
     QUndoStack undo;
     auto oldMask = stack.at(0)->layerMask.clone();
     bool oldEnabled = stack.at(0)->maskEnabled;
-    auto *cmd = LayerCommand::makeClearMask(&stack, 0, oldMask, oldEnabled);
-    undo.push(cmd);
+
+    // 调用约定: 先改图层, 再 push command
     stack.clearMask(0);
     QVERIFY(stack.at(0)->layerMask.empty());
+
+    auto *cmd = LayerCommand::makeClearMask(&stack, 0, oldMask, oldEnabled);
+    undo.push(cmd);
     undo.undo();
     QVERIFY(!stack.at(0)->layerMask.empty());
     QCOMPARE(stack.at(0)->maskEnabled, true);
+    // redo: 再清一次
+    undo.redo();
+    QVERIFY(stack.at(0)->layerMask.empty());
+    QCOMPARE(stack.at(0)->maskEnabled, false);
 }
 
 void tst_LayerMask::test_enableMaskUndo()
@@ -237,12 +250,17 @@ void tst_LayerMask::test_enableMaskUndo()
     stack.addLayer(QStringLiteral("L1"), makeMat());
     stack.addMask(0, makeHalfMask());
     QUndoStack undo;
-    auto *cmd = LayerCommand::makeEnableMask(&stack, 0, true);  // 旧 enabled=true
-    undo.push(cmd);
+    // 调用约定: 先改图层, 再 push command
     stack.enableMask(0, false);
     QCOMPARE(stack.at(0)->maskEnabled, false);
+
+    auto *cmd = LayerCommand::makeEnableMask(&stack, 0, true);  // 旧 enabled=true
+    undo.push(cmd);
     undo.undo();
     QCOMPARE(stack.at(0)->maskEnabled, true);
+    // redo: 写回新状态 (关闭)
+    undo.redo();
+    QCOMPARE(stack.at(0)->maskEnabled, false);
 }
 
 QTEST_MAIN(tst_LayerMask)

@@ -25,12 +25,12 @@
 // =============================================================
 
 #include <QGraphicsTextItem>
+#include <QPainter>
+#include <QStyleOptionGraphicsItem>
 
 QT_BEGIN_NAMESPACE
 class QGraphicsSceneMouseEvent;
 class QFocusEvent;
-class QStyleOptionGraphicsItem;
-class QPainter;
 QT_END_NAMESPACE
 
 class GraphicsTextItem : public QGraphicsTextItem
@@ -99,6 +99,10 @@ public:
     // 旧 API 兼容 (供 ImageWindow 现有代码用)
     void showHandles(bool on) { Q_UNUSED(on); }
     QString text2() const { return toPlainText(); }
+
+    // 把文字内容按当前场景变换画到 painter 上 (scene 坐标).
+    // 不含选框 / handles —— 写盘和导出做一次性合成时用, 结果跟画布上看到的对齐.
+    void paintTextContent(QPainter* painter);
 
 signals:
     void editingFinished(const QString &oldText, const QString &newText);

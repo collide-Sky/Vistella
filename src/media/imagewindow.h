@@ -91,7 +91,7 @@ namespace transform { class TransformBox; }
 // =============================================================
 // TextItemCommand — 文字 item 的增/删/改/移动 撤销命令
 //   主流做法: 文字作为 scene item, 撤销栈只记录 item 操作 (不记录像素)
-//   烧图 (flattenText) 不入栈, 烧图后 m_textItems 清空
+//   写盘时文字走一次性合成, 文档里的 item 不清空
 // =============================================================
 class TextItemCommand : public QUndoCommand
 {
@@ -227,10 +227,6 @@ public:
     // 内部委托给 m_textCtrl
     GraphicsTextItem *createTextItem(const QPointF &scenePos);
 
-    // 公开: 扁平化所有文字 item 到 m_current (烧图) - 给 onSave 调用
-    // 内部委托给 m_textCtrl
-    void flattenText();
-
     // TransformCommand::redo/undo 调用
     //   接受变换后 cv::Mat, 同步 m_current + 可选 box 状态 (4 mode 切换时)
     void applyTransformImage(const cv::Mat& img, const transform::TransformBox* newBox = nullptr);
@@ -281,6 +277,11 @@ public:
     //   the multi-level inheritance defeated Qt 6.11's QPointer<T>).
     QGraphicsEllipseItem* brushCursor() { return m_brushCursor; }
     void renderToViewPublic() { renderToView(); }
+
+    //  作废渲染缓存 + 重绘画布.
+    //  LayerCommand 在 undo/redo 末尾统一调这个: 撤销/重做改的是图层状态,
+    //  画布必须立刻跟着重画, 否则用户看到的是上一帧.
+    void refreshCanvasNow() { invalidateCurrentCache(); renderToViewPublic(); }
 
     //  给 LayerPanel 调 (MainWindow 通过这些访问 layerStack + undoStack)
     layers::LayerStack* layerStack() const { return m_layerStack.get(); }

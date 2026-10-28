@@ -14,12 +14,45 @@
 
 #include <atomic>
 #include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
 #include <QHash>
 #include <QThread>
 #include <QVector>
 #include <stdexcept>
 
+#include "logger.h"
+
 namespace compositor {
+
+namespace {
+
+// 把 tile 转成画布要的格式.
+//   画布固定 CV_8UC3: 1ch -> BGR, 3ch -> 直通, 4ch -> BGRA2BGR,
+//   16bit -> 先降到 8bit 再转. 转不了就返回 false (调用方记日志跳过).
+bool convertTileFormat(const cv::Mat& tile, cv::Mat& out, int targetType)
+{
+    if (targetType != CV_8UC3) {
+        if (tile.type() != targetType) return false;
+        out = tile;
+        return true;
+    }
+    switch (tile.type()) {
+    case CV_8UC1: cv::cvtColor(tile, out, cv::COLOR_GRAY2BGR); return true;
+    case CV_8UC3: out = tile; return true;
+    case CV_8UC4: cv::cvtColor(tile, out, cv::COLOR_BGRA2BGR); return true;
+    default: break;
+    }
+    cv::Mat tmp;
+    tile.convertTo(tmp, CV_8U);
+    switch (tmp.channels()) {
+    case 1: cv::cvtColor(tmp, out, cv::COLOR_GRAY2BGR); return true;
+    case 3: out = tmp; return true;
+    case 4: cv::cvtColor(tmp, out, cv::COLOR_BGRA2BGR); return true;
+    default: return false;
+    }
+}
+
+}  // namespace
 
 cv::Mat RenderGraph::execute()
 {
@@ -65,11 +98,25 @@ cv::Mat RenderGraph::executeSequential()
         const cv::Rect r = m_grid->tileRect(tx, ty);
         // Place tile into canvas (handles partial edge tiles naturally).
         cv::Mat dst = canvas(r);
-        if (tile.size() == dst.size() && tile.type() == dst.type()) {
-            tile.copyTo(dst);
+        if (tile.size() != dst.size()) {
+            // 尺寸对不上: 跳过 (节点算错了, 不是通道问题)
+            LOG_WARN("[RenderGraph] tile size mismatch at ({}, {}): {}x{} vs canvas {}x{}",
+                     tx, ty,
+                     tile.size().width, tile.size().height,
+                     dst.size().width, dst.size().height);
+            continue;
         }
-        // Mismatched size / type = silently skip (caller should ensure
-        // compute() returns the right size).
+        if (tile.type() != dst.type()) {
+            // 类型对不上就转换, 不能静默跳过 —— 跳过会让画布留下一块黑.
+            cv::Mat converted;
+            if (!convertTileFormat(tile, converted, dst.type())) {
+                LOG_WARN("[RenderGraph] tile type mismatch at ({}, {}) and cannot convert: {} vs canvas {}",
+                         tx, ty, tile.type(), dst.type());
+                continue;
+            }
+            tile = converted;
+        }
+        tile.copyTo(dst);
     }
     m_lastHits  = ctx.hits;
     m_lastMisses = ctx.misses;

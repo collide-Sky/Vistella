@@ -710,8 +710,12 @@ void AdjustmentPanel::applyCurrentTab()
     // 分配新 task id, 旧 task 完成后主线程发现 id 变了, 直接 return
     const uint64_t myTaskId = m_host->currentTaskId().fetch_add(1) + 1;
 
-    // 拷 current image 进去, 避免后台跑一半 m_current 变了 (loadFile 时)
-    cv::Mat snapshot = m_host->originalImage().clone();
+    // 源图用共享引用, 不做整图 clone:
+    //   cv::Mat 是引用计数, 任务持有它就能保证像素缓冲不被回收 (loadFile
+    //   换图时旧缓冲仍在, 不会读到野指针).
+    //   之前每次 slider 变化都 clone 一份全图, 拖一次滑块就是几十份
+    //   (24MP 图一份 72MB), 内存直接被打爆.
+    cv::Mat snapshot = m_host->originalImage();
     cv::Mat lut = buildCurrentTabLut();
     if (lut.empty()) return;
 

@@ -20,9 +20,21 @@
 #include <QVBoxLayout>
 
 MosaicOptionPanel::MosaicOptionPanel(MosaicTool* tool, QWidget* parent)
-    : QWidget(parent), m_tool(tool)
+    : QWidget(parent)
 {
     setupUi();
+    setTool(tool);
+}
+
+MosaicOptionPanel::~MosaicOptionPanel() = default;
+
+void MosaicOptionPanel::setTool(MosaicTool* tool)
+{
+    if (m_tool == tool) return;
+    if (m_tool) {
+        disconnect(m_tool, nullptr, this, nullptr);
+    }
+    m_tool = tool;
     if (m_tool) {
         // MosaicTool signals - keep UI in sync when tool mutates its own
         // state (e.g. setEnabled from outside, undo/redo restoring mode).
@@ -35,8 +47,6 @@ MosaicOptionPanel::MosaicOptionPanel(MosaicTool* tool, QWidget* parent)
     }
     refreshFromTool();
 }
-
-MosaicOptionPanel::~MosaicOptionPanel() = default;
 
 void MosaicOptionPanel::setupUi()
 {

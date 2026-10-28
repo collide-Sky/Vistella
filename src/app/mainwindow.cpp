@@ -286,11 +286,15 @@ void MainWindow::closeEvent(QCloseEvent *e)
                     if (p.isEmpty()) { e->ignore(); return; }
                     if (!d->saveAsFile(p, &err)) { e->ignore(); return; }
                 } else if (!d->saveFile(&err)) { e->ignore(); return; }
+            } else if (auto *img = qobject_cast<ImageWindow *>(w)) {
+                // 图片文档跟 DocWindow 一样要真的落盘, 否则点了"保存"照样退出丢数据
+                if (img->filePath().isEmpty()) img->saveAsPublic();
+                else                            img->savePublic();
+                // 保存失败或用户取消了另存为 -> 仍然 dirty -> 中止退出
+                if (img->isDirty()) { e->ignore(); return; }
             }
         }
-        if(qobject_cast<QPushButton*>(clicked)==btnDiscard){
-
-        }
+        // btnDiscard: 不保存, 直接退出 (不写盘)
     }
     // 标记为"正常退出", 下次启动不会触发恢复弹窗
     // (异常退出: 程序崩溃 / kill -9 / 断电, closeEvent 不会触发, flag 保持 false)
@@ -1875,6 +1879,12 @@ void MainWindow::onTabCloseRequested(int index)
     ui->tabWidget->removeTab(index);
     ui->tabWidget->blockSignals(false);
 
+    // 5) 重新绑定左侧 dock.
+    //   removeTab 时 currentChanged 被 blockSignals 屏蔽了, 不在这里补一次
+    //   bindLeftDockWidgets 的话, dock 里还指着刚被关掉的文档 -> 关掉再点
+    //   工具栏就踩悬垂指针.
+    bindLeftDockWidgets(activeImageWindow());
+
     // 6) 拆 widget 与 tabWidget 关系, 释放
     //    注意: 不设 WA_DeleteOnClose, 只用 setParent + deleteLater
     //    (WA_DeleteOnClose 是给 close() 用的, 跟 deleteLater 混用会让状态错乱)
@@ -2235,6 +2245,7 @@ void MainWindow::onReplace()
         }
         ++replaced;
     }
+    if (replaced > 0) iw->refreshCanvasNow();
     statusBar()->showMessage(
         tr("替换: '%1' → '%2' 在 %3 个文字图层中应用").arg(pattern, replacement).arg(replaced),
         4000);
@@ -2850,6 +2861,7 @@ void MainWindow::onSmartObjectConvert(int idx)
     if (auto *undo = img->undoStack()) {
         undo->push(layers::LayerCommand::makeConvertToSmartObject(stack, realIdx, before));
     }
+    img->refreshCanvasNow();
     if (img->smartObjectWatcher())
         img->smartObjectWatcher()->rewatchAll(stack);
     statusBar()->showMessage(tr("已转换为智能对象 (嵌入模式)"), 3000);
@@ -2878,6 +2890,7 @@ void MainWindow::onSmartObjectRasterize(int idx)
     if (auto *undo = img->undoStack()) {
         undo->push(layers::LayerCommand::makeRasterizeSmartObject(stack, realIdx, before));
     }
+    img->refreshCanvasNow();
     if (img->smartObjectWatcher())
         img->smartObjectWatcher()->rewatchAll(stack);
     statusBar()->showMessage(tr("已栅格化智能对象"), 3000);
@@ -2938,6 +2951,7 @@ void MainWindow::onSmartObjectRelink(int idx)
     if (auto *undo = img->undoStack()) {
         undo->push(layers::LayerCommand::makeSetSmartObject(stack, realIdx, oldPath, oldEmbed));
     }
+    img->refreshCanvasNow();
     if (img->smartObjectWatcher())
         img->smartObjectWatcher()->rewatchAll(stack);
     statusBar()->showMessage(
@@ -2985,6 +2999,7 @@ void MainWindow::onApplySmartFilter(int idx)
         undo->push(layers::LayerCommand::makeAppendSmartFilter(
             stack, newIdx, picked, 1.0));
     }
+    img->refreshCanvasNow();
     statusBar()->showMessage(tr("已应用智能滤镜: %1").arg(picked), 3000);
 }
 

@@ -44,6 +44,10 @@ public:
     // changes current item).
     void refreshFromController();
 
+    // 重新绑定到另一个 TextOverlayController (换文档时用).
+    //   传 nullptr = 解绑: 旧 controller 随文档一起销毁, 页面不能再碰它.
+    void setController(TextOverlayController* ctrl);
+
 private slots:
     void onFontComboChanged(const QString& family);
     void onSizeSpinChanged(int v);

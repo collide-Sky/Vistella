@@ -19,6 +19,9 @@
 #pragma once
 
 #include <QWidget>
+#include <QPointer>
+
+#include "ToolContext.h"
 
 class QStackedWidget;
 class QHBoxLayout;
@@ -27,7 +30,7 @@ class QButtonGroup;
 
 
 namespace mediators { enum class ToolId : int; }
-namespace tools { class ToolContext; class MagicWand; class Lasso; class Crop; class Brush; class EyedropperTool; }
+namespace tools { class MagicWand; class Lasso; class Crop; class Brush; class EyedropperTool; }
 
 namespace tools {
 
@@ -62,7 +65,8 @@ private:
     void showPageForTool(mediators::ToolId id);
     void refreshButtonsFromTool();
 
-    ToolContext* m_ctx = nullptr;
+    // 文档级 weak ref: 文档销毁后自动置 null
+    QPointer<ToolContext> m_ctx;
 
     // 4 mode buttons per tool (selection mode shared between MagicWand + Lasso,
     //   but each tool keeps its own button group + page).

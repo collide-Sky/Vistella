@@ -39,7 +39,7 @@
 
 | ID | 位置 | 缺什么 | 用户可见影响 | 影响的能力路径 | 建议阶段 | 验收方式 | 状态 |
 |---|---|---|---|---|---|---|---|
-| `A-SETCOMPOSITOR` | `LayerStack.h:297` | `setCompositorEnabled()` 无任何调用点 → 灰度/带 alpha 文档在默认 compositor 路径下**全黑**且**无回退手段**（05-35 / CP-01） | 打开灰度 PNG / 带 alpha PNG → 画布全黑，用户无法自救 | 打开任意非 3 通道文档 | P8.4 | 灰度 PNG、RGBA PNG 打开正常 + 设置页有回退开关 | open |
+| `A-SETCOMPOSITOR` | `LayerStack.h:314` | 通道归一化（1ch→BGR / 4ch→BGR）+ 异常自动回退 legacy 已经就位，灰度/带 alpha 文档不再全黑；但 `setCompositorEnabled()` 在设置页没有入口 → 用户遇到 compositor 渲染异常时没法手动切回 legacy 路径（05-35 / CP-01） | 灰度 PNG / 带 alpha PNG 已能正常打开；渲染异常时用户没有自救手段 | 渲染路径切换 | P8.4 | 设置页有渲染路径开关，切换后画布立刻换成 legacy 路径 | open |
 | `A-TOOLCONFIG` | `ToolMediator.cpp:19-45` | `applyToolConfig/currentConfig/resetToolConfig/toolConfigApplied/toolConfigReset` 五个 API 零调用者 → 每个工具的设置**切走再切回全部丢回默认值**（04-20） | 调好画笔大小/羽化/容差 → 切到别的工具再切回来 → 参数全没了 | 工具选项持久化 | P8.5 | 切工具往返后参数保持 | open |
 | `A-ADJUSTPREVIEW` | `AdjustDialogBase.cpp:67` | `preview(QVariantMap)` 信号零 connect → 曲线/色阶/黑白/通道混合器/HSL 五个对话框**无实时预览**（09-02） | 调曲线只能点 OK 才生效，来回试错 | 图像 → 调整 → 曲线/色阶 | P8.5 | 拖动滑块实时预览 | open |
 | `A-RENDERBACKEND` | `RenderGraph.h:98` | `setBackend()` 零调用点 → 状态栏「Auto/Force GPU」对渲染**零影响**；`BackendCapabilities::isGpuAvailable()` 恒 false；readback 上下翻转（GPU-01/02/03） | 用户切「强制 GPU」毫无变化，状态栏骗人 | GPU 模式切换 | P8.9 | 切 GPU/CPU 渲染结果确实不同 + 状态栏与实际一致 | open |

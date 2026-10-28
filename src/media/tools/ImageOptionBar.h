@@ -35,16 +35,17 @@
 #pragma once
 
 #include <QWidget>
+#include <QPointer>
 
 #include "../imagewindow/MosaicTool.h"
 #include "../imagewindow/TextOverlayController.h"
 #include "../mediators/ToolMediator.h"
+#include "ToolContext.h"
 
 namespace Ui { class ImageOptionBar; }
 
 namespace tools {
 
-class ToolContext;
 class BrushOptionsPanel;
 
 class ImageOptionBar : public QWidget
@@ -98,9 +99,10 @@ private:
     void ensureTextPage();
 
     Ui::ImageOptionBar* ui = nullptr;
-    ToolContext* m_ctx = nullptr;       // weak ref
-    MosaicTool* m_mosaic = nullptr;     // weak ref, optional
-    TextOverlayController* m_textCtrl = nullptr;  // weak ref, optional
+    // 文档级 weak ref: 文档销毁后自动置 null, 不会拿着已析构对象的指针
+    QPointer<ToolContext>              m_ctx;
+    QPointer<MosaicTool>               m_mosaic;     // optional
+    QPointer<TextOverlayController>    m_textCtrl;   // optional
     BrushOptionsPanel* m_brushOpt = nullptr; // P7.6.x: weak ref, optional
     int m_mosaicPageIdx = -1;  // P5.1: actual idx after addWidget, -1 = not added
     int m_textPageIdx   = -1;  // P5.1: actual idx after addWidget, -1 = not added

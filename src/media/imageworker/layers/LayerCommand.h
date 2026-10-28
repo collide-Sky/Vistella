@@ -19,9 +19,18 @@
 //   Ungroup  — 解散, undo 恢复
 //
 // 设计原则:
-//   - 每个 command 内部存 before/after Layer 拷贝 (含 cv::Mat clone)
-//   - undo() 反向操作, redo() 正向
+//   - 每个 command 存两份状态: before (旧值) + after (新值)
+//   - undo() 应用 before, redo() 应用 after, 两者走同一套 LayerStack API
+//   - 状态变更统一收口在 applyState(), 末尾统一 notifyChanged()
 //   - 不用 parent (每个 command 独立, 易于调试)
+//
+// 调用约定 (重要):
+//   调用方**先**把新值应用到图层, **再**push command.
+//   这样 command 构造时图层上已经是新值, captureAfter() 读得到, redo 才有
+//   东西可写回去. 例:
+//       m_layerStack->setOpacity(index, 0.5f);
+//       m_undoStack->push(new LayerCommand(stack, Opacity, index, oldOpacity));
+//   Remove / Merge 是例外: 它们的"向前"动作由 command 自己执行.
 //
 // 用法:
 //     QUndoStack *stack = m_w->m_undoStack;
@@ -193,6 +202,23 @@ public:
     Layer& layerRef() { return m_layer; }
 
 private:
+    // ---- 统一的应用 / 刷新入口 ----
+    //   applyState(after): 按 Op 应用"旧值"(after=false, undo) 或
+    //     "新值"(after=true, redo). 所有状态变更都走 LayerStack 的公开
+    //     API, 由 LayerStack 负责发 layerChanged.
+    //   captureAfter(): 构造时从当前图层读出"新值". 调用方的约定是
+    //     "先改图层, 再 push command", 所以构造时图层上已经是新值.
+    //   notifyChanged(): undo/redo 末尾统一出口, 负责把画布刷新出来.
+    //     (发 layerChanged 的事由 setter / applyState 里的补发负责.)
+    //   selfApplied(): 这个 Op 的"向前"动作是不是由 command 自己执行.
+    //     true  → 首个 redo 必须真的执行 (Remove / Merge).
+    //     false → 调用方已经应用过了, 首个 redo 必须是 no-op, 否则会重复
+    //             应用一次 (比如追加两次智能滤镜).
+    void applyState(bool after);
+    void captureAfter();
+    void notifyChanged();
+    bool selfApplied() const;
+
     LayerStack *m_stack;
     Op          m_op;
     int         m_index = -1;
@@ -205,12 +231,27 @@ private:
     cv::Mat     m_oldMat;            // Phase 3: SetAdjustmentLut old LUT
                                     // P0-3.3: 同时作 "before image 快照" (跟 host 一起用)
     cv::Mat     m_newMat;            // P0-3.3: "after image 快照" (仅 host 模式用)
+                                    // 也用于 AddMask 的新蒙版 / SetAdjustmentLut 的新 LUT
     QPointer<ImageWindow> m_host;    // P0-3.3: image-based undo/redo 目标, 跟 m_stack 互补
+
+    // ---- after 状态 (新值) ----
+    //   构造时由 captureAfter() 从图层上读出, redo 时原样写回.
+    //   没有这一组字段, redo 就只能写成 no-op (撤销之后重做等于什么都不做).
+    float       m_floatNew = 0.0f;
+    bool        m_boolNew = false;
+    int         m_intNew = 0;
+    QString     m_strNew;
+    QColor      m_newColor;
+    double      m_doubleNew = 0.0;
+    int         m_groupChildCount = 0;    // 编组/解组: 子图层数量
+    bool        m_firstRedo = true;       // QUndoStack::push 触发的首个 redo
 
     // 状态保存 (Phase 1 简化: Add/Remove/Merge 用 before/after 完整 layer)
     Layer       m_layer;             // Add: new layer; Remove: deleted layer
     Layer       m_mergeBefore;       // Merge: 下层 (merge target) before
     Layer       m_mergeAfter;        // Merge: 下层 (merge target) after
+    Layer       m_mergeUpper;        // Merge: 上层 (被合并掉的那层), 撤销时插回
+    Layer       m_afterLayer;        // Convert/Rasterize: 转换后的完整快照
     QList<bool> m_groupBefore;       // Group: 区间内 link 状态
     QList<bool> m_ungroupBefore;     // Ungroup: 全部 link 状态
     // Convert / Rasterize smart object before-state

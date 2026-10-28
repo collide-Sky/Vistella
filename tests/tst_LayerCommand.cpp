@@ -72,6 +72,11 @@ private slots:
     void test_setAdjustmentLutUndo();
     // ---- P0-3.3 (2026-09-08): 升级版 SetAdjustmentLut (host + newImage) ----
     void test_setAdjustmentLutWithHost();
+    // ---- undo / redo 语义回归 ----
+    void test_undo_emits_layerChanged();
+    void test_redo_restores_new_value();
+    void test_remove_redo_same_layer();
+
 
 private:
     cv::Mat makeMat(int w = 8, int h = 8, cv::Scalar bgr = cv::Scalar(50, 100, 200))
@@ -168,27 +173,23 @@ void tst_LayerCommand::test_remove()
 
 void tst_LayerCommand::test_addUndo()
 {
-    // P2.5 (2026-09-22): factory pattern — caller pre-adds, push captures
-    //   for undo. Add::redo is a no-op so push doesn't change count.
+    // 调用方先加图层, 再 push command; 撤销删掉它, 重做放回原位
     LayerStack stack;
     QUndoStack undoStack;
-    // Caller pre-adds
     stack.addLayer(QStringLiteral("X"), makeMat());
     QCOMPARE(stack.count(), 1);
 
     auto *cmd = new LayerCommand(&stack, LayerCommand::Add, Layer(QStringLiteral("X"), makeMat()));
     undoStack.push(cmd);
-    QCOMPARE(stack.count(), 1);   // push didn't add (no-op redo)
+    QCOMPARE(stack.count(), 1);   // 首个 redo 不重复添加
 
     undoStack.undo();
-    QCOMPARE(stack.count(), 0);   // undo removes the pre-added layer
+    QCOMPARE(stack.count(), 0);   // 撤销删掉这一层
 
     undoStack.redo();
-    QCOMPARE(stack.count(), 0);   // redo is no-op too — caller is expected
-                                  //   to re-add if they want to redo (matches
-                                  //   Group/Ungroup factory pattern)
+    QCOMPARE(stack.count(), 1);   // 重做把它放回来
+    QCOMPARE(stack.at(0)->name, QStringLiteral("X"));
 }
-
 void tst_LayerCommand::test_removeUndo()
 {
     LayerStack stack;
@@ -241,62 +242,54 @@ void tst_LayerCommand::test_moveDown()
 
 void tst_LayerCommand::test_moveUndo()
 {
-    // P2.5 (2026-09-22): undo reverses the factory-applied move. Re-enable
-    //   this test now that the undo path uses moveDown / moveUp with the
-    //   shifted index (m_index + 1 for moveUp, m_index - 1 for moveDown).
+    // undo 还原移动, redo 重新执行移动
     LayerStack stack;
     stack.addLayer(QStringLiteral("A"), makeMat());
     stack.addLayer(QStringLiteral("B"), makeMat());
 
     QUndoStack undoStack;
-    undoStack.push(LayerCommand::makeMoveUp(&stack, 0));   // A 上移 → B,A
+    undoStack.push(LayerCommand::makeMoveUp(&stack, 0));   // A 上移
     QCOMPARE(stack.at(0)->name, QStringLiteral("B"));
     QCOMPARE(stack.at(1)->name, QStringLiteral("A"));
     undoStack.undo();                                       // 还原 → A,B
     QCOMPARE(stack.at(0)->name, QStringLiteral("A"));
     QCOMPARE(stack.at(1)->name, QStringLiteral("B"));
+    undoStack.redo();                                       // 重做 → B,A
+    QCOMPARE(stack.at(0)->name, QStringLiteral("B"));
+    QCOMPARE(stack.at(1)->name, QStringLiteral("A"));
 }
-
-// =====================================================================
-//  Opacity / Visible / Locked / Linked / Blend / Rename
-// =====================================================================
-
 void tst_LayerCommand::test_opacity()
 {
+    // 调用约定: 先改图层, 再 push command (command 构造时读图层上的新值)
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
     QCOMPARE(stack.at(0)->opacity, 1.0f);
 
-    // Phase 1 简化: LayerCommand::Opacity 存 old value, undo 还原 old, redo no-op
-    //   真实 mainwindow 流程: push(LayerCommand(old)) → setOpacity(new) → undo 还原 old → setOpacity(new) → redo no-op
     QUndoStack undoStack;
+    QVERIFY(stack.setOpacity(0, 0.5f));
     auto *cmd = new LayerCommand(&stack, LayerCommand::Opacity, 0, 1.0f);  // 存 old=1.0
     undoStack.push(cmd);
-    stack.setOpacity(0, 0.5f);   // 手动 setOpacity 模拟 mainwindow redo 路径
+    // push 触发的首个 redo 不能把新值改回旧值
     QCOMPARE(stack.at(0)->opacity, 0.5f);
 }
-
 void tst_LayerCommand::test_opacityUndo()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
     QUndoStack undoStack;
+    QVERIFY(stack.setOpacity(0, 0.5f));
     auto *cmd = new LayerCommand(&stack, LayerCommand::Opacity, 0, 1.0f);  // 存 old=1.0
     undoStack.push(cmd);
-    stack.setOpacity(0, 0.5f);   // 模拟 mainwindow: redo 路径手动 setOpacity
     QCOMPARE(stack.at(0)->opacity, 0.5f);
 
-    // undo 走 LayerCommand::undo: l->opacity = m_floatVal (1.0)
+    // undo 还原旧值
     undoStack.undo();
     QCOMPARE(stack.at(0)->opacity, 1.0f);
 
-    // redo 走 LayerCommand::redo: no-op (Phase 1 简化)
-    //   实际 mainwindow redo 路径会再 setOpacity(0.5f)
-    //   这里测 LayerCommand 本身: redo 不动
+    // redo 写回新值 (不是空操作)
     undoStack.redo();
-    QCOMPARE(stack.at(0)->opacity, 1.0f);   // 仍是 1.0
+    QCOMPARE(stack.at(0)->opacity, 0.5f);
 }
-
 void tst_LayerCommand::test_visible()
 {
     LayerStack stack;
@@ -304,52 +297,57 @@ void tst_LayerCommand::test_visible()
     QVERIFY(stack.at(0)->visible);
 
     QUndoStack undoStack;
+    QVERIFY(stack.setVisible(0, false));
     undoStack.push(new LayerCommand(&stack, LayerCommand::Visible, 0, true));
-    stack.setVisible(0, false);
     QVERIFY(!stack.at(0)->visible);
 
     undoStack.undo();
     QVERIFY(stack.at(0)->visible);
 }
-
 void tst_LayerCommand::test_visibleUndo()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
     QUndoStack undoStack;
+    QVERIFY(stack.setVisible(0, false));
     undoStack.push(new LayerCommand(&stack, LayerCommand::Visible, 0, true));
-    stack.setVisible(0, false);
 
     undoStack.undo();
     QVERIFY(stack.at(0)->visible);
-}
 
+    undoStack.redo();
+    QVERIFY(!stack.at(0)->visible);
+}
 void tst_LayerCommand::test_locked()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
     QUndoStack undoStack;
+    QVERIFY(stack.setLocked(0, true));
     undoStack.push(new LayerCommand(&stack, LayerCommand::Locked, 0, false));
-    stack.setLocked(0, true);
     QVERIFY(stack.at(0)->locked);
 
     undoStack.undo();
     QVERIFY(!stack.at(0)->locked);
-}
 
+    undoStack.redo();
+    QVERIFY(stack.at(0)->locked);
+}
 void tst_LayerCommand::test_linked()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
     QUndoStack undoStack;
+    QVERIFY(stack.setLinked(0, true));
     undoStack.push(new LayerCommand(&stack, LayerCommand::Linked, 0, false));
-    stack.setLinked(0, true);
     QVERIFY(stack.at(0)->isLinked);
 
     undoStack.undo();
     QVERIFY(!stack.at(0)->isLinked);
-}
 
+    undoStack.redo();
+    QVERIFY(stack.at(0)->isLinked);
+}
 void tst_LayerCommand::test_blend()
 {
     LayerStack stack;
@@ -357,63 +355,56 @@ void tst_LayerCommand::test_blend()
     QCOMPARE(stack.at(0)->blend, Layer::Normal);
 
     QUndoStack undoStack;
-    undoStack.push(new LayerCommand(&stack, LayerCommand::Blend, 0, static_cast<int>(Layer::Normal)));
-    stack.setBlend(0, Layer::Multiply);
+    QVERIFY(stack.setBlend(0, Layer::Multiply));
+    undoStack.push(new LayerCommand(&stack, LayerCommand::Blend, 0,
+                                    static_cast<int>(Layer::Normal)));
     QCOMPARE(stack.at(0)->blend, Layer::Multiply);
 
     undoStack.undo();
     QCOMPARE(stack.at(0)->blend, Layer::Normal);
-}
 
+    undoStack.redo();
+    QCOMPARE(stack.at(0)->blend, Layer::Multiply);
+}
 void tst_LayerCommand::test_rename()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("Old"), makeMat());
     QUndoStack undoStack;
-    // Rename 在 mainwindow 特殊处理: push 时存 old name, redo 时设 new name
-    //   LayerCommand::Rename 的 redo() 走 l->name = m_strVal
-    //   这里 m_strVal 是构造时传入 (旧名)
-    //   Phase 1 简化: 直接测试 redo 路径, undo 走 l->name = m_strVal
+    QVERIFY(stack.rename(0, QStringLiteral("New")));
     auto *cmd = new LayerCommand(&stack, LayerCommand::Rename, 0, QStringLiteral("Old"));
     undoStack.push(cmd);
-    // 模拟 mainwindow: redo 后调 stack.rename(0, "New")
-    stack.rename(0, QStringLiteral("New"));
     QCOMPARE(stack.at(0)->name, QStringLiteral("New"));
 
-    // Phase 1 简化: Rename undo 路径在 mainwindow 实际不调 (因为我们直接调 stack.rename 改了 name)
-    //   LayerCommand::Rename::undo 走 l->name = m_strVal, 但 m_strVal == old name, 跟当前 name 一样
-    //   所以 undo 是 no-op, 测试这里跳过 undo
-}
+    undoStack.undo();
+    QCOMPARE(stack.at(0)->name, QStringLiteral("Old"));
 
+    undoStack.redo();
+    QCOMPARE(stack.at(0)->name, QStringLiteral("New"));
+}
 void tst_LayerCommand::test_visible_callerPreApply_bugReproducer()
 {
-    // P2.5 bug fix (2026-09-22): LayerCommand::Visible redo used to revert
-    //   to m_boolVal (the old value), silently undoing the caller's
-    //   setVisible(new). Now redo is a no-op (matches Opacity pattern).
-    //   The caller pattern in ImageWindow::applyLayerOp is:
-    //       oldVisible = l->visible;
-    //       setVisible(newVisible);
-    //       push(new LayerCommand(Visible, idx, oldVisible));
-    //   Without the fix, push's redo() would set visible back to oldVisible.
+    // 调用方先改图层再 push:
+    //   oldVisible = l->visible;
+    //   setVisible(newVisible);
+    //   push(new LayerCommand(Visible, idx, oldVisible));
+    // push 触发的首个 redo 不能把新值改回旧值, 之后的 redo 才写回新值.
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
     QCOMPARE(stack.at(0)->visible, true);
 
     QUndoStack undoStack;
     const bool oldVisible = stack.at(0)->visible;             // true
-    QVERIFY(stack.setVisible(0, false));                       // caller pre-applies
-    QCOMPARE(stack.at(0)->visible, false);                     // caller change took effect
+    QVERIFY(stack.setVisible(0, false));                       // 调用方先应用
+    QCOMPARE(stack.at(0)->visible, false);
     undoStack.push(new LayerCommand(
         &stack, LayerCommand::Visible, 0, oldVisible));       // m_boolVal = old
-    QCOMPARE(stack.at(0)->visible, false);                     // push's redo did NOT revert
-    undoStack.undo();                                           // undo restores old
+    QCOMPARE(stack.at(0)->visible, false);                     // 首个 redo 没改回去
+    undoStack.undo();
     QCOMPARE(stack.at(0)->visible, true);
+    undoStack.redo();
+    QCOMPARE(stack.at(0)->visible, false);
 }
-
-// =====================================================================
-//  Merge / Group / Ungroup
-// =====================================================================
-
 void tst_LayerCommand::test_merge()
 {
     LayerStack stack;
@@ -434,9 +425,8 @@ void tst_LayerCommand::test_merge()
 
 void tst_LayerCommand::test_group()
 {
-    // P0 leftover 3 (2026-09-21): Group via makeMergeIntoGroup.
-    //   Factory applies mergeIntoGroup itself; push redo is a no-op.
-    //   undo -> flattenGroup -> back to 3 layers.
+    // Group via makeMergeIntoGroup.
+    //   Factory 自己完成 mergeIntoGroup; undo 解散, redo 重新编组.
     LayerStack stack;
     stack.addLayer(QStringLiteral("A"), makeMat());
     stack.addLayer(QStringLiteral("B"), makeMat());
@@ -460,16 +450,19 @@ void tst_LayerCommand::test_group()
         QCOMPARE(int(stack.at(i)->kind), int(Layer::Bitmap));
     }
 
-    // Redo -> no-op (factory already merged). Stack stays at 3.
-    // Caller would re-apply merge externally (UI flow) to get back to 2.
+    // Redo -> 重新编成组
     undoStack.redo();
-    QCOMPARE(stack.count(), 3);
+    QCOMPARE(stack.count(), 2);
+    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
+    const auto &kids2 = stack.groupChildrenOf(stack.idOf(stack.count() - 1));
+    QCOMPARE(int(kids2.size()), 2);
+    QCOMPARE(kids2[0]->name, QStringLiteral("B"));
+    QCOMPARE(kids2[1]->name, QStringLiteral("C"));
 }
-
 void tst_LayerCommand::test_ungroup()
 {
-    // P0 leftover 3 (2026-09-21): Ungroup via makeFlattenGroup.
-    //   Factory applies flattenGroup + captures children; push redo no-op.
+    // Ungroup via makeFlattenGroup.
+    //   Factory 自己完成 flattenGroup; undo 重新立组, redo 再次解散.
     LayerStack stack;
     stack.addLayer(QStringLiteral("A"), makeMat());
     stack.addLayer(QStringLiteral("B"), makeMat());
@@ -495,11 +488,13 @@ void tst_LayerCommand::test_ungroup()
     QCOMPARE(restored[0]->name, QStringLiteral("B"));
     QCOMPARE(restored[1]->name, QStringLiteral("C"));
 
-    // Redo -> no-op (factory already flattened). Stack stays at 2.
+    // Redo -> 再次解散
     undoStack.redo();
-    QCOMPARE(stack.count(), 2);
+    QCOMPARE(stack.count(), 3);
+    for (int i = 0; i < stack.count(); ++i) {
+        QCOMPARE(int(stack.at(i)->kind), int(Layer::Bitmap));
+    }
 }
-
 void tst_LayerCommand::test_group_redo()
 {
     // P0 leftover 3 (2026-09-21): mergeIntoGroup({0,1}) packs A,B into
@@ -598,34 +593,37 @@ void tst_LayerCommand::test_setText()
     LayerStack stack;
     stack.addTextLayer(QStringLiteral("T"), QStringLiteral("old"), 24, Qt::white, QStringLiteral("Arial"));
     QUndoStack undoStack;
+    QVERIFY(stack.setText(0, QStringLiteral("new")));
     auto *cmd = LayerCommand::makeSetText(&stack, 0, QStringLiteral("old"));
     undoStack.push(cmd);
-    stack.setText(0, QStringLiteral("new"));
+    QCOMPARE(stack.at(0)->text, QStringLiteral("new"));
+
+    undoStack.redo();
     QCOMPARE(stack.at(0)->text, QStringLiteral("new"));
 }
-
 void tst_LayerCommand::test_setTextUndo()
 {
     LayerStack stack;
     stack.addTextLayer(QStringLiteral("T"), QStringLiteral("old"), 24, Qt::white, QStringLiteral("Arial"));
     QUndoStack undoStack;
+    QVERIFY(stack.setText(0, QStringLiteral("new")));
     auto *cmd = LayerCommand::makeSetText(&stack, 0, QStringLiteral("old"));
     undoStack.push(cmd);
-    stack.setText(0, QStringLiteral("new"));
     QCOMPARE(stack.at(0)->text, QStringLiteral("new"));
     undoStack.undo();
     QCOMPARE(stack.at(0)->text, QStringLiteral("old"));
+    undoStack.redo();
+    QCOMPARE(stack.at(0)->text, QStringLiteral("new"));
 }
-
 void tst_LayerCommand::test_setTextFont()
 {
     LayerStack stack;
     stack.addTextLayer(QStringLiteral("T"), QStringLiteral("x"), 24, Qt::white, QStringLiteral("Arial"));
     QUndoStack undoStack;
+    QVERIFY(stack.setTextFont(0, QStringLiteral("Times"), 48, Qt::yellow));
     auto *cmd = LayerCommand::makeSetTextFont(&stack, 0,
                                               QStringLiteral("Arial"), 24, QColor(Qt::white));
     undoStack.push(cmd);
-    stack.setTextFont(0, QStringLiteral("Times"), 48, Qt::yellow);
     QCOMPARE(stack.at(0)->fontFamily, QStringLiteral("Times"));
     QCOMPARE(stack.at(0)->fontSize, 48);
     QCOMPARE(stack.at(0)->textColor, QColor(Qt::yellow));
@@ -633,111 +631,120 @@ void tst_LayerCommand::test_setTextFont()
     QCOMPARE(stack.at(0)->fontFamily, QStringLiteral("Arial"));
     QCOMPARE(stack.at(0)->fontSize, 24);
     QCOMPARE(stack.at(0)->textColor, QColor(Qt::white));
+    undoStack.redo();
+    QCOMPARE(stack.at(0)->fontFamily, QStringLiteral("Times"));
+    QCOMPARE(stack.at(0)->fontSize, 48);
+    QCOMPARE(stack.at(0)->textColor, QColor(Qt::yellow));
 }
-
 void tst_LayerCommand::test_setTextFontUndo()
 {
     LayerStack stack;
     stack.addTextLayer(QStringLiteral("T"), QStringLiteral("x"), 24, Qt::white, QStringLiteral("Arial"));
     QUndoStack undoStack;
+    QVERIFY(stack.setTextFont(0, QStringLiteral("Consolas"), 32, Qt::red));
     auto *cmd = LayerCommand::makeSetTextFont(&stack, 0,
                                               QStringLiteral("Arial"), 24, QColor(Qt::white));
     undoStack.push(cmd);
-    stack.setTextFont(0, QStringLiteral("Consolas"), 32, Qt::red);
     undoStack.undo();
     QCOMPARE(stack.at(0)->fontFamily, QStringLiteral("Arial"));
     QCOMPARE(stack.at(0)->fontSize, 24);
     QCOMPARE(stack.at(0)->textColor, QColor(Qt::white));
+    undoStack.redo();
+    QCOMPARE(stack.at(0)->fontFamily, QStringLiteral("Consolas"));
+    QCOMPARE(stack.at(0)->fontSize, 32);
+    QCOMPARE(stack.at(0)->textColor, QColor(Qt::red));
 }
-
 void tst_LayerCommand::test_setSmartObject()
 {
     LayerStack stack;
     stack.addSmartObjectLayer(QStringLiteral("S"), QStringLiteral("/old/path.png"), false);
     QUndoStack undoStack;
+    QVERIFY(stack.setSmartObjectSource(0, QStringLiteral("/new/path.png"), true));
     auto *cmd = LayerCommand::makeSetSmartObject(&stack, 0, QStringLiteral("/old/path.png"), false);
     undoStack.push(cmd);
-    stack.setSmartObjectSource(0, QStringLiteral("/new/path.png"), true);
     QCOMPARE(stack.at(0)->sourceFilePath, QStringLiteral("/new/path.png"));
     QVERIFY(stack.at(0)->sourceEmbedded);
     undoStack.undo();
     QCOMPARE(stack.at(0)->sourceFilePath, QStringLiteral("/old/path.png"));
     QVERIFY(!stack.at(0)->sourceEmbedded);
+    undoStack.redo();
+    QCOMPARE(stack.at(0)->sourceFilePath, QStringLiteral("/new/path.png"));
+    QVERIFY(stack.at(0)->sourceEmbedded);
 }
-
 void tst_LayerCommand::test_setSmartObjectUndo()
 {
     LayerStack stack;
     stack.addSmartObjectLayer(QStringLiteral("S"), QStringLiteral("/p.png"), false);
     QUndoStack undoStack;
+    QVERIFY(stack.setSmartObjectSource(0, QStringLiteral("/q.png"), true));
     auto *cmd = LayerCommand::makeSetSmartObject(&stack, 0, QStringLiteral("/p.png"), false);
     undoStack.push(cmd);
-    stack.setSmartObjectSource(0, QStringLiteral("/q.png"), true);
     undoStack.undo();
     QCOMPARE(stack.at(0)->sourceFilePath, QStringLiteral("/p.png"));
     QVERIFY(!stack.at(0)->sourceEmbedded);
+    undoStack.redo();
+    QCOMPARE(stack.at(0)->sourceFilePath, QStringLiteral("/q.png"));
+    QVERIFY(stack.at(0)->sourceEmbedded);
 }
-
 void tst_LayerCommand::test_setAdjustmentType()
 {
     LayerStack stack;
     stack.addAdjustmentLayer(QStringLiteral("A"), QStringLiteral("curves"));
     QUndoStack undoStack;
+    QVERIFY(stack.setAdjustmentType(0, QStringLiteral("levels")));
     auto *cmd = LayerCommand::makeSetAdjustmentType(&stack, 0, QStringLiteral("curves"));
     undoStack.push(cmd);
-    stack.setAdjustmentType(0, QStringLiteral("levels"));
     QCOMPARE(stack.at(0)->adjustmentType, QStringLiteral("levels"));
     undoStack.undo();
     QCOMPARE(stack.at(0)->adjustmentType, QStringLiteral("curves"));
+    undoStack.redo();
+    QCOMPARE(stack.at(0)->adjustmentType, QStringLiteral("levels"));
 }
-
 void tst_LayerCommand::test_setAdjustmentLut()
 {
     LayerStack stack;
     stack.addAdjustmentLayer(QStringLiteral("A"), QStringLiteral("curves"));
     auto oldLut = stack.at(0)->adjustmentLut.clone();
-    QUndoStack undoStack;
-    auto *cmd = LayerCommand::makeSetAdjustmentLut(&stack, 0, oldLut);
-    undoStack.push(cmd);
     // new LUT: invert
     cv::Mat newLut(256, 1, CV_8U);
     uchar *p = newLut.ptr<uchar>();
     for (int i = 0; i < 256; ++i) p[i] = static_cast<uchar>(255 - i);
-    stack.setAdjustmentLut(0, newLut);
+    QVERIFY(stack.setAdjustmentLut(0, newLut));
+
+    QUndoStack undoStack;
+    auto *cmd = LayerCommand::makeSetAdjustmentLut(&stack, 0, oldLut);
+    undoStack.push(cmd);
     QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(0)), 255);
     QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(255)), 0);
     undoStack.undo();
     QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(0)), 0);
     QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(255)), 255);
+    undoStack.redo();
+    QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(0)), 255);
+    QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(255)), 0);
 }
-
 void tst_LayerCommand::test_setAdjustmentLutUndo()
 {
     LayerStack stack;
     stack.addAdjustmentLayer(QStringLiteral("A"), QStringLiteral("curves"));
     auto oldLut = stack.at(0)->adjustmentLut.clone();
-    QUndoStack undoStack;
-    auto *cmd = LayerCommand::makeSetAdjustmentLut(&stack, 0, oldLut);
-    undoStack.push(cmd);
     cv::Mat newLut(256, 1, CV_8U);
     uchar *p = newLut.ptr<uchar>();
     for (int i = 0; i < 256; ++i) p[i] = 128;
-    stack.setAdjustmentLut(0, newLut);
+    QVERIFY(stack.setAdjustmentLut(0, newLut));
+
+    QUndoStack undoStack;
+    auto *cmd = LayerCommand::makeSetAdjustmentLut(&stack, 0, oldLut);
+    undoStack.push(cmd);
     // 现在是 all-128
     QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(50)), 128);
     undoStack.undo();
     // 还原 identity
     QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(50)), 50);
     QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(200)), 200);
+    undoStack.redo();
+    QCOMPARE(static_cast<int>(stack.at(0)->adjustmentLut.at<uchar>(50)), 128);
 }
-
-// P0-3.3 (2026-09-08): 升级版 SetAdjustmentLut (host + newImage) 工厂 + 撤销/重做
-//   验证 4 件事:
-//     1) 新 overload 编译并能创建 command
-//     2) 传入的 oldImage / newImage 被 clone 存储 (修改原 Mat 不影响 command)
-//     3) host == nullptr 走原 LUT 路径 (兼容, 不崩)
-//     4) QPointer 存到 m_host, QObject 销毁后 m_host 自动 null
-//   注: 完整 image 恢复走 replaceCurrentImage, 由 AdjustmentPanel 集成测试覆盖 (e.g. tst_ImageWorker)
 void tst_LayerCommand::test_setAdjustmentLutWithHost()
 {
     LayerStack stack;
@@ -786,6 +793,95 @@ void tst_LayerCommand::test_setAdjustmentLutWithHost()
     undoStack.undo();
     // redo: no-op 跟 P0-3.2 行为一致
     undoStack.redo();
+}
+
+// =====================================================================
+//  undo / redo 语义回归
+// =====================================================================
+
+//  撤销/重做必须发 layerChanged.
+//    没有这个信号, 图层面板和画布不知道图层内容变了, 用户看到的是旧帧.
+void tst_LayerCommand::test_undo_emits_layerChanged()
+{
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("L1"), makeMat());
+    QSignalSpy spy(&stack, &LayerStack::layerChanged);
+
+    QUndoStack undoStack;
+    QVERIFY(stack.setOpacity(0, 0.5f));
+    undoStack.push(new LayerCommand(&stack, LayerCommand::Opacity, 0, 1.0f));
+    spy.clear();
+
+    undoStack.undo();
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(stack.at(0)->opacity, 1.0f);
+
+    spy.clear();
+    undoStack.redo();
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(stack.at(0)->opacity, 0.5f);
+}
+
+//  撤销 → 重做 必须回到"新值", 不能是空操作.
+void tst_LayerCommand::test_redo_restores_new_value()
+{
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("Old"), makeMat());
+    QUndoStack undoStack;
+
+    QVERIFY(stack.setOpacity(0, 0.25f));
+    QVERIFY(stack.setVisible(0, false));
+    QVERIFY(stack.setBlend(0, Layer::Multiply));
+    QVERIFY(stack.rename(0, QStringLiteral("New")));
+
+    undoStack.push(new LayerCommand(&stack, LayerCommand::Opacity, 0, 1.0f));
+    undoStack.push(new LayerCommand(&stack, LayerCommand::Visible, 0, true));
+    undoStack.push(new LayerCommand(&stack, LayerCommand::Blend, 0,
+                                    static_cast<int>(Layer::Normal)));
+    undoStack.push(new LayerCommand(&stack, LayerCommand::Rename, 0,
+                                    QStringLiteral("Old")));
+
+    undoStack.undo();   // rename
+    undoStack.undo();   // blend
+    undoStack.undo();   // visible
+    undoStack.undo();   // opacity
+    QCOMPARE(stack.at(0)->name, QStringLiteral("Old"));
+    QCOMPARE(stack.at(0)->blend, Layer::Normal);
+    QVERIFY(stack.at(0)->visible);
+    QCOMPARE(stack.at(0)->opacity, 1.0f);
+
+    undoStack.redo();   // rename
+    undoStack.redo();   // blend
+    undoStack.redo();   // visible
+    undoStack.redo();   // opacity
+    QCOMPARE(stack.at(0)->name, QStringLiteral("New"));
+    QCOMPARE(stack.at(0)->blend, Layer::Multiply);
+    QVERIFY(!stack.at(0)->visible);
+    QCOMPARE(stack.at(0)->opacity, 0.25f);
+}
+
+//  删中间一层 → 撤销 → 重做: 删掉的必须是同一层, 而且要放回原来的位置.
+void tst_LayerCommand::test_remove_redo_same_layer()
+{
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("A"), makeMat());
+    stack.addLayer(QStringLiteral("B"), makeMat());
+    stack.addLayer(QStringLiteral("C"), makeMat());
+
+    QUndoStack undoStack;
+    undoStack.push(LayerCommand::makeRemove(&stack, 1));
+    QCOMPARE(stack.count(), 2);
+    QCOMPARE(stack.at(0)->name, QStringLiteral("A"));
+    QCOMPARE(stack.at(1)->name, QStringLiteral("C"));
+
+    undoStack.undo();
+    QCOMPARE(stack.count(), 3);
+    QCOMPARE(stack.at(1)->name, QStringLiteral("B"));
+
+    undoStack.redo();
+    QCOMPARE(stack.count(), 2);
+    QCOMPARE(stack.at(0)->name, QStringLiteral("A"));
+    QCOMPARE(stack.at(1)->name, QStringLiteral("C"));
 }
 
 QTEST_MAIN(tst_LayerCommand)
