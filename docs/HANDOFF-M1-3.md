@@ -131,24 +131,43 @@
 | `tests/tst_P8_1_1.cpp` | 8 | 3 处 `layer.layerMask` / `layer.maskEnabled` → `layer.mask.pixel` / `layer.mask.enabled`；**另外**渲染输出现在是 4 通道，`Vec3b` 断言要改 `Vec4b` |
 | `tests/tst_P8_RenderParity.cpp` | 2 | 同样换 `layer.mask` |
 
-### 4.2 M1-3 尚未开工的子项
+### 4.2 M1-3 尚未开工的子项 —— ✅ 已全部完成（commit `e8e2d7a`）
 
-- [ ] **工具 / 滤镜链 4 通道**：像素已归一化成 4 通道，但这些地方仍按 3 通道假设工作
-      （`src/media/imageprocessor.cpp`、`src/media/filters/FilterStrategy.cpp`、
-      `src/media/brushes/*`、画笔 / 马赛克 / 克隆 / 修复 / 液化）
-- [ ] **显示端**：`src/media/imageprocessor.cpp:112` `matToQImage()` 支持 4 通道 → `QImage::Format_ARGB32`
-- [ ] **`src/app/mainwindow.cpp`** 的 3/4 通道分支（746 / 2601 / 2771 行附近）
-- [ ] **LYR-41 蒙版操作可撤销**：`density` / `feather` / `invert` 三个 handler 现在**不 push 命令**
-      （`imagewindow.cpp` 的 `setMaskDensityRequested` / `setMaskFeatherRequested` / `setMaskInvertRequested`）→ 改走 `LayerMaskCommand`
-- [ ] **`docs/DEBT.md` 更新**
-      - `A-LAYERMASK`（`LayerMaskRenderer` 只被 tests 调用）→ 已接线，状态改 `done`，**同时删掉** `LayerMaskRenderer.h` 里的源码 TODO 标记
-      - `A-GROUPZORDER`（P8.4）→ 组 z 序 + LYR-14 已修，状态改 `done`，**同时删掉**源码 TODO 标记
+- [x] **工具 / 滤镜链 4 通道**：`FilterStrategy.cpp` / `brushes/*` 的滤镜本身已按通道数分支
+      （`in.channels() == 3 || == 4`），无需再改；真正丢 alpha 的是显示端与 Liquify 中转，见下两条。
+- [x] **显示端**：`matToQImage()` 按通道数选 QImage 格式（1 → `Format_Grayscale8`，
+      3 → `Format_RGB888`，4 → `Format_RGBA8888`），修掉 4 通道被包进 `Format_RGB888`
+      导致的 alpha 丢失与像素错位（INV-FMT-2）；`qImageToMat()` 相应保留 alpha。
+      注意：`Format_ARGB32` 是**预乘**语义，这里用 `Format_RGBA8888`（直通），不要改回去。
+- [x] **`src/app/mainwindow.cpp`** 的 3/4 通道分支：Liquify 中转不再用 `COLOR_BGR2BGRA`
+      补 alpha（那会把 alpha 补成 255 不透明，毁掉图层原有透明），改为回填**原始** alpha。
+- [x] **LYR-41 蒙版操作可撤销**：`setMaskDensityRequested` / `setMaskFeatherRequested` /
+      `setMaskInvertRequested` 三个 handler 改走 `LayerMaskCommand`（before/after 快照）。
+- [x] **`docs/DEBT.md` 更新**
+      - `A-LAYERMASK` → `done`（`LayerMaskRenderer` 已接入两条渲染路径）
+      - `A-GROUPZORDER` → `done`（组 z 序 + LYR-14 已修）
       - `INV-ID-1`（§B）维持 `partial` 不变
-- [ ] **`docs/CONTRACTS.md` 补像素/蒙版契约章节**（契约目前只写在 `PixelFormat.h` 文件头）
-- [ ] **新增单测**（建议 `tests/tst_AlphaMask.cpp`）：alpha 契约、蒙版真生效且不遮黑、
-      隐藏底图真露出、全栈合成、编组 z 序落位、legacy / compositor parity
-- [ ] **验证**：全量 build → 全量 `ctest` → 门禁 `ERROR=0` → **破坏自检**（必须真的改坏确认变红再还原）
-- [ ] **提交 M1-3**（翻译文件 `translatefile/*.ts` 必须同 commit）
+- [x] **`docs/CONTRACTS.md` 补像素/蒙版契约章节**：新增 §7.6.1，给出
+      INV-PIXEL-1..3 / INV-MASK-1..4 / INV-PATH-1..2 的编号与断言口径。
+- [x] **新增单测** `tests/tst_AlphaMask.cpp`：alpha 契约、蒙版真生效且不遮黑、
+      隐藏底图真露出、legacy / compositor parity。
+- [x] **验证**：全量 build → 全量 `ctest`（**85/85 全绿**）→ 门禁 `ERROR=0`
+      → **破坏自检**（R1/R2/R3/R4 四条规则都能真的变红，树已逐字节还原）。
+- [x] **提交 M1-3**（`e8e2d7a`，翻译文件 `translatefile/*.ts` 同 commit）。
+
+> **过程中额外修掉的 3 个生产 bug**（都是真 bug，不是测试期望值问题）：
+> 1. `LayerStack::rasterize()` 把 `toBgra()` 的**零拷贝**返回值直接交给渲染路径，
+>    导致蒙版被**永久写进**图层自身的 alpha 且逐次渲染累积（255→122→58…），
+>    两条渲染路径在蒙版图层上漂移。修法：`return toBgra(l->image).clone();`
+>    （`toBgra()` 的零拷贝在只读场景是性能优势，不该改它的语义）。
+> 2. `RenderGraph` 的合成画布还是 `CV_8UC3`，4 通道 tile 被 `BGRA2BGR` 静默丢 alpha。
+> 3. `LayerMaskNode` 在蒙版 tile 变成 4 通道后走 `else` 分支**直接 return base**，
+>    蒙版被静默忽略。
+>
+> **另外两条渲染路径还对齐了三处语义**（改之前 parity 差 18~122）：
+> - 调整层：LUT 只作用于颜色通道；不透明度走 Porter-Duff，不是 `addWeighted`。
+> - 组：子层合成到**透明**组画布再叠回外层（组内的孩子不能看到组下方的图层）。
+> - 底图：普通图层，渲染循环覆盖全栈（LYR-13 / LYR-14）。
 
 ---
 
