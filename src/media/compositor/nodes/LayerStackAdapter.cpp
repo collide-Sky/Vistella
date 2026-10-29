@@ -1,5 +1,8 @@
 #include "LayerStackAdapter.h"
 
+#include "../../imageworker/layers/LayerMaskRenderer.h"
+#include "../../imageworker/layers/PixelFormat.h"
+
 #include "../TileGrid.h"
 
 #include "../../imageworker/layers/LayerStack.h"
@@ -8,6 +11,8 @@
 
 #include <opencv2/imgproc.hpp>   // cv::resize (mask normalization)
 
+#include <QSize>                // QSize (蒙版覆盖度归一化用的画布尺寸)
+
 #include <algorithm>             // std::min
 
 namespace compositor {
@@ -15,27 +20,20 @@ namespace compositor {
 namespace {
 
 // Adapter-private mask source: a CompositorNode that yields a
-// single-channel cv::Mat from a Layer's layerMask. Lives in the
-// adapter's Result so its lifetime matches the graph.
+// single-channel cv::Mat — the mask's **coverage** — from a Layer's
+// LayerMask. Lives in the adapter's Result so its lifetime matches the graph.
 //
-// Two steps, in this order:
+// The coverage is folded in one place, by LayerMaskRenderer::buildAlpha()
+// (the single entry point): density / feather / invert are all handled
+// there, and the mask is normalised to the canvas geometry as well -- a
+// 16x16 brush mask on a 32x32 layer is scaled up, and slicing the
+// original directly would leave everything outside the mask footprints
+// fully masked.
 //
-// 1. Normalize the mask to canvas geometry. The legacy applyMask() resizes
-//    a mask whose size differs from the layer it masks, so a 16x16 stroke
-//    mask over a 32x32 layer is scaled UP before multiplying. Slicing the
-//    raw mask instead would leave everything outside the mask's own
-//    footprint at zero, which reads as "fully masked out" rather than
-//    "not covered by the mask".
-//
-// 2. Slice by tile, exactly like LayerBitmapNode does for a colour layer.
-//    Returning the whole mask used to work only when the canvas fit in one
-//    tile: the consumer found a size mismatch against the tile and resized
-//    the full mask down to it, so every tile received a downscaled copy of
-//    the entire mask instead of its own region. That divergence appeared
-//    as soon as a canvas spanned more than one tile.
-//
-// The normalized mask is memoized, so an undersized brush mask is rescaled
-// once per render rather than once per tile.
+// Then it is sliced per tile, the same way LayerBitmapNode does it for
+// the colour layers.
+// The normalised result is memoised, so an undersized brush mask is
+// rescaled only once per render.
 class MaskBitmapNode : public CompositorNode {
 public:
     explicit MaskBitmapNode(const layers::Layer* layer, QString name)
@@ -60,14 +58,13 @@ const cv::Mat& MaskBitmapNode::normalizedMask(const cv::Size& canvas)
 {
     if (m_normalizedFor == canvas && !m_normalized.empty()) return m_normalized;
 
-    const cv::Mat& full = m_layer->layerMask;
-    if (full.size() == canvas) {
-        m_normalized = full;
-    } else {
-        cv::Mat resized;
-        cv::resize(full, resized, canvas, 0, 0, cv::INTER_LINEAR);
-        m_normalized = resized;
+    // The single mask model: Layer::mask -> coverage (grayscale 8UC1).
+    cv::Mat coverage = layers::LayerMaskRenderer::buildAlpha(
+        m_layer->mask, QSize(canvas.width, canvas.height));
+    if (coverage.empty() || coverage.size() != canvas) {
+        coverage = cv::Mat(canvas, CV_8UC1, cv::Scalar(255));
     }
+    m_normalized = coverage;
     m_normalizedFor = canvas;
     return m_normalized;
 }
@@ -76,7 +73,7 @@ cv::Mat MaskBitmapNode::compute(int tileX, int tileY,
                                 const TileGrid& grid,
                                 RenderContext& /*ctx*/)
 {
-    if (!m_layer || m_layer->layerMask.empty()) return cv::Mat();
+    if (!m_layer || !m_layer->mask.isActive()) return cv::Mat();
 
     const cv::Rect r = grid.tileRect(tileX, tileY);
     if (r.width <= 0 || r.height <= 0) return cv::Mat();
@@ -125,41 +122,16 @@ namespace {
 //    needs something to hang the first layer off, which is what
 //    SolidCanvasNode provides.
 CompositorNode::NodeId makeRoot(layers::LayerStack& stack,
-                                int baseIdx,
                                 LayerStackAdapter::Result& r)
 {
-    if (baseIdx < 0) {
-        r.canvasSize = stack.canvasSize();
-        auto canvas = std::make_unique<SolidCanvasNode>(
-            r.canvasSize, cv::Scalar(255, 255, 255),
-            QStringLiteral("Canvas:white"));
-        const CompositorNode::NodeId id = canvas->id();
-        r.graph.addNode(canvas.get());
-        r.canvases.push_back(std::move(canvas));
-        return id;
-    }
-
-    layers::LayerPtr base = stack.at(baseIdx);
-    r.canvasSize = base->image.size();
-
-    auto bitmap = std::make_unique<LayerBitmapNode>(
-        base.get(), QString::fromLatin1("Base:%1").arg(base->name));
-    CompositorNode::NodeId id = bitmap->id();
-    r.graph.addNode(bitmap.get());
-    r.bitmaps.push_back(std::move(bitmap));
-
-    // Hidden base: the legacy loop skips it, so no opacity is applied
-    // and the raw image stands. See rule 1 above.
-    if (!base->visible || base->opacity >= 1.0f) return id;
-
-    auto fade = std::make_unique<LayerOpacityNode>(
-        id, base->opacity,
-        QString::fromLatin1("BaseOpacity:%1").arg(base->name));
-    const CompositorNode::NodeId fadeId = fade->id();
-    r.graph.addNode(fade.get());
-    r.graph.addEdge(id, fadeId);
-    r.opacities.push_back(std::move(fade));
-    return fadeId;
+    r.canvasSize = stack.canvasSize();
+    auto canvas = std::make_unique<SolidCanvasNode>(
+        r.canvasSize, cv::Scalar(255, 255, 255, 255),
+        QStringLiteral("Canvas:white"));
+    const CompositorNode::NodeId id = canvas->id();
+    r.graph.addNode(canvas.get());
+    r.canvases.push_back(std::move(canvas));
+    return id;
 }
 
 // Build one group's contribution: composite its children onto the
@@ -192,7 +164,18 @@ CompositorNode::NodeId appendGroupLayer(layers::LayerStack& stack,
     const auto& children = stack.groupChildrenOf(layer);
     if (children.empty()) return base;
 
-    CompositorNode::NodeId inner = base;
+    // A group is its own compositing stack (PS semantics): the child
+    //   layers are composited onto a TRANSPARENT group canvas, then that
+    //   canvas is composited back over the outer canvas with the group
+    //   opacity.
+    auto transparent = std::make_unique<SolidCanvasNode>(
+        r.canvasSize, cv::Scalar(0, 0, 0, 0),
+        QString::fromLatin1("GroupCanvas:%1").arg(layer->name));
+    const CompositorNode::NodeId transparentId = transparent->id();
+    r.graph.addNode(transparent.get());
+    r.canvases.push_back(std::move(transparent));
+
+    CompositorNode::NodeId inner = transparentId;
     for (const auto& child : children) {
         if (!child || !child->visible) continue;
 
@@ -269,7 +252,7 @@ CompositorNode::NodeId appendColorLayer(const layers::LayerStack& stack,
     }
 
     // Mask (if enabled) wraps the color node.
-    if (layer->maskEnabled && !layer->layerMask.empty()) {
+    if (layer->mask.isActive()) {
         auto maskSrc = std::make_unique<MaskBitmapNode>(
             layer.get(), QString::fromLatin1("MaskSrc:%1").arg(layer->name));
         const CompositorNode::NodeId maskSrcId = maskSrc->id();
@@ -375,24 +358,12 @@ LayerStackAdapter::Result LayerStackAdapter::build(layers::LayerStack& stack)
     Result r;
     const int n = stack.count();
 
-    // Legacy render() seeds the canvas with the FIRST Bitmap layer that
-    // has a non-empty image, then walks forward from there. That search
-    // deliberately does not check `visible` — see makeRoot() below.
-    int baseIdx = -1;
-    for (int i = 0; i < n; ++i) {
-        const auto& l = stack.at(i);
-        if (l && l->kind == layers::Layer::Bitmap && !l->image.empty()) {
-            baseIdx = i;
-            break;
-        }
-    }
-
-    const CompositorNode::NodeId root = makeRoot(stack, baseIdx, r);
-
-    // Layers before the base index are never reached by the legacy loop
-    // (`for (i = max(0, baseIdx); ...)`), so they are excluded here too.
-    const int begin = (baseIdx >= 0) ? baseIdx + 1 : 0;
-    r.outputNode = buildRange(stack, begin, n, root, r);
+    // The root is the document-level white canvas and EVERY layer in
+    //   the stack takes part in the compositing (LYR-13 / LYR-14): the base
+    //   image is no longer the root, so hiding it really reveals what is
+    //   below it.
+    const CompositorNode::NodeId root = makeRoot(stack, r);
+    r.outputNode = buildRange(stack, 0, n, root, r);
     return r;
 }
 

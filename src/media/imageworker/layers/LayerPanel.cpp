@@ -576,7 +576,8 @@ void LayerPanel::syncMaskProps(int index)
     // Adjustment 层无自己的图像, 蒙版无意义
     const bool adjustable = (l->kind != Layer::Adjustment);
     m_maskAdd->setEnabled(adjustable);
-    if (l->layerMask.empty()) {
+    // The single mask model: Layer::mask (LYR-15 / CP-18).
+    if (!l->mask.hasData()) {
         m_maskStatus->setText(tr("(无)"));
         m_maskEnable->setEnabled(false);
         m_maskClear->setEnabled(false);
@@ -584,12 +585,12 @@ void LayerPanel::syncMaskProps(int index)
         m_maskEnable->setChecked(false);
         m_maskEnable->blockSignals(false);
     } else {
-        QString s = l->maskEnabled ? tr("(已启用)") : tr("(已禁用)");
+        QString s = l->mask.enabled ? tr("(已启用)") : tr("(已禁用)");
         m_maskStatus->setText(s);
         m_maskEnable->setEnabled(true);
         m_maskClear->setEnabled(true);
         m_maskEnable->blockSignals(true);
-        m_maskEnable->setChecked(l->maskEnabled);
+        m_maskEnable->setChecked(l->mask.enabled);
         m_maskEnable->blockSignals(false);
     }
 }

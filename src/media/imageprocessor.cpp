@@ -114,30 +114,58 @@ QImage ImageProcessor::matToQImage(const cv::Mat &mat)
     if (mat.empty())
         return {};
 
-    // 转成 RGB888 (Qt 习惯)
-    cv::Mat rgb;
+    // The QImage format must match the channel count exactly (INV-FMT-2).
+    //   A 4-channel mat converted to RGBA bytes but wrapped in
+    //   Format_RGB888 would be read by Qt as 3 bytes per pixel: skewed
+    //   colors and a silently dropped alpha channel.
+    cv::Mat buf;
+    QImage::Format format = QImage::Format_RGB888;
+
     switch (mat.channels()) {
     case 1:
-        cv::cvtColor(mat, rgb, cv::COLOR_GRAY2RGB);
+        buf = mat;
+        format = QImage::Format_Grayscale8;
         break;
     case 3:
-        cv::cvtColor(mat, rgb, cv::COLOR_BGR2RGB);
+        cv::cvtColor(mat, buf, cv::COLOR_BGR2RGB);
+        format = QImage::Format_RGB888;
         break;
     case 4:
-        cv::cvtColor(mat, rgb, cv::COLOR_BGRA2RGBA);
+        cv::cvtColor(mat, buf, cv::COLOR_BGRA2RGBA);
+        format = QImage::Format_RGBA8888;
         break;
     default:
         return {};
     }
 
-    return QImage(rgb.data, rgb.cols, rgb.rows,
-                  static_cast<int>(rgb.step),
-                  QImage::Format_RGB888).copy();
+    // Copy into an owned buffer: `buf` may alias `mat` (the 1-channel
+    //   case above), and the QImage must not share the caller's memory.
+    return QImage(buf.data, buf.cols, buf.rows,
+                  static_cast<int>(buf.step),
+                  format).copy();
 }
 
 cv::Mat ImageProcessor::qImageToMat(const QImage &img)
 {
     if (img.isNull()) return {};
+
+    // Keep the alpha channel (INV-FMT-2): an image that came from a
+    //   4-channel layer must not lose its alpha on the way back.
+    //   hasAlphaChannel() is false for Format_RGB888, so the RGB path
+    //   stays byte-for-byte what it was before.
+    if (img.hasAlphaChannel()) {
+        // Format_RGBA8888 is the byte-exact mirror of Format_ARGB32
+        //   (both are 4 bytes per pixel, R,G,B,A in memory) and
+        //   Format_ARGB32 is the format QPainter writes by default.
+        QImage rgba = img.convertToFormat(QImage::Format_RGBA8888).copy();
+        cv::Mat mat(rgba.height(), rgba.width(), CV_8UC4,
+                    const_cast<uchar*>(rgba.bits()),
+                    static_cast<size_t>(rgba.bytesPerLine()));
+        cv::Mat bgra;
+        cv::cvtColor(mat, bgra, cv::COLOR_RGBA2BGRA);
+        return bgra;
+    }
+
     // 关键 1: QImage 共享数据, 必须 .copy() 深拷贝避免和原图互相干扰
     QImage rgb = img.convertToFormat(QImage::Format_RGB888).copy();
     // 关键 2: 用 QImage::rgbSwapped() 替代 cv::cvtColor, 避免 in-place 复杂性

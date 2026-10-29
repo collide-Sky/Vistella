@@ -231,17 +231,13 @@ public:
     // 给 MainWindow 调, 拿到嵌入 cache 路径 (打开源用)
     static QString smartObjectCachePathFor(const QString &sourceFilePath);
 
-    // 蒙版 setter
-    //   addMask: 加载一张灰度图当蒙版, 同步 enable
-    //   clearMask: 删蒙版 (但保留 enable 状态)
-    //   enableMask: 开关蒙版 (不删图)
-    //   loadMaskFromImage: 从任意彩色图生成灰度蒙版 (转灰度再二值化或保留)
-    bool addMask(int index, const cv::Mat &grayMask);
-    bool clearMask(int index);
-    bool enableMask(int index, bool enabled);
-
-    // 扩展 LayerMask 接口 (pixel/vector/density/feather/invert)
-    //   这些方法直接操作 layer.mask struct, 与上面 3 个旧方法互不冲突
+    // The mask setters -- the SINGLE mask model is Layer::mask
+    // (LYR-15 / CP-18).
+    //   There used to be three old interfaces here, addMask / clearMask /
+    //   enableMask, writing layerMask + maskEnabled, and the render read
+    //   those while the UI / brush wrote Layer::mask -- two states written
+    //   independently, so "add mask / invert / feather / density" had no
+    //   visual effect at all. Now there is only one model.
     bool addPixelMask(int index, const cv::Mat& grayMask);
     bool addVectorMask(int index, const QVector<QPainterPath>& paths);
     bool clearMaskFull(int index);  // clear full struct (vs old clearMask)

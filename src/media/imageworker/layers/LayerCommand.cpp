@@ -248,38 +248,6 @@ LayerCommand* LayerCommand::makeSetAdjustmentLut(LayerStack *stack, int index, c
     return cmd;
 }
 
-// =====================================================================
-//   蒙版 factory
-// =====================================================================
-
-LayerCommand* LayerCommand::makeAddMask(LayerStack *stack, int index,
-                                         const cv::Mat &oldMask, bool wasEnabled)
-{
-    auto *cmd = new LayerCommand(stack, AddMask, index);
-    cmd->m_oldMat = oldMask.empty() ? cv::Mat() : oldMask.clone();
-    cmd->m_boolVal = wasEnabled;
-    cmd->setText(QStringLiteral("Add Mask"));
-    return cmd;
-}
-
-LayerCommand* LayerCommand::makeClearMask(LayerStack *stack, int index,
-                                           const cv::Mat &oldMask, bool wasEnabled)
-{
-    auto *cmd = new LayerCommand(stack, ClearMask, index);
-    cmd->m_oldMat = oldMask.empty() ? cv::Mat() : oldMask.clone();
-    cmd->m_boolVal = wasEnabled;
-    cmd->setText(QStringLiteral("Clear Mask"));
-    return cmd;
-}
-
-LayerCommand* LayerCommand::makeEnableMask(LayerStack *stack, int index, bool oldEnabled)
-{
-    auto *cmd = new LayerCommand(stack, EnableMask, index);
-    cmd->m_boolVal = oldEnabled;
-    cmd->setText(QStringLiteral("Toggle Mask"));
-    return cmd;
-}
-
 //  智能对象 link↔embed 切换 factory
 LayerCommand* LayerCommand::makeToggleSmartObjectEmbed(LayerStack *stack, int index, bool oldEmbedded)
 {
@@ -490,12 +458,6 @@ void LayerCommand::captureAfter()
         // 新值 = 调整图层当前的 LUT (调用方先写新值, 再 push command)
         m_newMat = l->adjustmentLut.clone();
         break;
-    case AddMask:
-    case ClearMask:
-        m_newMat  = l->layerMask.clone();
-        m_boolNew = l->maskEnabled;
-        break;
-    case EnableMask:         m_boolNew = l->maskEnabled; break;
     case ToggleSmartObjectEmbed: m_boolNew = l->sourceEmbedded; break;
     case ConvertToSmartObject:
     case RasterizeSmartObject:
@@ -676,37 +638,6 @@ void LayerCommand::applyState(bool after)
         }
         break;
     }
-    case AddMask: {
-        // 向前: 挂上新蒙版; 撤销: 还原原来的蒙版 + 开关
-        if (after) {
-            if (!m_newMat.empty()) m_stack->addMask(m_index, m_newMat);
-        } else {
-            auto l = m_stack->at(m_index);
-            if (l) {
-                l->layerMask = m_oldMat.empty() ? cv::Mat() : m_oldMat.clone();
-                l->maskEnabled = m_boolVal;
-                m_stack->notifyLayerChanged(m_index);
-            }
-        }
-        break;
-    }
-    case ClearMask: {
-        // 向前: 清掉蒙版; 撤销: 还原原来的蒙版 + 开关
-        if (after) {
-            m_stack->clearMask(m_index);
-        } else {
-            auto l = m_stack->at(m_index);
-            if (l) {
-                l->layerMask = m_oldMat.empty() ? cv::Mat() : m_oldMat.clone();
-                l->maskEnabled = m_boolVal;
-                m_stack->notifyLayerChanged(m_index);
-            }
-        }
-        break;
-    }
-    case EnableMask:
-        m_stack->enableMask(m_index, after ? m_boolNew : m_boolVal);
-        break;
     case ToggleSmartObjectEmbed: {
         auto l = m_stack->at(m_index);
         if (l && l->kind == Layer::SmartObject) {

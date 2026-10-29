@@ -7,6 +7,8 @@
 #include "../RenderGraph.h"
 #include "../TileGrid.h"
 
+#include "../../imageworker/layers/PixelFormat.h"   // layers::splitBgra
+
 namespace compositor {
 
 LayerAdjustmentNode::LayerAdjustmentNode(CompositorNode::NodeId canvas,
@@ -50,14 +52,23 @@ cv::Mat LayerAdjustmentNode::compute(int tileX, int tileY,
     // legacy branch that `continue`s when the LUT is unusable.
     if (!m_hasUsableLut) return canvas;
 
-    cv::Mat adjusted;
-    cv::LUT(canvas, m_lut, adjusted);
+    // The LUT only touches the colour channels -- running the alpha
+    // through the LUT as well would scramble the canvas transparency.
+    cv::Mat bgr, alpha, adjustedBgr, adjusted;
+    layers::splitBgra(canvas, bgr, alpha);
+    cv::LUT(bgr, m_lut, adjustedBgr);
+    std::vector<cv::Mat> ch;
+    cv::split(adjustedBgr, ch);
+    ch.push_back(alpha);
+    cv::merge(ch, adjusted);
 
     if (m_opacity < 1.0f) {
-        cv::Mat mixed;
-        cv::addWeighted(canvas, 1.0f - m_opacity,
-                        adjusted, m_opacity, 0, mixed);
-        return mixed;
+        // The adjustment's opacity scales the COVERAGE, not the colour:
+        //   the adjusted colour is composited over the original with
+        //   Porter-Duff "over", exactly like every other layer. A plain
+        //   addWeighted would scale the colour instead, which darkens
+        //   the result and disagrees with the legacy path.
+        return layers::compositeOver(canvas, adjustedBgr, alpha, m_opacity);
     }
     return adjusted;
 }

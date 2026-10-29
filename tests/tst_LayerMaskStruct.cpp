@@ -1,18 +1,27 @@
+// tst_LayerMaskStruct.cpp
+//
 // LayerMask + LayerMaskRenderer unit tests.
+//
+// protects: a mask changes only the alpha channel of a layer; it never
+//           multiplies RGB (CP-07). Layer pixels are CV_8UC4 BGRA with
+//           straight alpha (docs/CONTRACTS.md 7.6).
+// path:     mask model -> buildAlpha() coverage -> applyAlpha() into a
+//           layer -> alpha scaled, colour untouched.
 //
 // Coverage:
 //  1.  Default LayerMask is inactive (kind=None).
 //  2.  Pixel mask isActive only when enabled + has pixel data.
 //  3.  Vector mask isActive only when enabled + has paths.
 //  4.  clear() resets all fields.
-//  5.  LayerMaskRenderer::apply on inactive mask is a no-op.
-//  6.  apply with full-opacity pixel mask leaves the layer unchanged.
-//  7.  apply with half-opacity pixel mask halves pixel values.
-//  8.  apply with density 0 fully hides the layer.
-//  9.  apply with invert flips visible/hidden.
-// 10.  apply with vector mask uses the path interior.
-// 11.  buildAlpha applies feather (gaussian blur reduces sharpness).
-// 12.  buildAlpha handles mismatched dims by resizing the pixel mask.
+//  5.  applyAlpha on an inactive mask is a no-op.
+//  6.  applyAlpha rejects a 3-channel layer (no alpha to write).
+//  7.  applyAlpha with a full-opacity mask keeps alpha at 255.
+//  8.  applyAlpha with a half-opacity mask halves the ALPHA, not RGB.
+//  9.  applyAlpha with density 0 fully hides the layer (alpha 0).
+// 10.  applyAlpha with invert flips visible/hidden.
+// 11.  applyAlpha with a vector mask uses the path interior.
+// 12.  buildAlpha applies feather (gaussian blur reduces sharpness).
+// 13.  buildAlpha handles mismatched dims by resizing the pixel mask.
 
 #include <QtTest>
 #include <QtMath>
@@ -26,9 +35,19 @@ class TestLayerMaskStruct : public QObject {
     Q_OBJECT
 
 private:
+    // Opaque grey layer in the pixel contract format (4-channel BGRA).
     static cv::Mat makeSolidColor(int w, int h, uchar v = 200) {
-        cv::Mat img(h, w, CV_8UC3, cv::Scalar(v, v, v, 0));
-        return img;
+        return cv::Mat(h, w, CV_8UC4, cv::Scalar(v, v, v, 255));
+    }
+
+    // Alpha channel of a 4-channel BGRA layer.
+    static int alphaAt(const cv::Mat& layer, int y, int x) {
+        return int(layer.at<cv::Vec4b>(y, x)[3]);
+    }
+
+    // Blue channel of a 4-channel BGRA layer.
+    static int blueAt(const cv::Mat& layer, int y, int x) {
+        return int(layer.at<cv::Vec4b>(y, x)[0]);
     }
 
 private slots:
@@ -37,8 +56,9 @@ private slots:
     void vectorMaskActivation();
     void clearResetsFields();
     void applyInactiveIsNoop();
+    void applyRejectsThreeChannelLayer();
     void applyFullOpacityPreservesLayer();
-    void applyHalfOpacityHalvesPixels();
+    void applyHalfOpacityScalesAlphaOnly();
     void applyDensityZeroHidesLayer();
     void applyInvertFlipsVisibility();
     void applyVectorMaskUsesInterior();
@@ -95,7 +115,21 @@ void TestLayerMaskStruct::clearResetsFields() {
 void TestLayerMaskStruct::applyInactiveIsNoop() {
     cv::Mat layer = makeSolidColor(20, 20, 200);
     LayerMask m;
-    QVERIFY(!LayerMaskRenderer::apply(layer, m));
+    QVERIFY(!LayerMaskRenderer::applyAlpha(layer, m));
+    QCOMPARE(alphaAt(layer, 0, 0), 255);
+    QCOMPARE(blueAt(layer, 0, 0), 200);
+}
+
+void TestLayerMaskStruct::applyRejectsThreeChannelLayer() {
+    // A 3-channel layer has no alpha channel to write. The renderer
+    // must refuse rather than silently degrade into an RGB multiply
+    // (CP-07).
+    cv::Mat layer(20, 20, CV_8UC3, cv::Scalar(200, 200, 200));
+    LayerMask m;
+    m.kind = LayerMask::Pixel;
+    m.pixel = cv::Mat(20, 20, CV_8UC1, cv::Scalar(0));
+    m.enabled = true;
+    QVERIFY(!LayerMaskRenderer::applyAlpha(layer, m));
     QCOMPARE(int(layer.at<cv::Vec3b>(0, 0)[0]), 200);
 }
 
@@ -105,21 +139,27 @@ void TestLayerMaskStruct::applyFullOpacityPreservesLayer() {
     m.kind = LayerMask::Pixel;
     m.pixel = cv::Mat(20, 20, CV_8UC1, cv::Scalar(255));
     m.enabled = true;
-    QVERIFY(LayerMaskRenderer::apply(layer, m));
-    QCOMPARE(int(layer.at<cv::Vec3b>(0, 0)[0]), 200);
-    QCOMPARE(int(layer.at<cv::Vec3b>(19, 19)[2]), 200);
+    QVERIFY(LayerMaskRenderer::applyAlpha(layer, m));
+    QCOMPARE(alphaAt(layer, 0, 0), 255);
+    QCOMPARE(alphaAt(layer, 19, 19), 255);
+    QCOMPARE(blueAt(layer, 0, 0), 200);
+    QCOMPARE(blueAt(layer, 19, 19), 200);
 }
 
-void TestLayerMaskStruct::applyHalfOpacityHalvesPixels() {
+void TestLayerMaskStruct::applyHalfOpacityScalesAlphaOnly() {
     cv::Mat layer = makeSolidColor(20, 20, 200);
     LayerMask m;
     m.kind = LayerMask::Pixel;
     m.pixel = cv::Mat(20, 20, CV_8UC1, cv::Scalar(128));
     m.enabled = true;
-    QVERIFY(LayerMaskRenderer::apply(layer, m));
-    // 200 * 128 / 255 = 100 (rounded down)
-    QCOMPARE(int(layer.at<cv::Vec3b>(0, 0)[0]), 100);
-    QCOMPARE(int(layer.at<cv::Vec3b>(19, 19)[2]), 100);
+    QVERIFY(LayerMaskRenderer::applyAlpha(layer, m));
+    // alpha = 255 * 128 / 255 = 128
+    QCOMPARE(alphaAt(layer, 0, 0), 128);
+    QCOMPARE(alphaAt(layer, 19, 19), 128);
+    // The RGB channels are UNCHANGED -- the mask hides the pixel, it
+    // does not paint it black (CP-07).
+    QCOMPARE(blueAt(layer, 0, 0), 200);
+    QCOMPARE(blueAt(layer, 19, 19), 200);
 }
 
 void TestLayerMaskStruct::applyDensityZeroHidesLayer() {
@@ -129,8 +169,11 @@ void TestLayerMaskStruct::applyDensityZeroHidesLayer() {
     m.pixel = cv::Mat(20, 20, CV_8UC1, cv::Scalar(255));
     m.enabled = true;
     m.density = 0.0;
-    QVERIFY(LayerMaskRenderer::apply(layer, m));
-    QCOMPARE(int(layer.at<cv::Vec3b>(0, 0)[0]), 0);
+    QVERIFY(LayerMaskRenderer::applyAlpha(layer, m));
+    // Coverage collapses to 0 -> the layer is fully hidden.
+    QCOMPARE(alphaAt(layer, 0, 0), 0);
+    // Colour still untouched.
+    QCOMPARE(blueAt(layer, 0, 0), 200);
 }
 
 void TestLayerMaskStruct::applyInvertFlipsVisibility() {
@@ -145,9 +188,11 @@ void TestLayerMaskStruct::applyInvertFlipsVisibility() {
     }
     m.enabled = true;
     m.invert = true;
-    LayerMaskRenderer::apply(layer, m);
-    QCOMPARE(int(layer.at<cv::Vec3b>(0, 0)[0]), 0);
-    QCOMPARE(int(layer.at<cv::Vec3b>(0, 19)[0]), 200);
+    QVERIFY(LayerMaskRenderer::applyAlpha(layer, m));
+    // Left half was covered -> inverted to hidden.
+    QCOMPARE(alphaAt(layer, 0, 0), 0);
+    // Right half was hidden -> inverted to visible.
+    QCOMPARE(alphaAt(layer, 0, 19), 255);
 }
 
 void TestLayerMaskStruct::applyVectorMaskUsesInterior() {
@@ -158,9 +203,11 @@ void TestLayerMaskStruct::applyVectorMaskUsesInterior() {
     path.addRect(5, 5, 10, 10);
     m.vectorPaths.append(path);
     m.enabled = true;
-    LayerMaskRenderer::apply(layer, m);
-    QCOMPARE(int(layer.at<cv::Vec3b>(10, 10)[0]), 200);
-    QCOMPARE(int(layer.at<cv::Vec3b>(0, 0)[0]), 0);
+    QVERIFY(LayerMaskRenderer::applyAlpha(layer, m));
+    // Inside the path -> visible.
+    QCOMPARE(alphaAt(layer, 10, 10), 255);
+    // Outside the path -> hidden.
+    QCOMPARE(alphaAt(layer, 0, 0), 0);
 }
 
 void TestLayerMaskStruct::buildAlphaFeatherSoftens() {

@@ -61,10 +61,6 @@ public:
         SetSmartObject,     // 智能对象源 (m_strVal=old path, m_boolVal=old embed)
         SetAdjustmentType,  // 调整类型 (m_strVal=old type)
         SetAdjustmentLut,   // 调整 LUT (m_oldMat=old lut)
-        //  蒙版 Op
-        AddMask,            // 加蒙版 (m_oldMat=old mask, m_boolVal=wasEnabled)
-        ClearMask,          // 删蒙版 (m_oldMat=old mask, m_boolVal=wasEnabled)
-        EnableMask,         // 开关 (m_boolVal=old enabled)
         //  智能对象扩展 Op
         ToggleSmartObjectEmbed,  // link↔embed (m_boolVal=old embedded)
         // 智能对象 Convert / Rasterize / Transform
@@ -136,13 +132,6 @@ public:
                                              const QString &oldPath, bool oldEmbed);
     static LayerCommand* makeSetAdjustmentType(LayerStack *stack, int index, const QString &oldType);
     static LayerCommand* makeSetAdjustmentLut(LayerStack *stack, int index, const cv::Mat &oldLut);
-    //  蒙版 factory
-    //   oldMask (空 Mat = 原无蒙版), wasEnabled (原 enabled 状态)
-    static LayerCommand* makeAddMask(LayerStack *stack, int index,
-                                      const cv::Mat &oldMask, bool wasEnabled);
-    static LayerCommand* makeClearMask(LayerStack *stack, int index,
-                                        const cv::Mat &oldMask, bool wasEnabled);
-    static LayerCommand* makeEnableMask(LayerStack *stack, int index, bool oldEnabled);
     //  智能对象扩展 factory
     static LayerCommand* makeToggleSmartObjectEmbed(LayerStack *stack, int index, bool oldEmbedded);
     // Convert / Rasterize / Transform factories
@@ -232,7 +221,7 @@ private:
     cv::Mat     m_oldMat;            // Phase 3: SetAdjustmentLut old LUT
                                     // P0-3.3: 同时作 "before image 快照" (跟 host 一起用)
     cv::Mat     m_newMat;            // P0-3.3: "after image 快照" (仅 host 模式用)
-                                    // 也用于 AddMask 的新蒙版 / SetAdjustmentLut 的新 LUT
+                                    // Also used for the new LUT of SetAdjustmentLut
 
     // ---- after 状态 (新值) ----
     //   构造时由 captureAfter() 从图层上读出, redo 时原样写回.

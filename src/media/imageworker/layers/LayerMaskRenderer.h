@@ -1,30 +1,38 @@
 #pragma once
 
+#include <QSize>   // API 里直接用了 QSize, 不能靠传递包含
+
 #include <opencv2/core.hpp>
 
 #include "LayerMask.h"
 
 namespace layers {
 
-// Composites a LayerMask onto a layer image in place.
+// Fold a LayerMask into a coverage value and write it into the alpha
+// channel of the layer pixels (CP-07 / CP-18).
 //
-// The layer may be:
-//   - CV_8UC3 BGR (default for our pipeline)
-//   - CV_8UC4 BGRA (text layers etc.)
+// Contract (see PixelFormat.h):
+//   - Layer pixels are always CV_8UC4 BGRA with STRAIGHT alpha (not
+//     premultiplied)
+//   - The mask is grayscale 8UC1 and does NOT take part in the
+//     compositing directly; it is folded into a coverage value here:
+//         out.a = pixel.a * maskCoverage / 255
+//   - The compositing (Porter-Duff over) is done by layers::applyBlend
+//     / compositeOver
 //
-// The output channels are unchanged; only the per-channel values are scaled
-// by the effective alpha:
-//
-//   out(x, y, c) = layer(x, y, c) * alpha(x, y)
-//
-// where alpha(x, y) is computed from the pixel/vector mask, then multiplied
-// by density, optionally inverted, and finally gaussian-blurred by feather.
-// TODO(P8.4): LayerMaskRenderer is only called from tests, so the LayerMask model never affects rendering -- see docs/DEBT.md#A-LAYERMASK
+// This used to be a per-channel RGB multiply (out.c = layer.c * alpha),
+// which is the CP-07 "turns black instead of transparent" bug: covering
+// with a mask turned the pixels black, and a semi-transparent mask
+// degenerated into multiply-by-black.
+// Now the mask only changes the alpha; the colour is decided during
+// the compositing step.
 class LayerMaskRenderer {
 public:
-    // Apply the mask in place. Returns true if the layer was modified.
-    // If the mask is inactive, the call is a no-op and returns false.
-    static bool apply(cv::Mat& layer, const LayerMask& mask);
+    // Write the mask coverage into the alpha channel of the layer
+    // (modified in place).
+    //   layer must be CV_8UC4 BGRA (the in-stack layer pixel contract).
+    //   A no-op when the mask has no effect; returns false.
+    static bool applyAlpha(cv::Mat& layer, const LayerMask& mask);
 
     // Build an effective alpha image (CV_8UC1) from the mask without
     // applying it. Useful for previews and tests.

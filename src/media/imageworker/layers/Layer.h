@@ -21,6 +21,10 @@
 //   Hue / Saturation / Color / Luminosity
 //
 // 设计原则:
+//   0. Pixel contract: the pixels of a layer in the stack are always
+//      CV_8UC4 BGRA with straight alpha (see PixelFormat.h);
+//      Layer::mask is the single mask model, and the render only
+//      honours it.
 //   1. Layer 用 shared_ptr + 值语义 cv::Mat (不可变, 修改 = 创建新 Layer 进撤销栈)
 //   2. LayerKind 决定哪个 payload 字段有效 (Bitmap 用 image, Text 用 text, ...)
 //   3. 不持有 QObject parent (避免 lifecycle 复杂度)
@@ -87,7 +91,14 @@ struct Layer {
     int     zOrder  = 0;          // 越大越上面 (跟 Photoshop 一致)
 
     // ---- Bitmap payload (kind == Bitmap) ----
-    cv::Mat image;                // 8UC3 BGR, 跟 base image 同尺寸
+    //   Pixel contract (LYR-01 / LYR-35 / CP-07):
+    //     The pixels of a layer in the stack are always CV_8UC4 BGRA with
+    //     STRAIGHT alpha (not premultiplied).
+    //     LayerStack normalises them on insert (PixelFormat::toBgra), so a
+    //     3-channel layer created outside becomes 4-channel once it is in
+    //     the stack.
+    //     See PixelFormat.h for the compositing maths.
+    cv::Mat image;
 
     // ---- Vector payload (kind == Vector, Phase 3) ----
     QVector<QPainterPath> vectorPaths;
@@ -128,12 +139,15 @@ struct Layer {
     LayerId parentSmartId = 0;
     int     filterSlotIndex  = -1; // 0-based position in parent's smartFilters chain
 
-    // ---- 蒙版 (Phase 4 实现) ----
-    cv::Mat layerMask;            // 灰度图 8U, 0=透明 255=不透明
-    bool    maskEnabled = false;
-
-    // extended mask state (pixel/vector/density/feather/invert)
-    LayerMask mask;               // new structured mask (additive to layerMask)
+    // ---- Mask (the single model) ----
+    //   Layer::mask is the layer's ONLY mask truth (LYR-15 / CP-18).
+    //   There used to be a pair, cv::Mat layerMask + bool maskEnabled,
+    //   which the render consumed, while the UI / brush wrote this struct
+    //   -> two states written independently, and "add mask / invert /
+    //   feather / density" had no visual effect at all.
+    //   Now: the render only honours mask, and the coverage is folded in
+    //   by LayerMaskRenderer::buildAlpha().
+    LayerMask mask;
 
     // ---- 构造 ----
     Layer() = default;
@@ -156,13 +170,17 @@ struct Layer {
     bool isValid() const {
         switch (kind) {
         case Bitmap:
-            return !image.empty() && image.depth() == CV_8U && image.channels() == 3;
+            // Both 3 channels (not yet normalised into the stack) and
+// 4 channels (the in-stack contract) are valid
+            return !image.empty() && image.depth() == CV_8U
+                && (image.channels() == 3 || image.channels() == 4);
         case Text:
             return !text.isEmpty();
         case SmartObject:
             return !sourceFilePath.isEmpty();
         case SmartFilter:
             return !image.empty() && image.depth() == CV_8U
+                && (image.channels() == 3 || image.channels() == 4)
                 && !filterType.isEmpty() && parentSmartId != 0;
         case Group:
             return true;  // Empty group is valid; non-empty validated by LayerStack::m_groups entry.

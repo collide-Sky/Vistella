@@ -4,6 +4,9 @@
 // =============================================================
 
 #include "LayerStack.h"
+
+#include "LayerMaskRenderer.h"
+#include "PixelFormat.h"
 #include "BlendMode.h"
 
 // compositor-backed render path
@@ -233,6 +236,11 @@ int LayerStack::appendLayerPtr(LayerPtr layer)
         layer->stableId = 0;
     }
     assignStableId(*layer);
+    // Pixel contract: the layers in the stack are always 4-channel BGRA
+    // with straight alpha (LYR-01 / LYR-35).
+    //   A 3-channel layer created outside is normalised here, so the
+    //   render layer only ever sees one format.
+    layer->image = toBgra(layer->image);
     m_layers.append(std::move(layer));
     const int newIndex = m_layers.size() - 1;
     reassignZOrder();
@@ -263,6 +271,7 @@ int LayerStack::insertLayer(int index, const Layer &layer)
         l->stableId = 0;
     }
     assignStableId(*l);
+    l->image = toBgra(l->image);
     m_layers.insert(index, l);
     reassignZOrder();
     emit layerAdded(index);
@@ -370,8 +379,9 @@ void LayerStack::releaseGroupChildren(const LayerPtr& group)
 }
 //   2. Capture each layer's full copy (LayerPtr deep clone via std::make_shared<Layer>).
 //   3. Remove originals (high idx to low idx to avoid index shift).
-//   4. Build Group layer at end (kind=Group) + store clones in m_groups[newGroupIdx].
-//   5. Return new Group index at end of stack.
+//   4. Build Group layer (kind=Group) + store clones in m_groups[newGroupIdx].
+//   5. Return the new Group index (the group lands at the
+//      original position of the topmost selected layer, PS behaviour).
 int LayerStack::mergeIntoGroup(const QList<int>& indices)
 {
     if (indices.size() < 2) return -1;
@@ -419,9 +429,17 @@ int LayerStack::mergeIntoGroup(const QList<int>& indices)
     Layer grp;
     grp.kind = Layer::Group;
     grp.name = QStringLiteral("Group 1");
-    // Append Group at end of stack (既有契约).
-    // TODO(P8.4): 组应该落在最上面那个被选图层原来的位置 (PS 行为), 现在追加到栈尾, 选中间几层编组时组的 z 序会跑到没被选中的层上面; 改这一条要连带修 LYR-14 (base 之下的图层不参与合成) -- see docs/DEBT.md#A-GROUPZORDER
-    const int groupIdx = addLayer(grp);
+    // The group lands at the ORIGINAL POSITION of the topmost
+    // selected layer (PS behaviour).
+    //   The insert point is the number of UNSELECTED layers below it --
+    //   the selected layers have already been removed, the unselected
+    //   ones are still in place.
+    const int topSelected = sorted.back();
+    int insertAt = 0;
+    for (int i = 0; i < topSelected; ++i) {
+        if (!sorted.contains(i)) ++insertAt;
+    }
+    const int groupIdx = insertLayer(insertAt, grp);
     if (groupIdx < 0) return -1;
     // key m_groups by the Group's stableId, not int layer index
     //   so subsequent m_layers mutations (moveUp / removeLayer / flattenGroup)
@@ -755,72 +773,6 @@ bool LayerStack::setAdjustmentLut(int index, const cv::Mat &lut)
 // =====================================================================
 //  蒙版
 // =====================================================================
-
-namespace {
-//  mask 应用
-//   把 layer mask 灰度图广播到 3 通道, 跟 layerMat 逐像素相乘
-//   mask 0 → 像素置 0 (透明); mask 255 → 像素保留
-//   返回新 Mat (不修改入参)
-cv::Mat applyMask(const cv::Mat &layerMat, const cv::Mat &grayMask)
-{
-    if (layerMat.empty() || grayMask.empty()) return layerMat.clone();
-    cv::Size sz = layerMat.size();
-    cv::Mat maskR;
-    if (grayMask.size() != sz) {
-        cv::resize(grayMask, maskR, sz, 0, 0, cv::INTER_LINEAR);
-    } else {
-        maskR = grayMask;
-    }
-    cv::Mat mask3ch;
-    cv::cvtColor(maskR, mask3ch, cv::COLOR_GRAY2BGR);
-    cv::Mat maskF;
-    mask3ch.convertTo(maskF, CV_32F, 1.0 / 255.0);
-    cv::Mat layerF;
-    layerMat.convertTo(layerF, CV_32F);
-    cv::Mat outF;
-    cv::multiply(layerF, maskF, outF);
-    cv::Mat out;
-    outF.convertTo(out, CV_8U);
-    return out;
-}
-} // namespace
-
-bool LayerStack::addMask(int index, const cv::Mat &grayMask)
-{
-    if (auto l = at(index)) {
-        if (grayMask.empty()) return false;
-        l->layerMask = grayMask.clone();
-        l->maskEnabled = true;
-        emit layerChanged(index);
-        return true;
-    }
-    return false;
-}
-
-bool LayerStack::clearMask(int index)
-{
-    if (auto l = at(index)) {
-        const bool had = !l->layerMask.empty() || l->maskEnabled;
-        l->layerMask = cv::Mat();
-        l->maskEnabled = false;
-        if (had) emit layerChanged(index);
-        return had;
-    }
-    return false;
-}
-
-bool LayerStack::enableMask(int index, bool enabled)
-{
-    if (auto l = at(index)) {
-        if (l->layerMask.empty()) return false;   // 无蒙版不能 enable
-        if (l->maskEnabled != enabled) {
-            l->maskEnabled = enabled;
-            emit layerChanged(index);
-            return true;
-        }
-    }
-    return false;
-}
 
 // =====================================================================
 //  扩展 LayerMask struct 接口
@@ -1529,7 +1481,19 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
     if (!l) return cv::Mat();
     switch (l->kind) {
     case Layer::Bitmap: {
-        return l->image.empty() ? cv::Mat() : l->image.clone();
+        // Normalised to 4-channel BGRA straight alpha (pixel contract).
+        //
+        // The result must be an OWNED buffer: toBgra() returns an
+        // already-4-channel input WITHOUT copying, so handing it back
+        // directly would alias the layer's stored pixels. The render
+        // paths then write into the rasterized result (the mask is
+        // applied to its alpha), which would rewrite the layer's own
+        // alpha on every render -- and the damage compounds, because
+        // each render applies the mask to the already-masked alpha.
+        // The compositor reads the layer image, so it would then see a
+        // layer that is masked twice.
+        if (l->image.empty()) return cv::Mat();
+        return toBgra(l->image).clone();
     }
     case Layer::Text: {
         if (l->text.isEmpty()) return cv::Mat();
@@ -1549,12 +1513,12 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
         const int y = sz.height / 4;
         p.drawText(x, y + fm.ascent(), l->text);
         p.end();
-        // QImage ARGB32 → cv::Mat BGRA
+        // QImage ARGB32 -> cv::Mat BGRA.
+        //   It must NOT be converted to BGR -- dropping the alpha is
+        //   LYR-01: the transparent background of the text layer becomes
+        //   opaque black and the whole canvas is covered in black.
         cv::Mat mat(img.height(), img.width(), CV_8UC4, img.bits(), img.bytesPerLine());
-        cv::Mat bgra = mat.clone();
-        cv::Mat bgr;
-        cv::cvtColor(bgra, bgr, cv::COLOR_BGRA2BGR);
-        return bgr;
+        return mat.clone();
     }
     case Layer::Vector: {
         if (l->vectorPaths.isEmpty()) return cv::Mat();
@@ -1671,24 +1635,22 @@ void LayerStack::compositeChildrenInto(const std::vector<LayerPtr> &children,
         if (child->kind == Layer::Group) {
             const auto &grandChildren = groupChildrenOf(child);
             if (grandChildren.empty()) continue;
-            cv::Mat groupMat = target.clone();
+            // Nested group: the same model as the top-level group branch
+            //   (and as GroupNode on the compositor side) -- the children
+            //   are composited onto a TRANSPARENT group canvas, which is
+            //   then blended over the incoming canvas.
+            cv::Mat groupMat(target.size(), CV_8UC4, cv::Scalar(0, 0, 0, 0));
             compositeChildrenInto(grandChildren, groupMat);
-            if (child->opacity < 1.0f) {
-                cv::Mat tmp;
-                cv::addWeighted(target, 1.0f - child->opacity,
-                                groupMat, child->opacity, 0, tmp);
-                target = tmp;
-            } else {
-                target = groupMat;
-            }
+            target = applyBlend(Layer::Normal, target, groupMat, child->opacity);
             continue;
         }
 
         cv::Mat cMat = rasterize(child);
         if (cMat.empty()) continue;
-        if (child->maskEnabled && !child->layerMask.empty()) {
-            cMat = applyMask(cMat, child->layerMask);
-        }
+        // Mask -> coverage written into the alpha (CP-07 / CP-18).
+        //   The single mask model: Layer::mask, and the render only
+        //   honours it.
+        LayerMaskRenderer::applyAlpha(cMat, child->mask);
         target = applyBlend(child->blend, target, cMat, child->opacity);
     }
 }
@@ -1703,100 +1665,108 @@ cv::Mat LayerStack::render() const
     return renderLegacy();
 }
 
-// legacy 逐层合成: 找 base layer 作 canvas, 然后按 zOrder asc 逐层混合.
-//   compositor 路径失败时也走这里 (见 renderViaCompositor 的回退分支).
+// legacy per-layer compositing: start from an opaque white document
+// canvas, then blend every visible layer over it in zOrder.
+//
+//   Pixel contract (CP-07 / CP-18): the canvas is CV_8UC4 BGRA with
+//   straight alpha throughout. Every layer -- the base image included --
+//   contributes coverage through Porter-Duff "over". A layer's own alpha
+//   (pixel transparency) and its mask-derived coverage are folded into the
+//   source alpha by applyAlpha() before the blend.
+//
+//   This path is the fallback for the compositor (see renderViaCompositor)
+//   and the reference implementation the compositor is checked against
+//   (tst_P8_RenderParity). The two must agree pixel for pixel.
 cv::Mat LayerStack::renderLegacy() const
 {
     if (m_layers.isEmpty()) return cv::Mat();
 
-    // Step 1: 找 base layer (kind=Bitmap 且 image 非空) 作 canvas
-    cv::Mat canvas;
-    int baseIdx = -1;
-    for (int i = 0; i < m_layers.size(); ++i) {
-        const auto &l = m_layers[i];
-        if (l && l->kind == Layer::Bitmap && !l->image.empty()) {
-            canvas = l->image.clone();
-            baseIdx = i;
-            break;
-        }
-    }
-    if (canvas.empty()) {
-        // 没有 base layer: 用 canvasSize 建一张白底
-        const cv::Size sz = canvasSize();
-        canvas = cv::Mat(sz, CV_8UC3, cv::Scalar(255, 255, 255));
-        baseIdx = -1;
-    }
+    // Step 1: the document canvas is an opaque WHITE layer.
+    //   Every layer -- the base image included -- is blended over it,
+    //   so hiding the base image really reveals what is below it
+    //   (LYR-13 / LYR-14).
+    //   The alpha is 255 explicitly: cv::Scalar(255, 255, 255) leaves
+    //   the 4th channel at 0, which would make the whole document
+    //   transparent.
+    //
+    //   This mirrors the compositor, which roots the graph on a
+    //   SolidCanvasNode and blends the whole stack over it. The base
+    //   image is an ordinary layer there, and it has to be an ordinary
+    //   layer here too, or the two paths diverge.
+    const cv::Size sz = canvasSize();
+    cv::Mat canvas(sz, CV_8UC4, cv::Scalar(255, 255, 255, 255));
 
-    // Step 2: 从 base+1 开始, 逐层按 zOrder asc 混合
-    for (int i = std::max(0, baseIdx); i < m_layers.size(); ++i) {
+    // Step 2: blend every visible layer in zOrder.
+    for (int i = 0; i < m_layers.size(); ++i) {
         const auto &l = m_layers[i];
         if (!l || !l->visible) continue;
         // SmartFilter sub-layers render only as part of
         //   their parent SmartObject's chain; skip them in the main loop.
         if (l->kind == Layer::SmartFilter) continue;
-        // Group recursive render
-        //   PS-style: children blend with their own blendModes into a fresh
-        //   groupMat starting from current canvas, then groupMat composites
-        //   over canvas using Group.opacity (Normal blend). Group's own
-        //   blendMode is intentionally ignored (PS does the same).
+
+        // Group: composite the children into a transparent group canvas,
+        //   then composite that over the canvas with Group.opacity.
+        //   Group's own blendMode is intentionally ignored (PS does the same).
         if (l->kind == Layer::Group) {
             const auto &children = groupChildrenOf(idOf(i));
             if (children.empty()) continue;
-            cv::Mat groupMat = canvas.clone();
+            // The group's children are composited onto a TRANSPARENT
+            //   group canvas -- they must NOT see the layers below the
+            //   group, or a child with a blend mode would blend against
+            //   the backdrop instead of against the group itself.
+            //   That group canvas is then blended over the incoming
+            //   canvas with the group's opacity, which is exactly what
+            //   GroupNode does on the compositor side.
+            cv::Mat groupMat(canvas.size(), CV_8UC4, cv::Scalar(0, 0, 0, 0));
             compositeChildrenInto(children, groupMat);
-            if (l->opacity < 1.0f) {
-                cv::Mat tmp;
-                cv::addWeighted(canvas, 1.0f - l->opacity,
-                                groupMat, l->opacity, 0, tmp);
-                canvas = tmp;
-            } else {
-                canvas = groupMat;
-            }
+            canvas = applyBlend(Layer::Normal, canvas, groupMat, l->opacity);
             continue;
         }
-        if (i == baseIdx) {
-            // base 层: 单独处理 opacity
-            if (l->opacity < 1.0f) {
-                cv::Mat tmp;
-                cv::addWeighted(canvas, l->opacity,
-                                cv::Mat::zeros(canvas.size(), canvas.type()),
-                                0, 0, tmp);
-                canvas = tmp;
-            }
-            continue;
-        }
-        // Adjustment 层: 应用 LUT 到 canvas
+
+        // The base image is NOT special: it is an ordinary layer that
+        //   reaches the canvas through the same blend path as every other
+        //   layer, so its opacity scales its coverage (not its colour)
+        //   exactly like the rest of the stack.
+
+        // Adjustment layer: apply the LUT to the canvas.
+        //
+        //   The LUT touches the COLOUR channels only -- running the alpha
+        //   through a colour LUT would scramble the canvas transparency.
+        //   The adjustment's opacity scales the COVERAGE (Porter-Duff
+        //   over), the same as every other layer.
         if (l->kind == Layer::Adjustment) {
             if (!l->adjustmentLut.empty() && l->adjustmentLut.rows == 256
                 && l->adjustmentLut.cols == 1 && l->adjustmentLut.type() == CV_8U) {
-                cv::Mat adjusted;
-                cv::LUT(canvas, l->adjustmentLut, adjusted);
+                cv::Mat bgr, alpha, adjustedBgr, adjusted;
+                splitBgra(canvas, bgr, alpha);
+                cv::LUT(bgr, l->adjustmentLut, adjustedBgr);
+                std::vector<cv::Mat> ch;
+                cv::split(adjustedBgr, ch);
+                ch.push_back(alpha);
+                cv::merge(ch, adjusted);
                 if (l->opacity < 1.0f) {
-                    cv::Mat tmp;
-                    cv::addWeighted(canvas, 1.0f - l->opacity,
-                                    adjusted, l->opacity, 0, tmp);
-                    canvas = tmp;
+                    canvas = compositeOver(canvas, adjustedBgr, alpha, l->opacity);
                 } else {
                     canvas = adjusted;
                 }
             }
             continue;
         }
-        // 其他 kind: rasterize 后 blend
+
+        // Other kinds: rasterize, then blend.
         cv::Mat layerMat = rasterize(l);
         if (layerMat.empty()) continue;
         // SmartObject chain application
         //   Walk the chain in order and re-apply each enabled filter
         //   fresh (so reorder / strength changes take effect without
         //   re-running append). Shared with the compositor path via
-        //   applySmartFilterChain() — P8.1.1.x.
+        //   applySmartFilterChain() -- P8.1.1.x.
         if (l->kind == Layer::SmartObject) {
             layerMat = applySmartFilterChain(layerMat, i);
         }
-        // 应用蒙版 (mask 调制 layer alpha)
-        if (l->maskEnabled && !l->layerMask.empty()) {
-            layerMat = applyMask(layerMat, l->layerMask);
-        }
+        // Mask -> coverage written into the source alpha
+        //   (CP-07 / CP-18). Single mask model: Layer::mask.
+        LayerMaskRenderer::applyAlpha(layerMat, l->mask);
         canvas = applyBlend(l->blend, canvas, layerMat, l->opacity);
     }
     return canvas;
@@ -1820,15 +1790,19 @@ cv::Mat LayerStack::renderOne(int index) const
     cv::Mat m = rasterize(l);
     if (m.empty()) return cv::Mat();
     // 单层预览也应用 mask
-    if (l->maskEnabled && !l->layerMask.empty()) {
-        m = applyMask(m, l->layerMask);
-    }
+    LayerMaskRenderer::applyAlpha(m, l->mask);
     if (l->opacity < 1.0f) {
-        cv::Mat tmp;
-        cv::addWeighted(m, l->opacity,
-                        cv::Mat::zeros(m.size(), m.type()),
-                        0, 0, tmp);
-        return tmp;
+        // Straight alpha semantics: the opacity scales the alpha, not
+        //   the colour (scaling the colour would premultiply the layer,
+        //   and the compositing would darken it a second time).
+        cv::Mat bgr, alpha, out;
+        splitBgra(m, bgr, alpha);
+        alpha.convertTo(alpha, CV_8U, l->opacity);
+        std::vector<cv::Mat> ch;
+        cv::split(bgr, ch);
+        ch.push_back(alpha);
+        cv::merge(ch, out);
+        return out;
     }
     return m;
 }
@@ -1860,7 +1834,7 @@ void LayerStack::setBaseLayer(const cv::Mat &baseImage)
         addLayer(QStringLiteral("Background"), baseImage);
     } else {
         if (m_layers[0]) {
-            m_layers[0]->image = baseImage.clone();
+            m_layers[0]->image = toBgra(baseImage);
             m_layers[0]->name = QStringLiteral("Background");
             emit layerChanged(0);
         }

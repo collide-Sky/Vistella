@@ -1,7 +1,7 @@
 #include "LayerMaskNode.h"
 
 #include "../RenderGraph.h"   // for RenderContext
-#include <opencv2/imgproc.hpp>   // cv::resize
+#include <opencv2/imgproc.hpp>
 
 namespace compositor {
 
@@ -24,11 +24,16 @@ cv::Mat LayerMaskNode::compute(int tileX, int tileY,
         // No mask source = no masking. Pass-through.
         return base;
     }
-    // Defensive: ensure mask is 8U single-channel.
+    // Ensure the mask is 8U single-channel.
+    //   Every compositor node emits 4-channel BGRA, so a mask authored
+    //   as CV_8UC1 arrives with its grey value in B/G/R and alpha 255.
+    //   The coverage is therefore read from the B channel (project
+    //   convention). Ignoring the 4-channel case would silently turn
+    //   this node into a pass-through.
     if (mask.type() != CV_8UC1) {
         cv::Mat single;
-        if (mask.channels() == 3) {
-            // Take the B channel as the alpha (project convention).
+        if (mask.channels() == 3 || mask.channels() == 4) {
+            // Take the B channel as the coverage (project convention).
             cv::extractChannel(mask, single, 0);
         } else if (mask.channels() == 1) {
             single = mask;
@@ -44,17 +49,19 @@ cv::Mat LayerMaskNode::compute(int tileX, int tileY,
         cv::resize(mask, mask, base.size(), 0, 0, cv::INTER_LINEAR);
     }
 
-    // Per-channel multiplicative attenuation: out = base * (mask/255)
-    cv::Mat baseF, maskF;
-    base.convertTo(baseF, CV_32FC3);
-    mask.convertTo(maskF, CV_32FC1, 1.0 / 255.0);
-    // Broadcast single-channel mask across 3 channels.
-    std::vector<cv::Mat> channels(3, maskF);
-    cv::Mat maskBgr;
-    cv::merge(channels, maskBgr);
-    cv::Mat outF = baseF.mul(maskBgr);
-    outF.convertTo(base, CV_8UC3);   // in-place to avoid extra alloc
-    return base;
+    // The mask only changes the alpha (CP-07): out.a = base.a * coverage / 255
+    //   The colour is NOT touched -- it used to be a per-channel RGB
+    //   multiply, so covering with a mask turned the pixels black and a
+    //   semi-transparent mask degenerated into multiply-by-black.
+    if (base.channels() != 4) return base;
+
+    std::vector<cv::Mat> ch;
+    cv::split(base, ch);
+    if (ch.size() < 4) return base;
+    cv::multiply(ch[3], mask, ch[3], 1.0 / 255.0);
+    cv::Mat out;
+    cv::merge(ch, out);
+    return out;
 }
 
 } // namespace compositor

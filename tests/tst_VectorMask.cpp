@@ -1,4 +1,11 @@
+// tst_VectorMask.cpp
+//
 // Vector mask path-to-mask pipeline tests.
+//
+// protects: a vector mask changes only the alpha channel of a layer;
+//           the RGB channels stay untouched (CP-07).
+// path:     vector paths -> buildAlpha() coverage -> applyAlpha() into
+//           a 4-channel BGRA layer.
 //
 // Coverage:
 //   1.  Empty vector mask is a no-op on apply.
@@ -8,13 +15,12 @@
 //   5.  Vector mask + density scales the effective alpha.
 //   6.  Vector mask + feather smooths the path edge.
 //   7.  Vector mask + invert flips interior/exterior.
-//   8.  Vector mask + maskRenderer::apply on a real cv::Mat integrates
-//      alpha into the layer's RGB pixels.
+//   8.  Vector mask + applyAlpha integrates the coverage into the
+//       layer's alpha channel without touching RGB.
 
 #include <QtTest>
 #include <QtMath>
 
-#include "filters/liquify/LiquifyMesh.h"  // not used directly but include path test
 #include "../src/media/imageworker/layers/LayerMask.h"
 #include "../src/media/imageworker/layers/LayerMaskRenderer.h"
 
@@ -24,8 +30,17 @@ class TestVectorMask : public QObject {
     Q_OBJECT
 
 private:
+    // Opaque layer in the pixel contract format (4-channel BGRA).
     static cv::Mat makeLayer(int w, int h, uchar v = 100) {
-        return cv::Mat(h, w, CV_8UC3, cv::Scalar(v, v, v));
+        return cv::Mat(h, w, CV_8UC4, cv::Scalar(v, v, v, 255));
+    }
+
+    static int alphaAt(const cv::Mat& layer, int y, int x) {
+        return int(layer.at<cv::Vec4b>(y, x)[3]);
+    }
+
+    static int blueAt(const cv::Mat& layer, int y, int x) {
+        return int(layer.at<cv::Vec4b>(y, x)[0]);
     }
 
 private slots:
@@ -36,7 +51,7 @@ private slots:
     void densityScalesAlpha();
     void featherSmoothsEdge();
     void invertFlipsMask();
-    void applyIntegratesIntoLayer();
+    void applyIntegratesIntoLayerAlpha();
 };
 
 void TestVectorMask::emptyVectorMaskIsNoop() {
@@ -44,10 +59,11 @@ void TestVectorMask::emptyVectorMaskIsNoop() {
     LayerMask m;
     m.kind = LayerMask::Vector;
     m.enabled = true;
-    // Empty vectorPaths => isActive() is false => apply returns false and
-    // the layer is left untouched.
-    QVERIFY(!LayerMaskRenderer::apply(layer, m));
-    QCOMPARE(int(layer.at<cv::Vec3b>(20, 20)[0]), 100);
+    // Empty vectorPaths => isActive() is false => applyAlpha returns
+    // false and the layer is left untouched.
+    QVERIFY(!LayerMaskRenderer::applyAlpha(layer, m));
+    QCOMPARE(alphaAt(layer, 20, 20), 255);
+    QCOMPARE(blueAt(layer, 20, 20), 100);
 }
 
 void TestVectorMask::pathInteriorFullAlpha() {
@@ -101,7 +117,7 @@ void TestVectorMask::densityScalesAlpha() {
     m.density = 0.5;
 
     const cv::Mat alpha = LayerMaskRenderer::buildAlpha(m, QSize(40, 40));
-    // buildAlpha rounds(255 * 0.5) = 128, then 255 * 128 / 255 = 128.
+    // buildAlpha rounds(255 * 0.5) = 128.
     QCOMPARE(int(alpha.at<uchar>(20, 20)), 128);
 }
 
@@ -115,7 +131,7 @@ void TestVectorMask::featherSmoothsEdge() {
     m.feather = 5.0;
 
     const cv::Mat alpha = LayerMaskRenderer::buildAlpha(m, QSize(40, 40));
-    // After gaussian blur ( sigma=5 ), pixel just inside the boundary
+    // After gaussian blur (sigma=5 ), pixel just inside the boundary
     // should be softened: alpha at (19, 20) should be > 0 but less than 255.
     const int v = int(alpha.at<uchar>(20, 19));
     QVERIFY(v > 0);
@@ -136,7 +152,7 @@ void TestVectorMask::invertFlipsMask() {
     QCOMPARE(int(alpha.at<uchar>(20, 20)), 0);
 }
 
-void TestVectorMask::applyIntegratesIntoLayer() {
+void TestVectorMask::applyIntegratesIntoLayerAlpha() {
     cv::Mat layer = makeLayer(40, 40, 200);
     QPainterPath path;
     path.addRect(0, 0, 20, 40);  // left half visible
@@ -145,9 +161,13 @@ void TestVectorMask::applyIntegratesIntoLayer() {
     m.vectorPaths.append(path);
     m.enabled = true;
 
-    QVERIFY(LayerMaskRenderer::apply(layer, m));
-    QCOMPARE(int(layer.at<cv::Vec3b>(20, 5)[0]), 200);   // left half = 200
-    QCOMPARE(int(layer.at<cv::Vec3b>(20, 35)[0]), 0);    // right half = 0
+    QVERIFY(LayerMaskRenderer::applyAlpha(layer, m));
+    // Left half stays fully opaque.
+    QCOMPARE(alphaAt(layer, 20, 5), 255);
+    // Right half is hidden: alpha drops to 0, RGB unchanged.
+    QCOMPARE(alphaAt(layer, 20, 35), 0);
+    QCOMPARE(blueAt(layer, 20, 35), 200);
+    QCOMPARE(blueAt(layer, 20, 5), 200);
 }
 
 QTEST_MAIN(TestVectorMask)

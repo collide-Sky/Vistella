@@ -275,6 +275,9 @@ add_library(vistella_media STATIC
     filters/liquify/FaceDetector.cpp
     filters/liquify/LiquifyFaceAware.h
     filters/liquify/LiquifyFaceAware.cpp
+    # 像素契约 (LYR-01 / LYR-35 / CP-07): 通道归一化 + Porter-Duff over 合成原语
+    imageworker/layers/PixelFormat.h
+    imageworker/layers/PixelFormat.cpp
     # P1.3.1 (2026-09-16): LayerMask 数据结构 (pixel + vector + density + feather + invert)
     imageworker/layers/LayerMask.h
     imageworker/layers/LayerMaskRenderer.h
@@ -336,12 +339,8 @@ add_library(vistella_media STATIC
     compositor/nodes/LayerAdjustmentNode.h
     compositor/nodes/LayerAdjustmentNode.cpp
     # P8.1.1.y (2026-10-22): explicit graph root.
-    #   LayerOpacityNode  base layer composited over black at its own
-    #     opacity (legacy does NOT route the base through applyBlend)
-    #   SolidCanvasNode   white canvasSize() fallback for stacks with no
-    #     bitmap base layer
-    compositor/nodes/LayerOpacityNode.h
-    compositor/nodes/LayerOpacityNode.cpp
+    #   SolidCanvasNode   white canvasSize() root (4 通道 BGRA);
+    #     组画布复用同一个节点, 只是 alpha 给 0
     compositor/nodes/SolidCanvasNode.h
     compositor/nodes/SolidCanvasNode.cpp
     compositor/nodes/LayerStackAdapter.h

@@ -44,7 +44,7 @@
 | `A-ADJUSTPREVIEW` | `AdjustDialogBase.cpp:67` | `preview(QVariantMap)` 信号零 connect → 曲线/色阶/黑白/通道混合器/HSL 五个对话框**无实时预览**（09-02） | 调曲线只能点 OK 才生效，来回试错 | 图像 → 调整 → 曲线/色阶 | P8.5 | 拖动滑块实时预览 | open |
 | `A-RENDERBACKEND` | `RenderGraph.h:98` | `setBackend()` 零调用点 → 状态栏「Auto/Force GPU」对渲染**零影响**；`BackendCapabilities::isGpuAvailable()` 恒 false；readback 上下翻转（GPU-01/02/03） | 用户切「强制 GPU」毫无变化，状态栏骗人 | GPU 模式切换 | P8.9 | 切 GPU/CPU 渲染结果确实不同 + 状态栏与实际一致 | open |
 | `A-MEDIADISPATCH` | `core/MediaDispatcher.cpp:112` | `MediaDispatcher::openFile` / `IModule::openFile` / `IWorkspace` 生产路径零调用 → `MainWindow` 另写两份「先 ImageWindow 后 DocWindow」启发式；`.mp3/.mp4` 走 `cv::imread` 失败后当文本整块读入（CI-19 / UI-12 / APP-18） | 打开视频/音频 → 满屏乱码，大文件卡死/OOM | 打开非图像文件 | P8.6 | 打开 .mp4 走视频模块或明确拒绝并提示 | open |
-| `A-LAYERMASK` | `layers/LayerMaskRenderer` | `LayerMaskRenderer` 仅被 tests 调用 → 新 `LayerMask` 模型**完全不参与渲染**，蒙版只读旧字段（LYR-15 / CP-18） | 加/反转/羽化/密度/矢量蒙版**全都没有视觉效果** | 图层 → 蒙版 | P8.4 | 加蒙版后图层真的被遮住 | open |
+| `A-LAYERMASK` | `layers/LayerMaskRenderer` | ✅ M1-3 已解：`Layer::mask` 成为**唯一**蒙版模型（旧的 `layerMask` + `maskEnabled` 已删除），两条渲染路径（legacy / compositor）都经 `LayerMaskRenderer::applyAlpha()` / `buildAlpha()` 把覆盖度写进源层 alpha；密度/羽化/反相改走 `LayerMaskCommand`，可撤销（LYR-41） | 加/反转/羽化/密度/矢量蒙版**现在都有视觉效果** | 图层 → 蒙版 | P8.4 | 加蒙版后图层真的被遮住 | done |
 | `A-CAMERARAW` | `imagewindow/ImageIOController.cpp:49` + `camera_raw/CameraRawLoader.h:49` | `ImageIOController::onOpen` **全项目无调用者**（`MainWindow` 直接 `img->loadFile`）→ RAW 文件根本进不了 Camera Raw；即使进去，`m_filePath` 变成临时 PNG，Ctrl+S 存到 `%TEMP%`（05-24） | 打开 .RAF/.CR2 → 走普通图像路径，色温滑杆无效 | Camera Raw | P8.6 | 打开 RAW 进 Camera Raw + Ctrl+S 覆盖原文件 | open |
 | `A-EYEDROPPER` | `EyedropperTool.cpp:35-58` | `sampledColor()` 零消费者 → 吸管**只改状态栏文字**，不改前景色、不改画笔色、颜色面板不动（04-13 / 04-14） | 吸管取色后画笔还是黑色 | 吸管 → 前景色 | P8.5 | 吸管取色后画笔颜色跟着变 | open |
 | `A-COLORDOCK` | `media/docks/RightPanelDock.h:130` | `RightPanelDock::colorDock()` 是 deprecated accessor，`return nullptr` + warning；而 `mainwindow.cpp:3408` 仍在调它 → 工具栏取色链**整条断着**；旧 `ColorDock` 类只被 `RightPanelStack` 持有，与工具栏无关（09-01 / 09-08） | 左侧工具栏改前景/背景色**完全无效** | 前景色/背景色 | P8.5 | 工具栏取色 → 画笔 + 颜色面板三者同步 | open |
@@ -96,7 +96,7 @@
 | `A-MOSAICBACKUP` | `media/imagewindow/MosaicTool.cpp` | — | `ensureBackup()` 现在快照的是**活动图层**的像素，涂抹落在图层上，撤销走 `LayerCommand::SetLayerImage` | 马赛克有真实备份链路，撤销能还原图层像素 | P8.4 | 马赛克前有真实备份且可恢复 | done |
 | `A-TEXTOVERLAYAPPLY` | `media/imagewindow/TextOverlayController.cpp:244` | `applyStyleToCurrent()` 空实现，保留接口没有调用者 | 文字样式改动没有统一的生效入口 | P8.5 | 文字样式通过该入口生效，或删除该接口 | open |
 | `A-PROJECTFORMAT` | `ImageIOController.cpp:68` | 保存写 `currentImage()`，**无任何工程格式** → 保存后重开只剩一张扁平图，图层/蒙版/智能对象/文字全丢（LYR-23 / §5.2） | 「非破坏修图」定位不成立 | P8.8 | 自定义 .vst 格式往返 | open |
-| `A-GROUPZORDER` | `layers/LayerStack.cpp` `mergeIntoGroup()` | 编组时把 Group **追加到栈尾**，而不是落到最上面那个被选图层原来的位置 (PS 行为)；直接改成原位置会让组沉到 base 位图之下，而渲染循环从 base 起 (LYR-14) → 组被整层跳过、渲染丢内容；修这一条要连带把渲染循环改成覆盖全栈 + compositor 侧重排 | 选中中间几层编组后，组的 z 序跑到没被选中的层上面；组内层与组外层的叠放次序和 PS 不一致 | P8.4 | 渲染循环覆盖全栈后，编组的 z 序落在最上面那个被选层原位置，且 legacy / compositor 两条渲染路径画面一致 | open |
+| `A-GROUPZORDER` | `layers/LayerStack.cpp` `mergeIntoGroup()` | ✅ M1-3 已解：编组时 Group 落到**最上面那个被选图层原来的位置**（PS 行为，插入点 = 其下未被选中的图层数）；同时渲染循环改成**覆盖全栈**（LYR-13 / LYR-14），底图不再当根、隐藏底图真的会露出下面内容，compositor 侧同步重排；legacy / compositor 两条路径画面一致 | 选中中间几层编组后，组的 z 序与 PS 一致 | P8.4 | 渲染循环覆盖全栈后，编组的 z 序落在最上面那个被选层原位置，且 legacy / compositor 两条渲染路径画面一致 | done |
 
 ### A.3　源码中的「以后会做」承诺（20 处散落注释，尚未登记）
 

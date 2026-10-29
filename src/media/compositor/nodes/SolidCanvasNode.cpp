@@ -32,10 +32,15 @@ cv::Mat SolidCanvasNode::compute(int tileX, int tileY,
     // paint canvas pixels that legacy leaves black.
     const int w = std::min(r.width, m_size.width - r.x);
     const int h = std::min(r.height, m_size.height - r.y);
-    if (w <= 0 || h <= 0) return cv::Mat(r.height, r.width, CV_8UC3,
-                                          cv::Scalar(0, 0, 0));
+    // The compositing canvas is always CV_8UC4 BGRA with straight alpha
+    // (pixel contract).
+    //   The alpha comes from the caller: 255 for the white canvas, 0 for
+    //   the transparent canvas of a group.
+    const cv::Scalar color(m_color[0], m_color[1], m_color[2], m_color[3]);
+    if (w <= 0 || h <= 0) return cv::Mat(r.height, r.width, CV_8UC4,
+                                          cv::Scalar(0, 0, 0, 0));
 
-    cv::Mat tile(r.height, r.width, CV_8UC3, m_color);
+    cv::Mat tile(r.height, r.width, CV_8UC4, color);
     if (w < r.width || h < r.height) {
         tile(cv::Rect(0, 0, w, h)).setTo(m_color);
     }

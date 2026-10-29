@@ -2597,10 +2597,23 @@ void MainWindow::onLiquifyTriggered()
         //  QImage 是 RGB 顺序, qImageToMat 负责换回 BGR
         cv::Mat after = ImageProcessor::qImageToMat(result);
         if (after.empty()) return;
-        //  图层带 alpha 时补回来 (QImage 中转会把 alpha 丢掉)
+        //  When the layer has alpha but the dialog returned a 3-channel
+        //    image, restore the ORIGINAL alpha.
+        //    (qImageToMat now keeps the alpha, and
+        //     LiquifyEngine::renderFull() preserves the source format, so
+        //     this branch only runs if the dialog really dropped alpha.)
+        //    Note: COLOR_BGR2BGRA must NOT be used -- it fills alpha with
+        //    255 (opaque) and turns the layer's transparent regions solid,
+        //    which was the original bug.
         if (before.channels() == 4 && after.channels() == 3) {
             cv::Mat bgra;
             cv::cvtColor(after, bgra, cv::COLOR_BGR2BGRA);
+            cv::Mat origAlpha;
+            cv::extractChannel(before, origAlpha, 3);
+            std::vector<cv::Mat> ch;
+            cv::split(bgra, ch);
+            ch[3] = origAlpha;
+            cv::merge(ch, bgra);
             after = bgra;
         }
 

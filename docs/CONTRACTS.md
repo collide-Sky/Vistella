@@ -312,7 +312,55 @@
 
 - **INV-FMT-1**　通道数、位深必须显式声明并在每个边界做校验，**禁止**默认按 3 通道处理。
 - **INV-FMT-2**　`cv::Mat` → `QImage` 的格式必须与 `channels()` 一一对应（4 通道用 `Format_RGBA8888`，1 通道用 `Format_Grayscale8`）。
-  *当前状态：❌ 06-02 / 05-08 / 06-03 / 06-39*
+  *当前状态：✅ M1-3 已修 `matToQImage()` / `qImageToMat()`（`ImageProcessor`）*
+
+### 7.6.1 图层像素与蒙版契约（M1-3）
+
+这一节的实现在 `src/media/imageworker/layers/PixelFormat.h`（契约正文）与
+`LayerMaskRenderer.h`（蒙版折算）。下面是**可断言的规则**，测试见
+`tests/tst_AlphaMask.cpp`。
+
+#### 像素模型
+
+- **INV-PIXEL-1**　栈内图层像素（`Layer::image`）**一律** `CV_8UC4` BGRA，**直通 alpha**（非预乘）。
+  归一化只允许走 `layers::toBgra()`；**禁止**自己 `cvtColor` 补 alpha —— 各种补法的 alpha 语义不同
+  （255 / 0 / 保留原值），混用会让"半透明退化成乘黑"（CP-07）复发。
+- **INV-PIXEL-2**　合成用 Porter-Duff `over`：
+
+  ```
+  cov    = src.a * 图层不透明度
+  out.a  = cov + dst.a * (1 - cov)
+  out.rgb = (src.rgb * cov + dst.rgb * dst.a * (1 - cov)) / out.a
+  ```
+
+  混合模式**只**决定 `src.rgb` 怎么算，**不**决定 alpha 怎么算。
+- **INV-PIXEL-3**　图层不透明度（`Layer::opacity`）缩的是**覆盖度**，不是颜色。
+  缩颜色等于把图层预乘，合成时会二次变暗。
+
+#### 蒙版模型
+
+- **INV-MASK-1**　蒙版**唯一**模型是 `Layer::mask`（`LayerMask` 结构体）。
+  旧的 `cv::Mat layerMask` + `bool maskEnabled` 两份独立状态**已删除**，不得复活。
+- **INV-MASK-2**　蒙版是灰度 `8UC1`，**不直接参与合成**。它由
+  `LayerMaskRenderer::buildAlpha()` 折算成覆盖度，再由 `LayerMaskRenderer::applyAlpha()`
+  写进源层的 alpha：
+
+  ```
+  out.a = pixel.a * coverage / 255
+  ```
+
+  蒙版与像素 alpha **只有这一个汇合点**。
+- **INV-MASK-3**　蒙版**只改 alpha**，**不改颜色**。蒙版盖上去变黑 = CP-07 复发。
+- **INV-MASK-4**　蒙版的密度 / 羽化 / 反相 / 显隐改动**必须可撤销**，
+  即经 `LayerMaskCommand`（before/after 快照）入撤销栈（LYR-41）。
+
+#### 渲染路径
+
+- **INV-PATH-1**　两条渲染路径（`LayerStack::renderLegacy()` 与
+  `LayerStack::renderViaCompositor()`）对同一个图层栈**必须**输出相同像素
+  （`tests/tst_P8_RenderParity.cpp` 钉住）。
+- **INV-PATH-2**　渲染循环**覆盖全栈**（LYR-13 / LYR-14）：底图是普通图层，
+  不是根；隐藏底图真的会露出下面的内容。文档画布是**不透明白**（alpha = 255）。
 
 ### 7.7 依赖方向
 

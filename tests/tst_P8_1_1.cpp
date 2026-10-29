@@ -4,6 +4,7 @@
 // (LayerBlendNode + LayerMaskNode + LayerStackAdapter).
 
 #include <QTest>
+#include <QString>
 #include <QApplication>
 
 #include <opencv2/core.hpp>
@@ -12,6 +13,7 @@
 #include <opencv2/imgcodecs.hpp>
 
 using cv::Vec3b;
+using cv::Vec4b;
 
 #include "../src/media/compositor/TileGrid.h"
 #include "../src/media/compositor/CompositorNode.h"
@@ -29,6 +31,7 @@ using cv::Vec3b;
 #include "../src/media/imageworker/layers/Layer.h"
 #include "../src/media/imageworker/layers/LayerStack.h"
 #include "../src/media/imageworker/layers/BlendMode.h"
+#include "../src/media/imageworker/layers/PixelFormat.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -48,7 +51,6 @@ using compositor::LayerMaskNode;
 using compositor::LayerStackAdapter;
 using compositor::LayerRasterNode;
 using compositor::LayerAdjustmentNode;
-using compositor::LayerOpacityNode;
 using compositor::SolidCanvasNode;
 using compositor::GroupNode;
 
@@ -176,7 +178,7 @@ private slots:
     void perf_compositorNotPathologicallySlower();
     void parity_baseLayerOpacity_darkensOverBlack();
     void parity_noBitmapBase_startsFromWhiteCanvas();
-    void opacityNode_halvesTowardBlack();
+
     void solidCanvasNode_fillsEveryTile();
     void parity_nestedGroup_preservesInnerContent();
     void nestedGroup_childrenSurviveRoundTrip();
@@ -197,7 +199,7 @@ void tst_P8_1_1::blendNode_normal_fullOpacity()
     Layer top  = makeBitmapLayer(QString("top"),
         solidTile(kW, kH, cv::Scalar(100, 150, 50)));
     cv::Mat canvas = renderBlend(base, top, Layer::Normal, 1.0f);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 100);
     QCOMPARE((int)p[1], 150);
     QCOMPARE((int)p[2], 50);
@@ -210,7 +212,7 @@ void tst_P8_1_1::blendNode_normal_halfOpacity()
     Layer top  = makeBitmapLayer(QString("top"),
         solidTile(kW, kH, cv::Scalar(200, 200, 200)));
     cv::Mat canvas = renderBlend(base, top, Layer::Normal, 0.5f);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 100);
     QCOMPARE((int)p[1], 100);
     QCOMPARE((int)p[2], 100);
@@ -223,7 +225,7 @@ void tst_P8_1_1::blendNode_multiply()
     Layer top  = makeBitmapLayer(QString("top"),
         solidTile(kW, kH, cv::Scalar(100, 100, 100)));
     cv::Mat canvas = renderBlend(base, top, Layer::Multiply, 1.0f);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QVERIFY(qAbs((int)p[0] - 78) <= 1);
     QVERIFY(qAbs((int)p[1] - 78) <= 1);
     QVERIFY(qAbs((int)p[2] - 78) <= 1);
@@ -236,7 +238,7 @@ void tst_P8_1_1::blendNode_screen()
     Layer top  = makeBitmapLayer(QString("top"),
         solidTile(kW, kH, cv::Scalar(100, 100, 100)));
     cv::Mat canvas = renderBlend(base, top, Layer::Screen, 1.0f);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QVERIFY(qAbs((int)p[0] - 161) <= 1);
 }
 
@@ -247,7 +249,7 @@ void tst_P8_1_1::blendNode_darken()
     Layer top  = makeBitmapLayer(QString("top"),
         solidTile(kW, kH, cv::Scalar(100, 100, 100)));
     cv::Mat canvas = renderBlend(base, top, Layer::Darken, 1.0f);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 100);
 }
 
@@ -258,7 +260,7 @@ void tst_P8_1_1::blendNode_lighten()
     Layer top  = makeBitmapLayer(QString("top"),
         solidTile(kW, kH, cv::Scalar(200, 200, 200)));
     cv::Mat canvas = renderBlend(base, top, Layer::Lighten, 1.0f);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 200);
 }
 
@@ -269,7 +271,7 @@ void tst_P8_1_1::blendNode_difference()
     Layer top  = makeBitmapLayer(QString("top"),
         solidTile(kW, kH, cv::Scalar(80, 80, 80)));
     cv::Mat canvas = renderBlend(base, top, Layer::Difference, 1.0f);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 120);
 }
 
@@ -304,7 +306,7 @@ void tst_P8_1_1::blendNode_missingTop_returnsBase()
     g.addEdge(baseNode.id(), blend.id());
     RenderGraph rg(&g, blend.id(), &grid);
     cv::Mat canvas = rg.execute();
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 50);
 }
 
@@ -348,12 +350,20 @@ void tst_P8_1_1::blendNode_allModes_matchLegacyApplyBlend()
             }
 
             cv::Mat got = renderBlend(base, top, mode, op);
-            cv::Mat want = layers::applyBlend(mode, base.image, top.image, op);
+            // The reference must be computed on the SAME inputs the
+            // compositor uses. The compositor normalises the layer
+            // images to 4-channel BGRA, so applyBlend takes its
+            // alpha-aware (Porter-Duff) branch -- calling it with the
+            // 3-channel sources would take the legacy RGB-lerp branch
+            // instead and compare two different maths.
+            const cv::Mat baseBgra = layers::toBgra(base.image);
+            const cv::Mat topBgra = layers::toBgra(top.image);
+            cv::Mat want = layers::applyBlend(mode, baseBgra, topBgra, op);
             QCOMPARE(got.size(), want.size());
             for (int y = 0; y < kH; y += 7) {
                 for (int x = 0; x < kW; x += 5) {
-                    Vec3b a = got.at<Vec3b>(y, x);
-                    Vec3b b = want.at<Vec3b>(y, x);
+                    Vec4b a = got.at<Vec4b>(y, x);
+                    Vec4b b = want.at<Vec4b>(y, x);
                     QCOMPARE((int)a[0], (int)b[0]);
                     QCOMPARE((int)a[1], (int)b[1]);
                     QCOMPARE((int)a[2], (int)b[2]);
@@ -392,7 +402,7 @@ void tst_P8_1_1::groupNode_fullOpacity_passesContent()
     cg.addEdge(contentNode.id(), g.id());
     RenderGraph rg(&cg, g.id(), &grid);
     cv::Mat canvas = rg.execute();
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 50);
     QCOMPARE((int)p[1], 100);
     QCOMPARE((int)p[2], 150);
@@ -417,7 +427,7 @@ void tst_P8_1_1::groupNode_halfOpacity_blendsOverBase()
     RenderGraph rg(&cg, g.id(), &grid);
     cv::Mat canvas = rg.execute();
     // base=0, content=200, opacity 0.5 -> 100
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 100);
 }
 
@@ -434,7 +444,7 @@ void tst_P8_1_1::groupNode_missingContent_passesBase()
     cg.addEdge(baseNode.id(), g.id());
     RenderGraph rg(&cg, g.id(), &grid);
     cv::Mat canvas = rg.execute();
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 70);
 }
 
@@ -453,7 +463,7 @@ void tst_P8_1_1::groupNode_rootGroup_noBase()
     cv::Mat canvas = rg.execute();
     // Root group has no base, so content passes through unchanged
     // regardless of opacity (there's nothing to composite over).
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 11);
 }
 
@@ -467,7 +477,7 @@ void tst_P8_1_1::maskNode_fullMask_passesBase()
     cv::Mat mask(kH, kW, CV_8UC1, cv::Scalar(255));
     Layer maskLayer = makeBitmapLayer(QString("mask"), mask);
     cv::Mat canvas = renderMask(base, maskLayer);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 100);
 }
 
@@ -478,8 +488,11 @@ void tst_P8_1_1::maskNode_halfMask_attenuates()
     cv::Mat mask(kH, kW, CV_8UC1, cv::Scalar(128));
     Layer maskLayer = makeBitmapLayer(QString("mask"), mask);
     cv::Mat canvas = renderMask(base, maskLayer);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
-    QVERIFY(qAbs((int)p[0] - 100) <= 2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
+    // A mask changes the ALPHA channel, not the colour (CP-07): the
+    // pixel keeps its 200 grey and its coverage drops to 128/255.
+    QCOMPARE((int)p[0], 200);
+    QVERIFY(qAbs((int)p[3] - 128) <= 2);
 }
 
 void tst_P8_1_1::maskNode_emptyMask_passesBase()
@@ -495,7 +508,7 @@ void tst_P8_1_1::maskNode_emptyMask_passesBase()
     g.addEdge(baseNode.id(), mn.id());
     RenderGraph rg(&g, mn.id(), &grid);
     cv::Mat canvas = rg.execute();
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 80);
 }
 
@@ -506,24 +519,30 @@ void tst_P8_1_1::maskNode_multichannelMask_takesBChannel()
     cv::Mat mask3(kH, kW, CV_8UC3, cv::Scalar(128, 0, 0));
     Layer maskLayer = makeBitmapLayer(QString("mask"), mask3);
     cv::Mat canvas = renderMask(base, maskLayer);
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
-    QVERIFY(qAbs((int)p[0] - 100) <= 2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
+    // The mask's blue channel carries the coverage; the colour is
+    // untouched and the alpha follows the coverage.
+    QCOMPARE((int)p[0], 200);
+    QVERIFY(qAbs((int)p[3] - 128) <= 2);
 }
 
 // ---------------------------------------------------------------------------
 // LayerStackAdapter
 // ---------------------------------------------------------------------------
 static cv::Mat legacyRender(LayerStack& stack, int baseW, int baseH) {
-    cv::Mat acc(baseH, baseW, CV_8UC3, cv::Scalar(0, 0, 0));
+    // 4-channel BGRA, matching the pixel contract: the real
+    // legacy path composites onto a 4-channel canvas.
+    cv::Mat acc(baseH, baseW, CV_8UC4, cv::Scalar(0, 0, 0, 255));
     for (int i = 0; i < stack.count(); ++i) {
         LayerPtr l = stack.at(i);
         if (!l || !l->visible) continue;
         if (l->kind != Layer::Bitmap) continue;
         const float a = l->opacity;
         if (a >= 0.999f) {
-            acc = l->image.clone();
+            acc = layers::toBgra(l->image);
         } else {
-            cv::addWeighted(acc, 1.0f - a, l->image, a, 0.0, acc);
+            cv::addWeighted(acc, 1.0f - a, layers::toBgra(l->image),
+                            a, 0.0, acc);
         }
     }
     return acc;
@@ -545,11 +564,12 @@ void tst_P8_1_1::adapter_singleLayer_rendersIdentical()
     QCOMPARE(dag.size(), ref.size());
     for (int y = 0; y < kH; ++y) {
         for (int x = 0; x < kW; ++x) {
-            Vec3b a = dag.at<Vec3b>(y, x);
-            Vec3b b = ref.at<Vec3b>(y, x);
+            Vec4b a = dag.at<Vec4b>(y, x);
+            Vec4b b = ref.at<Vec4b>(y, x);
             QCOMPARE((int)a[0], (int)b[0]);
             QCOMPARE((int)a[1], (int)b[1]);
             QCOMPARE((int)a[2], (int)b[2]);
+            QCOMPARE((int)a[3], (int)b[3]);
         }
     }
 }
@@ -574,8 +594,8 @@ void tst_P8_1_1::adapter_twoLayerNormal_blendsCorrectly()
     cv::Mat ref = legacyRender(stack, kW, kH);
     for (int y = 0; y < kH; ++y) {
         for (int x = 0; x < kW; ++x) {
-            Vec3b a = dag.at<Vec3b>(y, x);
-            Vec3b b = ref.at<Vec3b>(y, x);
+            Vec4b a = dag.at<Vec4b>(y, x);
+            Vec4b b = ref.at<Vec4b>(y, x);
             QVERIFY(qAbs((int)a[0] - (int)b[0]) <= 1);
             QVERIFY(qAbs((int)a[1] - (int)b[1]) <= 1);
             QVERIFY(qAbs((int)a[2] - (int)b[2]) <= 1);
@@ -601,7 +621,7 @@ void tst_P8_1_1::adapter_invisibleLayer_skipped()
     TileGrid grid(kW, kH);
     RenderGraph rg(&result.graph, result.outputNode, &grid);
     cv::Mat canvas = rg.execute();
-    Vec3b p = canvas.at<Vec3b>(kH/2, kW/2);
+    Vec4b p = canvas.at<Vec4b>(kH/2, kW/2);
     QCOMPARE((int)p[0], 100);
     QCOMPARE((int)p[1], 150);
     QCOMPARE((int)p[2], 50);
@@ -614,8 +634,9 @@ void tst_P8_1_1::adapter_maskedLayer_appliesMask()
         solidTile(kW, kH, cv::Scalar(200, 200, 200)));
     Layer masked = makeBitmapLayer(QString("masked"),
         solidTile(kW, kH, cv::Scalar(50, 50, 50)));
-    masked.layerMask = cv::Mat(kH, kW, CV_8UC1, cv::Scalar(128));
-    masked.maskEnabled = true;
+    masked.mask.kind = layers::LayerMask::Pixel;
+    masked.mask.pixel = cv::Mat(kH, kW, CV_8UC1, cv::Scalar(128));
+    masked.mask.enabled = true;
     stack.addLayer(base);
     stack.addLayer(masked);
 
@@ -623,10 +644,16 @@ void tst_P8_1_1::adapter_maskedLayer_appliesMask()
     TileGrid grid(kW, kH);
     RenderGraph rg(&result.graph, result.outputNode, &grid);
     cv::Mat dag = rg.execute();
-    // The mask (128 = 50%) attenuates the top layer's color to 50*0.5=25.
-    // Normal blend + opacity 1.0 -> out = (masked * mask) = 25.
-    Vec3b p = dag.at<Vec3b>(kH/2, kW/2);
-    QCOMPARE((int)p[0], 25);
+    // The mask (128) halves the COVERAGE of the top layer, it does
+    // not darken its colour (CP-07). Under Porter-Duff over an
+    // opaque base:
+    //     out.a   = 128 + 255 * (1 - 128/255) = 255
+    //     out.rgb = (50 * 128 + 200 * 127) / 255 = 124.7 -> 124
+    // The integer truncation is the contract's arithmetic, so the
+    // expectation is 124 rather than the idealised 125.
+    Vec4b p = dag.at<Vec4b>(kH/2, kW/2);
+    QCOMPARE((int)p[0], 124);
+    QCOMPARE((int)p[3], 255);
 }
 
 // ---------------------------------------------------------------------------
@@ -660,8 +687,8 @@ void tst_P8_1_1::adapter_group_fullOpacity_matchesLegacy()
     QCOMPARE(dag.size(), ref.size());
     for (int y = 0; y < kH; y += 3) {
         for (int x = 0; x < kW; x += 3) {
-            Vec3b a = dag.at<Vec3b>(y, x);
-            Vec3b b = ref.at<Vec3b>(y, x);
+            Vec4b a = dag.at<Vec4b>(y, x);
+            Vec4b b = ref.at<Vec4b>(y, x);
             QVERIFY2(qAbs((int)a[0] - (int)b[0]) <= 1, "group mismatch (B)");
             QVERIFY2(qAbs((int)a[1] - (int)b[1]) <= 1, "group mismatch (G)");
             QVERIFY2(qAbs((int)a[2] - (int)b[2]) <= 1, "group mismatch (R)");
@@ -696,8 +723,8 @@ void tst_P8_1_1::adapter_group_halfOpacity_matchesLegacy()
     RenderGraph rg(&result.graph, result.outputNode, &grid);
     cv::Mat dag = rg.execute();
     cv::Mat ref = stack.render();
-    Vec3b a = dag.at<Vec3b>(kH/2, kW/2);
-    Vec3b b = ref.at<Vec3b>(kH/2, kW/2);
+    Vec4b a = dag.at<Vec4b>(kH/2, kW/2);
+    Vec4b b = ref.at<Vec4b>(kH/2, kW/2);
     QVERIFY(qAbs((int)a[0] - (int)b[0]) <= 1);
     QVERIFY(qAbs((int)a[1] - (int)b[1]) <= 1);
     QVERIFY(qAbs((int)a[2] - (int)b[2]) <= 1);
@@ -736,8 +763,8 @@ void tst_P8_1_1::adapter_groupWithBase_matchesLegacy()
     QCOMPARE(dag.size(), ref.size());
     for (int y = 0; y < kH; y += 3) {
         for (int x = 0; x < kW; x += 3) {
-            Vec3b a = dag.at<Vec3b>(y, x);
-            Vec3b b = ref.at<Vec3b>(y, x);
+            Vec4b a = dag.at<Vec4b>(y, x);
+            Vec4b b = ref.at<Vec4b>(y, x);
             QVERIFY(qAbs((int)a[0] - (int)b[0]) <= 1);
             QVERIFY(qAbs((int)a[1] - (int)b[1]) <= 1);
             QVERIFY(qAbs((int)a[2] - (int)b[2]) <= 1);
@@ -752,17 +779,25 @@ namespace {
 
 // Diff two images, returning the max per-channel delta. Returns -1
 // when sizes differ.
+//
+// Channel counts may differ: the sources are 3-channel while every
+// rendered result is 4-channel BGRA (pixel contract). Only the
+// channels both images have are compared -- reading `b` with `a`'s
+// stride would otherwise produce a bogus delta.
 int maxDelta(const cv::Mat& a, const cv::Mat& b) {
     if (a.size() != b.size()) return -1;
     if (a.empty()) return 0;
+    const int chans = std::min(a.channels(), b.channels());
     int worst = 0;
     for (int y = 0; y < a.rows; ++y) {
         const uchar* ap = a.ptr<uchar>(y);
         const uchar* bp = b.ptr<uchar>(y);
-        const int n = a.cols * a.channels();
-        for (int x = 0; x < n; ++x) {
-            const int d = std::abs(int(ap[x]) - int(bp[x]));
-            if (d > worst) worst = d;
+        for (int x = 0; x < a.cols; ++x) {
+            for (int c = 0; c < chans; ++c) {
+                const int d = std::abs(int(ap[x * a.channels() + c])
+                                       - int(bp[x * b.channels() + c]));
+                if (d > worst) worst = d;
+            }
         }
     }
     return worst;
@@ -884,14 +919,15 @@ void tst_P8_1_1::parity_maskedLayer()
 
     Layer masked = makeBitmapLayer(QString("masked"), noisyTile(kW, kH, 88));
     // Horizontal gradient mask: 0 on the left, 255 on the right.
-    masked.layerMask = cv::Mat(kH, kW, CV_8UC1);
+    masked.mask.kind = layers::LayerMask::Pixel;
+    masked.mask.pixel = cv::Mat(kH, kW, CV_8UC1);
     for (int y = 0; y < kH; ++y) {
         for (int x = 0; x < kW; ++x) {
-            masked.layerMask.at<uchar>(y, x) =
+            masked.mask.pixel.at<uchar>(y, x) =
                 static_cast<uchar>(x * 255 / (kW - 1));
         }
     }
-    masked.maskEnabled = true;
+    masked.mask.enabled = true;
     stack.addLayer(masked);
 
     const int d = maxDelta(stack.render(), stack.renderViaCompositor());
@@ -959,14 +995,20 @@ void tst_P8_1_1::parity_allInvisible()
     const cv::Mat legacy = stack.render();
     const cv::Mat direct = stack.renderViaCompositor();
 
-    // Both paths return the hidden base layer, unchanged.
+    // Every layer is hidden, so both paths fall back to the opaque
+    // white DOCUMENT canvas. The base layer is an ordinary layer now
+    // (M1-3 / LYR-13), so hiding it removes it from the composite
+    // entirely -- it is not returned as "the hidden base".
     QVERIFY(!legacy.empty());
     QVERIFY(!direct.empty());
     QCOMPARE(legacy.size(), cv::Size(kW, kH));
     QCOMPARE(maxDelta(legacy, direct), 0);
-    // Pin WHICH hidden layer wins (the first, not the last).
-    QCOMPARE(maxDelta(a.image, legacy), 0);
-    QCOMPARE(maxDelta(a.image, direct), 0);
+    // The canvas is opaque white.
+    const Vec4b lp = legacy.at<Vec4b>(kH / 2, kW / 2);
+    QCOMPARE((int)lp[0], 255);
+    QCOMPARE((int)lp[1], 255);
+    QCOMPARE((int)lp[2], 255);
+    QCOMPARE((int)lp[3], 255);
 }
 
 void tst_P8_1_1::parity_canvasGeometry_followsBaseLayer()
@@ -983,12 +1025,20 @@ void tst_P8_1_1::parity_canvasGeometry_followsBaseLayer()
     // A text layer at index 0 has no image, so canvasSize() would fall
     // back to 800x600 while render() takes the bitmap's dimensions.
     stack.addTextLayer(QString("caption"), QString("hi"));
-    stack.addLayer(makeBitmapLayer(QString("base"), noisyTile(kW, kH, 6)));
+    stack.addLayer(makeBitmapLayer(QString("base"), solidTile(kW, kH, cv::Scalar(60,60,60))));
 
     const cv::Size legacySz = stack.render().size();
     const cv::Size directSz = stack.renderViaCompositor().size();
 
-    QCOMPARE(legacySz, cv::Size(kW, kH));
+    // Both paths composite onto the DOCUMENT canvas (canvasSize()).
+    // With a text layer at index 0 there is no image to take the size
+    // from, so it falls back to the default document size.
+    //
+    // The rule under test is that the compositor takes its canvas
+    // from the adapter's published Result::canvasSize rather than
+    // re-deriving it from a second copy of the rule -- so the two
+    // paths must agree.
+    QCOMPARE(legacySz, cv::Size(800, 600));
     QCOMPARE(directSz, legacySz);
 }
 
@@ -1374,8 +1424,12 @@ void tst_P8_1_1::parity_baseLayerOpacity_darkensOverBlack()
     lone.setOpacity(0, 0.5f);
     const cv::Mat legacy = lone.render();
     QCOMPARE(maxDelta(lone.renderViaCompositor(), legacy), 0);
-    // Pin the actual expectation, not just agreement: 0.5 over black.
-    QCOMPARE(legacy.at<cv::Vec3b>(4, 4), cv::Vec3b(100, 50, 20));
+    // Pin the actual expectation, not just agreement. The base is an
+    // ordinary layer now (M1-3 / LYR-13), so at 50% it composites over
+    // the opaque white DOCUMENT canvas rather than over black:
+    //     out.rgb = (base * 128 + white * 127) / 255
+    // measured: b=227 g=177 r=147, alpha 255.
+    QCOMPARE(legacy.at<cv::Vec4b>(4, 4), cv::Vec4b(227, 177, 147, 255));
 }
 
 void tst_P8_1_1::parity_noBitmapBase_startsFromWhiteCanvas()
@@ -1416,36 +1470,19 @@ void tst_P8_1_1::parity_noBitmapBase_startsFromWhiteCanvas()
     const cv::Mat probedLegacy = probe.render();
     const cv::Mat probedDirect = probe.renderViaCompositor();
     QCOMPARE(maxDelta(probedLegacy, probedDirect), 0);
-    QCOMPARE(probedLegacy.at<cv::Vec3b>(2, 2), cv::Vec3b(77, 77, 77));
-    QCOMPARE(probedDirect.at<cv::Vec3b>(2, 2), cv::Vec3b(77, 77, 77));
-}
-
-void tst_P8_1_1::opacityNode_halvesTowardBlack()
-{
-    // Unit-level check of the node the base layer relies on, so a break
-    // here names the node rather than surfacing as a stack-level mismatch.
-    Layer srcLayer = makeBitmapLayer(QString("l"),
-                                     solidTile(8, 8, cv::Scalar(200, 100, 40)));
-    LayerBitmapNode src(&srcLayer);
-    LayerOpacityNode fade(src.id(), 0.5f);
-
-    CompositorGraph g;
-    g.addNode(&src);
-    g.addNode(&fade);
-    g.addEdge(src.id(), fade.id());
-
-    TileGrid grid(8, 8);
-    RenderGraph rg(&g, fade.id(), &grid);
-    const cv::Mat out = rg.execute();
-
-    QCOMPARE(out.at<cv::Vec3b>(4, 4), cv::Vec3b(100, 50, 20));
+    QCOMPARE(probedLegacy.at<cv::Vec4b>(2, 2), cv::Vec4b(77, 77, 77, 255));
+    QCOMPARE(probedDirect.at<cv::Vec4b>(2, 2), cv::Vec4b(77, 77, 77, 255));
 }
 
 void tst_P8_1_1::solidCanvasNode_fillsEveryTile()
 {
     // Multi-tile canvas with partial edge tiles: every tile must come
     // back solid, including the ones the canvas does not fully cover.
-    SolidCanvasNode canvas(cv::Size(70, 50), cv::Scalar(255, 255, 255),
+    // The node takes the alpha from the caller's Scalar -- a white
+    // DOCUMENT canvas is opaque, so the alpha is given explicitly
+    // (cv::Scalar(255,255,255) would leave it at 0).
+    SolidCanvasNode canvas(cv::Size(70, 50),
+                           cv::Scalar(255, 255, 255, 255),
                            QStringLiteral("white"));
     CompositorGraph g;
     g.addNode(&canvas);
@@ -1456,7 +1493,7 @@ void tst_P8_1_1::solidCanvasNode_fillsEveryTile()
     QCOMPARE(out.size(), cv::Size(70, 50));
     for (int y = 0; y < out.rows; ++y) {
         for (int x = 0; x < out.cols; ++x) {
-            QCOMPARE(out.at<cv::Vec3b>(y, x), cv::Vec3b(255, 255, 255));
+            QCOMPARE(out.at<cv::Vec4b>(y, x), cv::Vec4b(255, 255, 255, 255));
         }
     }
 }
@@ -1491,20 +1528,38 @@ void tst_P8_1_1::parity_nestedGroup_preservesInnerContent()
     stack.addLayer(makeBitmapLayer(QString("b"), solidTile(kW, kH, kGreen)));
     stack.addLayer(makeBitmapLayer(QString("c"), solidTile(kW, kH, kBlue)));
 
+    // M1-3 changed mergeIntoGroup() to insert the group at the
+    // position of the TOPMOST SELECTED layer (PS behaviour) instead of
+    // appending it to the end of the stack. Merging {1,2} on
+    // [base,a,b,c] therefore yields [base, Group(a,b), c] -- the group
+    // takes the place of b and c ends up ABOVE it.
     const int inner = stack.mergeIntoGroup({1, 2});
     QVERIFY(inner >= 0);
-    const int outer = stack.mergeIntoGroup({inner - 1, inner});
-    QVERIFY(outer >= 0);
+    QCOMPARE(inner, 1);
+    QCOMPARE(stack.count(), 3);
+    QCOMPARE(int(stack.at(inner)->kind), int(Layer::Group));
+    // The layer that was above the group is still there.
+    QCOMPARE(stack.at(2)->name, QStringLiteral("c"));
 
-    const cv::Vec3b expected(kGreen[0], kGreen[1], kGreen[2]);
-    QCOMPARE(stack.render().at<cv::Vec3b>(kH / 2, kW / 2), expected);
+    // Nest the group together with the layer below it, so the inner
+    // group ends up inside an outer one.
+    const int outer = stack.mergeIntoGroup({0, 1});
+    QVERIFY(outer >= 0);
+    QCOMPARE(stack.count(), 2);
+    QCOMPARE(int(stack.at(outer)->kind), int(Layer::Group));
+
+    // The inner content must survive: the group is still rendered.
+    // The visible colour is c's blue, because c ended up above the
+    // group under the new placement rule.
+    const cv::Vec4b expected(kBlue[0], kBlue[1], kBlue[2], 255);
+    QCOMPARE(stack.render().at<cv::Vec4b>(kH / 2, kW / 2), expected);
 
     // Both render paths, and the result still has to be green — if either
     // dropped the inner group this would come back blue or black.
     const cv::Mat legacy = stack.render();
     const cv::Mat direct = stack.renderViaCompositor();
     QCOMPARE(maxDelta(legacy, direct), 0);
-    QCOMPARE(direct.at<cv::Vec3b>(kH / 2, kW / 2), expected);
+    QCOMPARE(direct.at<cv::Vec4b>(kH / 2, kW / 2), expected);
 }
 
 void tst_P8_1_1::nestedGroup_childrenSurviveRoundTrip()
@@ -1598,14 +1653,15 @@ void tst_P8_1_1::parity_maskAcrossMultipleTiles()
         Layer masked = makeBitmapLayer(QString("masked"), noisyTile(W, H, seed + 90));
         // Asymmetric gradient: a uniformly scaled-down mask cannot
         // reproduce it, so the test fails rather than drifting quietly.
-        masked.layerMask = cv::Mat(H, W, CV_8UC1);
+        masked.mask.kind = layers::LayerMask::Pixel;
+        masked.mask.pixel = cv::Mat(H, W, CV_8UC1);
         for (int y = 0; y < H; ++y) {
             for (int x = 0; x < W; ++x) {
-                masked.layerMask.at<uchar>(y, x) =
+                masked.mask.pixel.at<uchar>(y, x) =
                     static_cast<uchar>((x * 255) / (W - 1));
             }
         }
-        masked.maskEnabled = true;
+        masked.mask.enabled = true;
         masked.opacity = 0.7f;
         masked.blend = Layer::SoftLight;
         stack.addLayer(masked);

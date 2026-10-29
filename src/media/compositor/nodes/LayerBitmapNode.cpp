@@ -5,6 +5,7 @@
 #include "LayerBitmapNode.h"
 
 #include "../../imageworker/layers/Layer.h"   // layers::Layer (full def for .image)
+#include "../../imageworker/layers/PixelFormat.h"   // layers::toBgra
 
 #include <opencv2/imgproc.hpp>
 
@@ -34,46 +35,25 @@ cv::Mat LayerBitmapNode::compute(int tileX, int tileY,
     const cv::Rect r = grid.tileRect(tileX, tileY);
     if (r.width <= 0 || r.height <= 0) return cv::Mat();
 
-    // 通道归一化: 合成画布固定是 CV_8UC3, 节点必须输出同样的格式.
-    //   图层图可能是 CV_8UC1 (灰度) / CV_8UC3 / CV_8UC4 (带 alpha) / 16bit,
-    //   不在这里转的话 RenderGraph 会因为类型不匹配把整块 tile 丢掉 ->
-    //   画布全黑.
-    cv::Mat src;
-    switch (m_layer->image.type()) {
-    case CV_8UC1:
-        cv::cvtColor(m_layer->image, src, cv::COLOR_GRAY2BGR);
-        break;
-    case CV_8UC3:
-        src = m_layer->image;
-        break;
-    case CV_8UC4:
-        // 画布是 3 通道, alpha 在这里丢掉 (跟 legacy 路径一致)
-        cv::cvtColor(m_layer->image, src, cv::COLOR_BGRA2BGR);
-        break;
-    default:
-        // 其它位深 (16bit 等): 先降到 8bit 再转 BGR
-        cv::Mat tmp;
-        m_layer->image.convertTo(tmp, CV_8U);
-        if (tmp.channels() == 1) {
-            cv::cvtColor(tmp, src, cv::COLOR_GRAY2BGR);
-        } else if (tmp.channels() == 4) {
-            cv::cvtColor(tmp, src, cv::COLOR_BGRA2BGR);
-        } else {
-            src = tmp;   // 3 通道: 直接用
-        }
-        break;
-    }
+    // Channel normalisation: the compositing canvas is always CV_8UC4
+    // BGRA with straight alpha (pixel contract).
+    //   The layer image may be CV_8UC1 (grayscale) / CV_8UC3 / CV_8UC4
+    //   (with alpha) / 16bit. Without normalisation RenderGraph drops the
+    //   whole tile on a type mismatch -> a black canvas. The alpha must
+    //   NOT be dropped here: without it there is no transparency at all
+    //   (LYR-01).
+    const cv::Mat src = layers::toBgra(m_layer->image);
     if (src.empty()) return cv::Mat();
 
     // Bounds check: if the layer's image is smaller than the grid image
     // (e.g. layer hasn't been resized to base yet), treat missing regions
     // as transparent/black.
     if (r.x >= src.cols || r.y >= src.rows) {
-        return cv::Mat::zeros(r.height, r.width, CV_8UC3);
+        return cv::Mat::zeros(r.height, r.width, CV_8UC4);
     }
 
     // Build the tile by copying from the layer's image.
-    cv::Mat tile(r.height, r.width, CV_8UC3);
+    cv::Mat tile(r.height, r.width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
     const int copyW = std::min(r.width,  src.cols - r.x);
     const int copyH = std::min(r.height, src.rows - r.y);
     if (copyW <= 0 || copyH <= 0) {

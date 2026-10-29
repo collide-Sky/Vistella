@@ -26,11 +26,44 @@ namespace compositor {
 
 namespace {
 
-// 把 tile 转成画布要的格式.
-//   画布固定 CV_8UC3: 1ch -> BGR, 3ch -> 直通, 4ch -> BGRA2BGR,
-//   16bit -> 先降到 8bit 再转. 转不了就返回 false (调用方记日志跳过).
+// Convert a tile to the canvas format.
+//   The canvas is CV_8UC4 BGRA with straight alpha (pixel contract,
+//   docs/CONTRACTS.md 7.6). A 4-channel tile therefore passes through
+//   untouched -- converting it to 3 channels would drop the alpha,
+//   which is the CP-01 failure mode.
+//   1ch -> grey + opaque alpha, 3ch -> BGR + opaque alpha,
+//   16bit -> down to 8bit first. If it cannot be converted, return
+//   false and let the caller log and skip the tile.
 bool convertTileFormat(const cv::Mat& tile, cv::Mat& out, int targetType)
 {
+    if (targetType == CV_8UC4) {
+        switch (tile.type()) {
+        case CV_8UC4: out = tile; return true;
+        case CV_8UC1: {
+            cv::Mat bgr;
+            cv::cvtColor(tile, bgr, cv::COLOR_GRAY2BGR);
+            cv::cvtColor(bgr, out, cv::COLOR_BGR2BGRA);
+            return true;
+        }
+        case CV_8UC3:
+            cv::cvtColor(tile, out, cv::COLOR_BGR2BGRA);
+            return true;
+        default: break;
+        }
+        cv::Mat tmp;
+        tile.convertTo(tmp, CV_8U);
+        switch (tmp.channels()) {
+        case 1: {
+            cv::Mat bgr;
+            cv::cvtColor(tmp, bgr, cv::COLOR_GRAY2BGR);
+            cv::cvtColor(bgr, out, cv::COLOR_BGR2BGRA);
+            return true;
+        }
+        case 3: cv::cvtColor(tmp, out, cv::COLOR_BGR2BGRA); return true;
+        case 4: out = tmp; return true;
+        default: return false;
+        }
+    }
     if (targetType != CV_8UC3) {
         if (tile.type() != targetType) return false;
         out = tile;
@@ -86,8 +119,10 @@ cv::Mat RenderGraph::executeSequential()
     RenderContext ctx(m_graph, &m_cache, this);
 
     // Build the full canvas by stitching output node's tiles.
-    cv::Mat canvas(m_grid->imageHeight(), m_grid->imageWidth(), CV_8UC3,
-                   cv::Scalar(0, 0, 0));
+    // The compositing canvas is CV_8UC4 BGRA with straight alpha, so it
+    // matches the node outputs and the legacy path (pixel contract).
+    cv::Mat canvas(m_grid->imageHeight(), m_grid->imageWidth(), CV_8UC4,
+                   cv::Scalar(0, 0, 0, 0));
 
     const auto tiles = m_grid->allTiles();
     for (const auto& t : tiles) {
@@ -146,8 +181,10 @@ cv::Mat RenderGraph::executeParallel(::vistella::tp::EngineContext* engine)
     m_lastMisses = 0;
     m_lastTiles  = 0;
 
-    cv::Mat canvas(m_grid->imageHeight(), m_grid->imageWidth(), CV_8UC3,
-                   cv::Scalar(0, 0, 0));
+    // The compositing canvas is CV_8UC4 BGRA with straight alpha, so it
+    // matches the node outputs and the legacy path (pixel contract).
+    cv::Mat canvas(m_grid->imageHeight(), m_grid->imageWidth(), CV_8UC4,
+                   cv::Scalar(0, 0, 0, 0));
 
     const auto tiles = m_grid->allTiles();
     const int nTiles = static_cast<int>(tiles.size());
@@ -228,8 +265,10 @@ cv::Mat RenderGraph::executeAndReuse(RenderContext& ctx)
     CompositorNode* out = m_graph->node(m_output);
     if (!out) return cv::Mat();
 
-    cv::Mat canvas(m_grid->imageHeight(), m_grid->imageWidth(), CV_8UC3,
-                   cv::Scalar(0, 0, 0));
+    // The compositing canvas is CV_8UC4 BGRA with straight alpha, so it
+    // matches the node outputs and the legacy path (pixel contract).
+    cv::Mat canvas(m_grid->imageHeight(), m_grid->imageWidth(), CV_8UC4,
+                   cv::Scalar(0, 0, 0, 0));
     const auto tiles = m_grid->allTiles();
     for (const auto& t : tiles) {
         const int tx = t.first;

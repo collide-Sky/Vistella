@@ -238,8 +238,9 @@ void buildRealisticStack(LayerStack& stack, const cv::Mat& base, int seed) {
                                   photoLike(base.cols, base.rows, seed + 1));
     retouched.blend = Layer::SoftLight;
     retouched.opacity = 0.65f;
-    retouched.layerMask = radialMask(base.cols, base.rows, 0.85);
-    retouched.maskEnabled = true;
+    retouched.mask.kind = layers::LayerMask::Pixel;
+    retouched.mask.pixel = radialMask(base.cols, base.rows, 0.85);
+    retouched.mask.enabled = true;
     stack.addLayer(retouched);
 
     // A group holding two layers, at partial opacity.

@@ -16,6 +16,7 @@
 #include "../TileGrid.h"
 
 #include "../../imageworker/layers/BlendMode.h"   // layers::applyBlend
+#include "../../imageworker/layers/PixelFormat.h"   // layers::toBgra
 
 #include <opencv2/imgproc.hpp>   // cv::cvtColor
 #include <algorithm>
@@ -28,20 +29,11 @@ namespace {
 // cropping. Returns a CV_8UC3 copy of exactly dst.size().
 cv::Mat fitToSize(const cv::Mat& src, const cv::Size& target) {
     if (src.empty()) return cv::Mat();
-    cv::Mat work = src;
-    if (work.type() != CV_8UC3) {
-        if (work.channels() == 1) {
-            cv::Mat bgr;
-            cv::cvtColor(work, bgr, cv::COLOR_GRAY2BGR);
-            work = bgr;
-        } else if (work.channels() == 4) {
-            cv::Mat bgr;
-            cv::cvtColor(work, bgr, cv::COLOR_BGRA2BGR);
-            work = bgr;
-        } else {
-            return cv::Mat();
-        }
-    }
+    // The compositing canvas is always CV_8UC4 BGRA with straight alpha
+    // (pixel contract): the alpha must not be dropped here, otherwise
+    // masks and transparency stop working.
+    cv::Mat work = layers::toBgra(src);
+    if (work.empty()) return cv::Mat();
     if (work.size() == target) return work;
 
     const int tw = target.width;
@@ -52,8 +44,8 @@ cv::Mat fitToSize(const cv::Mat& src, const cv::Size& target) {
         // origin is the image origin, not the center).
         return work(cv::Rect(0, 0, tw, th)).clone();
     }
-    // Zero-pad (canvas origin alignment).
-    cv::Mat out(th, tw, CV_8UC3, cv::Scalar(0, 0, 0));
+    // Zero-pad (canvas origin alignment). Transparent (alpha = 0), not black.
+    cv::Mat out(th, tw, CV_8UC4, cv::Scalar(0, 0, 0, 0));
     const int copyW = std::min(tw, work.cols);
     const int copyH = std::min(th, work.rows);
     if (copyW > 0 && copyH > 0) {

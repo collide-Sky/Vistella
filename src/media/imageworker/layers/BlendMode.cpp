@@ -5,6 +5,8 @@
 
 #include "BlendMode.h"
 
+#include "PixelFormat.h"
+
 #include <opencv2/core.hpp>
 
 namespace layers {
@@ -280,24 +282,28 @@ cv::Mat blendExclusion(const cv::Mat &base, const cv::Mat &blend, float opacity)
 //  调度器
 // =====================================================================
 
-cv::Mat applyBlend(Layer::BlendMode mode, const cv::Mat &base, const cv::Mat &blend, float opacity)
+namespace {
+
+// Pure colour blending: only the result colour of the blend mode is
+// computed, without the opacity and without alpha.
+//   The blendXxx functions are called with opacity = 1.0, so they
+//   return the colour result directly (alphaBlend returns
+//   blend.clone() when opacity >= 1).
+cv::Mat blendColorOnly(Layer::BlendMode mode, const cv::Mat &base, const cv::Mat &blend)
 {
-    if (!canBlend(base, blend)) {
-        return base.empty() ? cv::Mat() : base.clone();
-    }
     switch (mode) {
-    case Layer::Normal:      return blendNormal(base, blend, opacity);
-    case Layer::Multiply:    return blendMultiply(base, blend, opacity);
-    case Layer::Screen:      return blendScreen(base, blend, opacity);
-    case Layer::Overlay:     return blendOverlay(base, blend, opacity);
-    case Layer::SoftLight:   return blendSoftLight(base, blend, opacity);
-    case Layer::HardLight:   return blendHardLight(base, blend, opacity);
-    case Layer::ColorDodge:  return blendColorDodge(base, blend, opacity);
-    case Layer::ColorBurn:   return blendColorBurn(base, blend, opacity);
-    case Layer::Darken:      return blendDarken(base, blend, opacity);
-    case Layer::Lighten:     return blendLighten(base, blend, opacity);
-    case Layer::Difference:  return blendDifference(base, blend, opacity);
-    case Layer::Exclusion:   return blendExclusion(base, blend, opacity);
+    case Layer::Normal:      return blendNormal(base, blend, 1.0f);
+    case Layer::Multiply:    return blendMultiply(base, blend, 1.0f);
+    case Layer::Screen:      return blendScreen(base, blend, 1.0f);
+    case Layer::Overlay:     return blendOverlay(base, blend, 1.0f);
+    case Layer::SoftLight:   return blendSoftLight(base, blend, 1.0f);
+    case Layer::HardLight:   return blendHardLight(base, blend, 1.0f);
+    case Layer::ColorDodge:  return blendColorDodge(base, blend, 1.0f);
+    case Layer::ColorBurn:   return blendColorBurn(base, blend, 1.0f);
+    case Layer::Darken:      return blendDarken(base, blend, 1.0f);
+    case Layer::Lighten:     return blendLighten(base, blend, 1.0f);
+    case Layer::Difference:  return blendDifference(base, blend, 1.0f);
+    case Layer::Exclusion:   return blendExclusion(base, blend, 1.0f);
     // Phase 3: Hue / Saturation / Color / Luminosity (HSV 复合)
     case Layer::Hue:
     case Layer::Saturation:
@@ -305,8 +311,62 @@ cv::Mat applyBlend(Layer::BlendMode mode, const cv::Mat &base, const cv::Mat &bl
     case Layer::Luminosity:
     default:
         // Phase 2 暂不支持, fallback 到 Normal
-        return blendNormal(base, blend, opacity);
+        return blendNormal(base, blend, 1.0f);
     }
+}
+
+}   // namespace
+
+cv::Mat applyBlend(Layer::BlendMode mode, const cv::Mat &base, const cv::Mat &blend, float opacity)
+{
+    // ---- 3 channels: the old behaviour, changed in no way ----
+    //   Without alpha there is no notion of "coverage", so the opacity
+    //   can only be a linear RGB interpolation.
+    //   This path is kept for callers that take no part in alpha
+    //   compositing (unit tests / offscreen tools).
+    if (base.channels() == 3 && blend.channels() == 3) {
+        if (!canBlend(base, blend)) {
+            return base.empty() ? cv::Mat() : base.clone();
+        }
+        switch (mode) {
+        case Layer::Normal:      return blendNormal(base, blend, opacity);
+        case Layer::Multiply:    return blendMultiply(base, blend, opacity);
+        case Layer::Screen:      return blendScreen(base, blend, opacity);
+        case Layer::Overlay:     return blendOverlay(base, blend, opacity);
+        case Layer::SoftLight:   return blendSoftLight(base, blend, opacity);
+        case Layer::HardLight:   return blendHardLight(base, blend, opacity);
+        case Layer::ColorDodge:  return blendColorDodge(base, blend, opacity);
+        case Layer::ColorBurn:   return blendColorBurn(base, blend, opacity);
+        case Layer::Darken:      return blendDarken(base, blend, opacity);
+        case Layer::Lighten:     return blendLighten(base, blend, opacity);
+        case Layer::Difference:  return blendDifference(base, blend, opacity);
+        case Layer::Exclusion:   return blendExclusion(base, blend, opacity);
+        case Layer::Hue:
+        case Layer::Saturation:
+        case Layer::Color:
+        case Layer::Luminosity:
+        default:
+            return blendNormal(base, blend, opacity);
+        }
+    }
+
+    // ---- 4 channels: colour blending + Porter-Duff over (CP-07) ----
+    //   The blend mode only decides "how the source colour is computed";
+    //   the coverage comes from the source alpha times the layer opacity.
+    //   The mask, the pixel transparency and the layer opacity all take
+    //   effect at this one step.
+    if (base.empty()) return cv::Mat();
+    if (base.size() != blend.size()) return base.clone();
+
+    cv::Mat baseBgr, baseA, srcBgr, srcA;
+    splitBgra(base, baseBgr, baseA);
+    splitBgra(blend, srcBgr, srcA);
+    if (baseBgr.empty() || srcBgr.empty()) return base.clone();
+
+    const cv::Mat color = blendColorOnly(mode, baseBgr, srcBgr);
+    if (color.empty()) return base.clone();
+
+    return compositeOver(base, color, srcA, opacity);
 }
 
 } // namespace layers

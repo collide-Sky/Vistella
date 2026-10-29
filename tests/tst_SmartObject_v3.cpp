@@ -114,7 +114,11 @@ void tst_SmartObject_v3::test_mainwindow_convertSmartObject()
     QCOMPARE(stack.at(0)->kind, Layer::Bitmap);
     QVERIFY(!stack.at(0)->image.empty());
     QCOMPARE(stack.at(0)->image.size(), img.size());
-    QCOMPARE(stack.at(0)->image.type(), img.type());
+    // Layer pixels are normalised to 4-channel BGRA on the way
+    // into the stack (pixel contract), so the stored image is
+    // CV_8UC4 regardless of the source format.
+    QCOMPARE(stack.at(0)->image.type(), CV_8UC4);
+    QCOMPARE(stack.at(0)->image.size(), img.size());
 
     // SmartObject payload 清除
     QVERIFY(stack.at(0)->sourceFilePath.isEmpty());

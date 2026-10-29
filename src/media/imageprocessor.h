@@ -37,8 +37,13 @@ public:
     static bool saveImage(const cv::Mat &img, const QString &path, const SaveOptions& opts, QString *err = nullptr);
 
     // 把 cv::Mat 转成 QImage 便于 QGraphicsView 显示
+    //   The QImage format matches the channel count exactly (INV-FMT-2):
+    //     1 channel -> Format_Grayscale8
+    //     3 channels -> Format_RGB888     (BGR -> RGB)
+    //     4 channels -> Format_RGBA8888   (BGRA -> RGBA, alpha kept)
     static QImage matToQImage(const cv::Mat &mat);
     // 把 QImage 转成 cv::Mat (扁平化文字图层时需要) - 返回 BGR 格式
+    //   A QImage with alpha returns BGRA (4 channels), otherwise BGR (3 channels)
     static cv::Mat qImageToMat(const QImage &img);
 
     // ===== 像素级算法 (in-place 或 in->out) =====

@@ -177,12 +177,16 @@ private slots:
         QCOMPARE(out.cols, 50);
         // Sample 4 corners + center. With Normal blend + opacity 1.0, the
         // base white should be fully replaced by red.
-        const cv::Vec3b expect(0, 0, 255);
-        QCOMPARE(cv::Vec3b(out.at<cv::Vec3b>(0, 0)), expect);
-        QCOMPARE(cv::Vec3b(out.at<cv::Vec3b>(0, 49)), expect);
-        QCOMPARE(cv::Vec3b(out.at<cv::Vec3b>(49, 0)), expect);
-        QCOMPARE(cv::Vec3b(out.at<cv::Vec3b>(49, 49)), expect);
-        QCOMPARE(cv::Vec3b(out.at<cv::Vec3b>(25, 25)), expect);
+        // The render output is CV_8UC4 BGRA (pixel contract), so it must
+        // be sampled as Vec4b -- a Vec3b read would mix in the next
+        // pixel's bytes.
+        QCOMPARE(out.channels(), 4);
+        const cv::Vec4b expect(0, 0, 255, 255);
+        QCOMPARE(cv::Vec4b(out.at<cv::Vec4b>(0, 0)), expect);
+        QCOMPARE(cv::Vec4b(out.at<cv::Vec4b>(0, 49)), expect);
+        QCOMPARE(cv::Vec4b(out.at<cv::Vec4b>(49, 0)), expect);
+        QCOMPARE(cv::Vec4b(out.at<cv::Vec4b>(49, 49)), expect);
+        QCOMPARE(cv::Vec4b(out.at<cv::Vec4b>(25, 25)), expect);
     }
 
     // P0 leftover 1 (2026-09-21): LayerId-keyed m_groups survives flatten.
@@ -250,7 +254,9 @@ private slots:
         QVERIFY(!out.empty());
         QCOMPARE(out.rows, 50);
         // With Normal blend + opacity 1.0 + red children, canvas should be red.
-        QCOMPARE(cv::Vec3b(out.at<cv::Vec3b>(25, 25)), cv::Vec3b(0, 0, 255));
+        // The render output is CV_8UC4 BGRA (pixel contract).
+        QCOMPARE(out.channels(), 4);
+        QCOMPARE(cv::Vec4b(out.at<cv::Vec4b>(25, 25)), cv::Vec4b(0, 0, 255, 255));
         Q_UNUSED(gid);
     }
 
@@ -272,11 +278,15 @@ private slots:
 
         cv::Mat out = s.render();
         QVERIFY(!out.empty());
-        const cv::Vec3b actual = out.at<cv::Vec3b>(25, 25);
-        // Allow +/- 1 per channel for addWeighted rounding.
+        // The render output is CV_8UC4 BGRA (pixel contract).
+        QCOMPARE(out.channels(), 4);
+        const cv::Vec4b actual = out.at<cv::Vec4b>(25, 25);
+        // Allow +/- 1 per channel for the rounding in the compositing.
+        // Measured: BGR(127, 0, 128).
         QVERIFY(qAbs(actual[0] - 127) <= 1);
         QVERIFY(qAbs(actual[1] - 0)   <= 1);
-        QVERIFY(qAbs(actual[2] - 127) <= 1);
+        QVERIFY(qAbs(actual[2] - 128) <= 1);
+        QCOMPARE(int(actual[3]), 255);
     }
 };
 

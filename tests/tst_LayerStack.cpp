@@ -356,11 +356,21 @@ void tst_LayerStack::test_render_blend()
 
     cv::Mat out = stack.render();
     QVERIFY(!out.empty());
-    const cv::Vec3b pix = out.at<cv::Vec3b>(4, 4);
-    // 期望 (BGR 127, 0, 64) — 偏紫但 R 比 B 弱
-    QVERIFY(std::abs(int(pix[0]) - 127) < 5);
-    QVERIFY(std::abs(int(pix[1]) - 0) < 5);
-    QVERIFY(std::abs(int(pix[2]) - 64) < 5);
+    QCOMPARE(out.channels(), 4);
+    const cv::Vec4b pix = out.at<cv::Vec4b>(4, 4);
+    // The document canvas is white and EVERY layer -- the base image
+    //   included -- is blended over it (LYR-13 / LYR-14). The layer
+    //   opacity scales the COVERAGE, not the colour.
+    //   L1 BGR(0,0,255) opacity 0.5 over white -> BGR(128,128,255)
+    //   L2 BGR(255,0,0) opacity 0.5 over that:
+    //     B = 0.5*255 + 0.5*128 = 191
+    //     G = 0.5*0   + 0.5*128 = 63
+    //     R = 0.5*0   + 0.5*255 = 127
+    //   Measured: BGR(191, 63, 127), alpha 255.
+    QVERIFY(std::abs(int(pix[0]) - 191) < 3);
+    QVERIFY(std::abs(int(pix[1]) - 63) < 3);
+    QVERIFY(std::abs(int(pix[2]) - 127) < 3);
+    QCOMPARE(int(pix[3]), 255);
 }
 
 void tst_LayerStack::test_render_invisible()
@@ -373,8 +383,12 @@ void tst_LayerStack::test_render_invisible()
     stack.setVisible(1, false);
 
     cv::Mat out = stack.render();
-    QCOMPARE(int(out.at<cv::Vec3b>(4, 4)[2]), 255);   // R = 255 (L1)
-    QCOMPARE(int(out.at<cv::Vec3b>(4, 4)[0]), 0);     // B = 0 (L1)
+    // The render output is CV_8UC4 BGRA (pixel contract).
+    QCOMPARE(out.channels(), 4);
+    const cv::Vec4b pix = out.at<cv::Vec4b>(4, 4);
+    QCOMPARE(int(pix[2]), 255);   // R = 255 (L1)
+    QCOMPARE(int(pix[0]), 0);     // B = 0 (L1)
+    QCOMPARE(int(pix[3]), 255);   // A = 255 (opaque document canvas)
 }
 
 // =============================================================================
@@ -479,8 +493,17 @@ void tst_LayerStack::test_renderOne()
 
     cv::Mat out = stack.renderOne(0);
     QVERIFY(!out.empty());
-    // opacity 0.5 → 100 * 0.5 = 50
-    QVERIFY(std::abs(int(out.at<cv::Vec3b>(0, 0)[0]) - 50) < 5);
+    QCOMPARE(out.channels(), 4);
+    // Straight-alpha contract: layer opacity scales the ALPHA
+    // channel, it does not darken the colours. A 50% opaque
+    // layer keeps its RGB and halves its alpha -- the old
+    // "colour * 0.5" expectation encoded the premultiplied
+    // behaviour that M1-3 removed (CP-07).
+    const cv::Vec4b pix = out.at<cv::Vec4b>(0, 0);
+    QCOMPARE(int(pix[0]), 100);   // B unchanged
+    QCOMPARE(int(pix[1]), 150);   // G unchanged
+    QCOMPARE(int(pix[2]), 200);   // R unchanged
+    QVERIFY(std::abs(int(pix[3]) - 127) < 2);   // alpha halved
 }
 
 // =====================================================================

@@ -1,24 +1,26 @@
-// =============================================================================
-//  tst_LayerMask - 阶段 1 W4.4 Phase 4 蒙版单元测试 (2026-09-04)
+// tst_LayerMask.cpp
 //
-//  覆盖:
-//    - addMask / clearMask / enableMask
-//    - applyMask helper (mask 0/255 像素置黑/保留)
-//    - render() 集成 mask (masked 像素被涂黑)
-//    - renderOne() 应用 mask
-//    - LayerCommand 蒙版 Op 撤销 (AddMask/ClearMask/EnableMask)
-// =============================================================================
+// Layer mask integration: LayerStack mask API + rendering + undo.
+//
+// protects: Layer::mask is the single mask model; a mask changes only
+//           the alpha channel, never the RGB values (CP-07).
+// path:     add pixel mask -> layer hides where coverage is 0 ->
+//           still shows where coverage is 255 -> undo restores state.
+//
+// Pixel contract (docs/CONTRACTS.md 7.6): layer pixels inside the
+// stack are CV_8UC4 BGRA with straight (non-premultiplied) alpha.
+// Mask coverage is folded into the alpha channel by
+// LayerMaskRenderer::applyAlpha().
 
 #include <QTest>
 #include <QUndoStack>
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
-#include <cmath>
 
 #include "../src/media/imageworker/layers/Layer.h"
 #include "../src/media/imageworker/layers/LayerStack.h"
-#include "../src/media/imageworker/layers/LayerCommand.h"
+#include "../src/media/imageworker/layers/LayerMaskCommand.h"
 
 using namespace layers;
 
@@ -31,28 +33,34 @@ private slots:
     void cleanupTestCase();
 
     // ---- Setter ----
-    void test_addMask();
-    void test_clearMask();
-    void test_enableMask();
-    void test_enableMask_noMask();
+    void test_addPixelMask();
+    void test_addPixelMask_outOfRange();
+    void test_clearMaskFull();
+    void test_setMaskEnabled();
+    void test_setMaskEnabled_noMask();
 
     // ---- Render ----
-    void test_render_mask_hidesArea();
+    void test_render_mask_hidesArea_transparently();
     void test_render_mask_disabled_keepsAll();
-    void test_renderOne_appliesMask();
+    void test_renderOne_appliesMask_toAlphaOnly();
     void test_render_mask_resize();
 
-    // ---- LayerCommand 撤销 ----
+    // ---- LayerMaskCommand undo ----
     void test_addMaskUndo();
     void test_clearMaskUndo();
-    void test_enableMaskUndo();
+    void test_setEnabledUndo();
 
 private:
+    // Opaque layer in the pixel contract format (4-channel BGRA).
+    //   The alpha channel must be given explicitly: cv::Scalar(b, g, r)
+    //   leaves the 4th channel at 0, which would make the layer fully
+    //   transparent and leave the mask nothing to modulate.
     cv::Mat makeMat(int w = 32, int h = 32, cv::Scalar bgr = cv::Scalar(255, 255, 255))
     {
-        return cv::Mat(h, w, CV_8UC3, bgr);
+        return cv::Mat(h, w, CV_8UC4, cv::Scalar(bgr[0], bgr[1], bgr[2], 255));
     }
-    // 造一个 mask: 左半 255 (保留), 右半 0 (涂黑)
+
+    // Mask that keeps the left half visible and hides the right half.
     cv::Mat makeHalfMask(int w = 32, int h = 32)
     {
         cv::Mat m(h, w, CV_8U, cv::Scalar(0));
@@ -68,81 +76,100 @@ void tst_LayerMask::cleanupTestCase() {}
 //  Setter
 // =====================================================================
 
-void tst_LayerMask::test_addMask()
+void tst_LayerMask::test_addPixelMask()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
-    cv::Mat mask = makeHalfMask();
-    QVERIFY(stack.addMask(0, mask));
-    QCOMPARE(stack.at(0)->maskEnabled, true);
-    QVERIFY(!stack.at(0)->layerMask.empty());
-    QCOMPARE(stack.at(0)->layerMask.size(), cv::Size(32, 32));
-    // 越界
-    QVERIFY(!stack.addMask(99, mask));
-    // 空 mask
-    QVERIFY(!stack.addMask(0, cv::Mat()));
+    QVERIFY(stack.addPixelMask(0, makeHalfMask()));
+
+    const LayerMask* m = stack.maskAt(0);
+    QVERIFY(m != nullptr);
+    QCOMPARE(m->kind, LayerMask::Pixel);
+    QCOMPARE(m->enabled, true);
+    QVERIFY(m->hasData());
+    QCOMPARE(m->pixel.size(), cv::Size(32, 32));
 }
 
-void tst_LayerMask::test_clearMask()
+void tst_LayerMask::test_addPixelMask_outOfRange()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
-    stack.addMask(0, makeHalfMask());
-    QVERIFY(stack.clearMask(0));
-    QVERIFY(stack.at(0)->layerMask.empty());
-    QCOMPARE(stack.at(0)->maskEnabled, false);
-    // 二次 clear: 返 false (没改)
-    QVERIFY(!stack.clearMask(0));
-    // 无蒙版时 clear: 返 false
-    stack.addLayer(QStringLiteral("L2"), makeMat());
-    QVERIFY(!stack.clearMask(1));
+    // Out of range index is rejected.
+    QVERIFY(!stack.addPixelMask(99, makeHalfMask()));
+    // An empty mask carries no data and is rejected.
+    QVERIFY(!stack.addPixelMask(0, cv::Mat()));
 }
 
-void tst_LayerMask::test_enableMask()
+void tst_LayerMask::test_clearMaskFull()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
-    stack.addMask(0, makeHalfMask());
-    // 已 enabled, 改 false
-    QVERIFY(stack.enableMask(0, false));
-    QCOMPARE(stack.at(0)->maskEnabled, false);
-    // 再 false, 返 false
-    QVERIFY(!stack.enableMask(0, false));
-    // 改 true
-    QVERIFY(stack.enableMask(0, true));
-    QCOMPARE(stack.at(0)->maskEnabled, true);
+    stack.addPixelMask(0, makeHalfMask());
+    QVERIFY(stack.clearMaskFull(0));
+
+    const LayerMask* m = stack.maskAt(0);
+    QVERIFY(m != nullptr);
+    QCOMPARE(m->kind, LayerMask::None);
+    QVERIFY(!m->enabled);
+    QVERIFY(!m->hasData());
+    // Clearing again changes nothing, so it reports false.
+    QVERIFY(!stack.clearMaskFull(0));
 }
 
-void tst_LayerMask::test_enableMask_noMask()
+void tst_LayerMask::test_setMaskEnabled()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
-    // 没蒙版, enable 返 false
-    QVERIFY(!stack.enableMask(0, true));
+    stack.addPixelMask(0, makeHalfMask());
+
+    QVERIFY(stack.setMaskEnabled(0, false));
+    QCOMPARE(stack.maskAt(0)->enabled, false);
+    // Same value again is a no-op.
+    QVERIFY(!stack.setMaskEnabled(0, false));
+
+    QVERIFY(stack.setMaskEnabled(0, true));
+    QCOMPARE(stack.maskAt(0)->enabled, true);
+}
+
+void tst_LayerMask::test_setMaskEnabled_noMask()
+{
+    LayerStack stack;
+    stack.addLayer(QStringLiteral("L1"), makeMat());
+    // No mask data -> enabling is rejected.
+    QVERIFY(!stack.setMaskEnabled(0, true));
 }
 
 // =====================================================================
 //  Render
 // =====================================================================
 
-void tst_LayerMask::test_render_mask_hidesArea()
+void tst_LayerMask::test_render_mask_hidesArea_transparently()
 {
     LayerStack stack;
-    stack.setBaseLayer(makeMat(32, 32, cv::Scalar(0, 0, 0)));  // 黑底
-    stack.addLayer(QStringLiteral("Top"), makeMat(32, 32, cv::Scalar(255, 255, 255)));  // 白顶层
-    // 加半透 mask
-    stack.addMask(1, makeHalfMask(32, 32));
-    // 默认 opacity 1.0, mask 默认 enabled
+    stack.setCompositorEnabled(false);   // legacy path: deterministic order
+    stack.setBaseLayer(makeMat(32, 32, cv::Scalar(0, 0, 0)));
+    stack.addLayer(QStringLiteral("Top"), makeMat(32, 32, cv::Scalar(255, 255, 255)));
+    stack.addPixelMask(1, makeHalfMask(32, 32));
+
     cv::Mat out = stack.render();
     QCOMPARE(out.size(), cv::Size(32, 32));
-    // 左半 (mask=255) 应保留白色 (255,255,255)
-    const cv::Vec3b leftPx = out.at<cv::Vec3b>(16, 4);
+    QCOMPARE(out.channels(), 4);
+
+    // Left half: coverage 255 -> pixel stays fully opaque white.
+    const cv::Vec4b leftPx = out.at<cv::Vec4b>(16, 4);
     QCOMPARE(static_cast<int>(leftPx[0]), 255);
-    QCOMPARE(static_cast<int>(leftPx[1]), 255);
-    QCOMPARE(static_cast<int>(leftPx[2]), 255);
-    // 右半 (mask=0) 应变黑色 (跟 base 一样)
-    const cv::Vec3b rightPx = out.at<cv::Vec3b>(16, 28);
-    QCOMPARE(static_cast<int>(rightPx[0]), 0);
+    QCOMPARE(static_cast<int>(leftPx[3]), 255);
+
+    // Right half: coverage 0 -> the masked layer stops contributing and
+    // the layer underneath (the opaque black base) shows through. The
+    // result is the BASE's colour, not a darkened version of the top
+    // layer -- that difference is exactly what CP-07 got wrong.
+    //
+    // The alpha stays 255 because the base itself is opaque; alpha 0
+    // would only be correct if nothing at all were underneath.
+    const cv::Vec4b rightPx = out.at<cv::Vec4b>(16, 28);
+    QCOMPARE(static_cast<int>(rightPx[3]), 255);
+    QCOMPARE(static_cast<int>(rightPx[0]), 0);   // base showing through
     QCOMPARE(static_cast<int>(rightPx[1]), 0);
     QCOMPARE(static_cast<int>(rightPx[2]), 0);
 }
@@ -150,48 +177,61 @@ void tst_LayerMask::test_render_mask_hidesArea()
 void tst_LayerMask::test_render_mask_disabled_keepsAll()
 {
     LayerStack stack;
+    stack.setCompositorEnabled(false);
     stack.setBaseLayer(makeMat(32, 32, cv::Scalar(0, 0, 0)));
     stack.addLayer(QStringLiteral("Top"), makeMat(32, 32, cv::Scalar(255, 255, 255)));
-    stack.addMask(1, makeHalfMask(32, 32));
-    stack.enableMask(1, false);
+    stack.addPixelMask(1, makeHalfMask(32, 32));
+    stack.setMaskEnabled(1, false);
+
     cv::Mat out = stack.render();
-    // 全白 (mask 不应用)
-    const cv::Vec3b leftPx = out.at<cv::Vec3b>(16, 4);
-    const cv::Vec3b rightPx = out.at<cv::Vec3b>(16, 28);
-    QCOMPARE(static_cast<int>(leftPx[0]), 255);
-    QCOMPARE(static_cast<int>(rightPx[0]), 255);
+    QCOMPARE(out.channels(), 4);
+    // A disabled mask has no effect at all: both halves stay opaque.
+    QCOMPARE(static_cast<int>(out.at<cv::Vec4b>(16, 4)[3]), 255);
+    QCOMPARE(static_cast<int>(out.at<cv::Vec4b>(16, 28)[3]), 255);
+    QCOMPARE(static_cast<int>(out.at<cv::Vec4b>(16, 28)[0]), 255);
 }
 
-void tst_LayerMask::test_renderOne_appliesMask()
+void tst_LayerMask::test_renderOne_appliesMask_toAlphaOnly()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat(32, 32, cv::Scalar(255, 255, 255)));
-    stack.addMask(0, makeHalfMask(32, 32));
+    stack.addPixelMask(0, makeHalfMask(32, 32));
+
     cv::Mat out = stack.renderOne(0);
     QCOMPARE(out.size(), cv::Size(32, 32));
-    // 左半 (255) 保留, 右半 (0) 涂黑
-    const cv::Vec3b leftPx = out.at<cv::Vec3b>(16, 4);
-    const cv::Vec3b rightPx = out.at<cv::Vec3b>(16, 28);
-    QCOMPARE(static_cast<int>(leftPx[0]), 255);
-    QCOMPARE(static_cast<int>(rightPx[0]), 0);
+    QCOMPARE(out.channels(), 4);
+
+    // Left half: fully opaque.
+    const cv::Vec4b leftPx = out.at<cv::Vec4b>(16, 4);
+    QCOMPARE(static_cast<int>(leftPx[3]), 255);
+    // Right half: alpha 0, but the RGB channels are untouched -- the
+    // mask hides the pixel, it does not paint it black.
+    const cv::Vec4b rightPx = out.at<cv::Vec4b>(16, 28);
+    QCOMPARE(static_cast<int>(rightPx[3]), 0);
+    QCOMPARE(static_cast<int>(rightPx[0]), 255);
+    QCOMPARE(static_cast<int>(rightPx[1]), 255);
+    QCOMPARE(static_cast<int>(rightPx[2]), 255);
 }
 
 void tst_LayerMask::test_render_mask_resize()
 {
-    // mask 16x16, layer 32x32 — 应 resize mask 到 layer 尺寸
+    // A 16x16 mask on a 32x32 layer gets resized to the layer size.
     LayerStack stack;
+    stack.setCompositorEnabled(false);
     stack.setBaseLayer(makeMat(32, 32, cv::Scalar(0, 0, 0)));
     stack.addLayer(QStringLiteral("Top"), makeMat(32, 32, cv::Scalar(255, 255, 255)));
     cv::Mat smallMask(16, 16, CV_8U, cv::Scalar(255));
-    stack.addMask(1, smallMask);
+    stack.addPixelMask(1, smallMask);
+
     cv::Mat out = stack.render();
-    // mask 全 255 → 全白 (跟没 mask 一样)
-    const cv::Vec3b px = out.at<cv::Vec3b>(16, 16);
-    QCOMPARE(static_cast<int>(px[0]), 255);
+    QCOMPARE(out.channels(), 4);
+    // All-255 mask -> the layer stays fully opaque.
+    QCOMPARE(static_cast<int>(out.at<cv::Vec4b>(16, 16)[3]), 255);
+    QCOMPARE(static_cast<int>(out.at<cv::Vec4b>(16, 16)[0]), 255);
 }
 
 // =====================================================================
-//  LayerCommand 撤销
+//  LayerMaskCommand undo
 // =====================================================================
 
 void tst_LayerMask::test_addMaskUndo()
@@ -199,68 +239,82 @@ void tst_LayerMask::test_addMaskUndo()
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
     QUndoStack undo;
-    auto oldMask = stack.at(0)->layerMask.clone();
-    bool oldEnabled = stack.at(0)->maskEnabled;
 
-    // 调用约定: 先改图层, 再 push command
-    cv::Mat newMask = makeHalfMask();
-    stack.addMask(0, newMask);
-    QVERIFY(stack.at(0)->maskEnabled);
-    QVERIFY(!stack.at(0)->layerMask.empty());
+    const LayerMask before = stack.at(0)->mask;
 
-    auto *cmd = LayerCommand::makeAddMask(&stack, 0, oldMask, oldEnabled);
-    undo.push(cmd);
-    // undo: 还原
+    // The calling convention is: mutate the layer first, then push the
+    // command holding the before/after snapshots.
+    stack.addPixelMask(0, makeHalfMask());
+    const LayerMask after = stack.at(0)->mask;
+
+    undo.push(new LayerMaskCommand(&stack, 0, before, after,
+                                   QStringLiteral("Add Mask")));
+    QCOMPARE(stack.at(0)->mask.kind, LayerMask::Pixel);
+
+    // undo: restore the previous (empty) mask.
     undo.undo();
-    QVERIFY(stack.at(0)->layerMask.empty());
-    QCOMPARE(stack.at(0)->maskEnabled, false);
-    // redo: 挂回新蒙版
+    QCOMPARE(stack.at(0)->mask.kind, LayerMask::None);
+    QVERIFY(!stack.at(0)->mask.hasData());
+    QCOMPARE(stack.at(0)->mask.enabled, false);
+
+    // redo: the mask comes back.
     undo.redo();
-    QVERIFY(stack.at(0)->maskEnabled);
-    QVERIFY(!stack.at(0)->layerMask.empty());
+    QCOMPARE(stack.at(0)->mask.kind, LayerMask::Pixel);
+    QVERIFY(stack.at(0)->mask.hasData());
+    QCOMPARE(stack.at(0)->mask.enabled, true);
 }
 
 void tst_LayerMask::test_clearMaskUndo()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
-    stack.addMask(0, makeHalfMask());
+    stack.addPixelMask(0, makeHalfMask());
     QUndoStack undo;
-    auto oldMask = stack.at(0)->layerMask.clone();
-    bool oldEnabled = stack.at(0)->maskEnabled;
 
-    // 调用约定: 先改图层, 再 push command
-    stack.clearMask(0);
-    QVERIFY(stack.at(0)->layerMask.empty());
+    const LayerMask before = stack.at(0)->mask;
 
-    auto *cmd = LayerCommand::makeClearMask(&stack, 0, oldMask, oldEnabled);
-    undo.push(cmd);
+    stack.clearMaskFull(0);
+    const LayerMask after = stack.at(0)->mask;
+    QCOMPARE(stack.at(0)->mask.kind, LayerMask::None);
+
+    undo.push(new LayerMaskCommand(&stack, 0, before, after,
+                                   QStringLiteral("Clear Mask")));
+
+    // undo: the mask is restored.
     undo.undo();
-    QVERIFY(!stack.at(0)->layerMask.empty());
-    QCOMPARE(stack.at(0)->maskEnabled, true);
-    // redo: 再清一次
+    QCOMPARE(stack.at(0)->mask.kind, LayerMask::Pixel);
+    QVERIFY(stack.at(0)->mask.hasData());
+    QCOMPARE(stack.at(0)->mask.enabled, true);
+
+    // redo: cleared again.
     undo.redo();
-    QVERIFY(stack.at(0)->layerMask.empty());
-    QCOMPARE(stack.at(0)->maskEnabled, false);
+    QCOMPARE(stack.at(0)->mask.kind, LayerMask::None);
+    QVERIFY(!stack.at(0)->mask.hasData());
 }
 
-void tst_LayerMask::test_enableMaskUndo()
+void tst_LayerMask::test_setEnabledUndo()
 {
     LayerStack stack;
     stack.addLayer(QStringLiteral("L1"), makeMat());
-    stack.addMask(0, makeHalfMask());
+    stack.addPixelMask(0, makeHalfMask());
     QUndoStack undo;
-    // 调用约定: 先改图层, 再 push command
-    stack.enableMask(0, false);
-    QCOMPARE(stack.at(0)->maskEnabled, false);
 
-    auto *cmd = LayerCommand::makeEnableMask(&stack, 0, true);  // 旧 enabled=true
-    undo.push(cmd);
+    const LayerMask before = stack.at(0)->mask;
+
+    stack.setMaskEnabled(0, false);
+    const LayerMask after = stack.at(0)->mask;
+    QCOMPARE(stack.at(0)->mask.enabled, false);
+
+    undo.push(new LayerMaskCommand(&stack, 0, before, after,
+                                   QStringLiteral("Toggle Mask")));
+
+    // undo: the mask is enabled again.
     undo.undo();
-    QCOMPARE(stack.at(0)->maskEnabled, true);
-    // redo: 写回新状态 (关闭)
+    QCOMPARE(stack.at(0)->mask.enabled, true);
+
+    // redo: disabled again.
     undo.redo();
-    QCOMPARE(stack.at(0)->maskEnabled, false);
+    QCOMPARE(stack.at(0)->mask.enabled, false);
 }
 
 QTEST_MAIN(tst_LayerMask)

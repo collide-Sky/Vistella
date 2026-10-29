@@ -30,6 +30,9 @@ using cv::Vec3b;
 #include "../src/media/compositor/nodes/LayerBitmapNode.h"
 
 #include "../src/media/imageworker/layers/Layer.h"
+#include "../src/media/imageworker/layers/PixelFormat.h"   // layers::toBgra
+
+using cv::Vec4b;
 
 using compositor::TileGrid;
 using compositor::TileKey;
@@ -457,14 +460,22 @@ void tst_P8_1::layerBitmapNode_rendersIdenticalToLayerCopy()
     cv::Mat canvas = rg.execute();
     QCOMPARE(canvas.size(), layer.image.size());
 
+    // LayerBitmapNode normalises the layer image to CV_8UC4 BGRA (pixel
+    // contract), so the output is 4-channel and is compared against the
+    // NORMALISED image -- not the raw 3-channel layer image.
+    QCOMPARE(canvas.channels(), 4);
+    const cv::Mat expected = layers::toBgra(layer.image);
+    QCOMPARE(expected.channels(), 4);
+
     // Pixel-for-pixel compare
     for (int y = 0; y < 300; ++y) {
         for (int x = 0; x < 400; ++x) {
-            Vec3b a = canvas.at<Vec3b>(y, x);
-            Vec3b b = layer.image.at<Vec3b>(y, x);
+            Vec4b a = canvas.at<Vec4b>(y, x);
+            Vec4b b = expected.at<Vec4b>(y, x);
             QCOMPARE((int)a[0], (int)b[0]);
             QCOMPARE((int)a[1], (int)b[1]);
             QCOMPARE((int)a[2], (int)b[2]);
+            QCOMPARE((int)a[3], (int)b[3]);
         }
     }
 }

@@ -25,6 +25,7 @@
 #include <vector>
 
 using cv::Vec3b;
+using cv::Vec4b;
 
 #include "../src/media/compositor/TileGrid.h"
 #include "../src/media/compositor/CompositorNode.h"
@@ -62,13 +63,18 @@ public:
                     const TileGrid& grid,
                     RenderContext& /*ctx*/) override {
         const cv::Rect r = grid.tileRect(tileX, tileY);
-        cv::Mat out(r.height, r.width, CV_8UC3, m_base);
+        // The compositing canvas is CV_8UC4 BGRA (pixel contract), so the
+        //   tile is produced in that format too -- otherwise the corner
+        //   tag below would land in the wrong bytes.
+        cv::Mat out(r.height, r.width, CV_8UC4,
+                    cv::Scalar(m_base[0], m_base[1], m_base[2], 255));
         // Tag top-left corner with (tileX, tileY) so we can spot-check.
         if (out.rows > 0 && out.cols > 0) {
-            out.at<Vec3b>(0, 0) = Vec3b(
+            out.at<Vec4b>(0, 0) = Vec4b(
                 static_cast<uchar>((tileX * 13 + 7) % 256),
                 static_cast<uchar>((tileY * 17 + 11) % 256),
-                0);
+                0,
+                255);
         }
         return out;
     }
@@ -311,13 +317,17 @@ void tst_P8_4::renderGraph_parallelOutputEqualsSequential()
     QCOMPARE(seq.type(), par.type());
 
     // Pixel-for-pixel
+    // The compositing canvas is CV_8UC4 BGRA (pixel contract), so it is
+    // read as Vec4b -- a Vec3b read would mix in the next pixel's bytes.
+    QCOMPARE(seq.channels(), 4);
     for (int y = 0; y < seq.rows; ++y) {
         for (int x = 0; x < seq.cols; ++x) {
-            Vec3b a = seq.at<Vec3b>(y, x);
-            Vec3b b = par.at<Vec3b>(y, x);
+            Vec4b a = seq.at<Vec4b>(y, x);
+            Vec4b b = par.at<Vec4b>(y, x);
             QCOMPARE((int)a[0], (int)b[0]);
             QCOMPARE((int)a[1], (int)b[1]);
             QCOMPARE((int)a[2], (int)b[2]);
+            QCOMPARE((int)a[3], (int)b[3]);
         }
     }
     QCOMPARE(rg.lastTilesDone(), 4);
@@ -426,9 +436,11 @@ void tst_P8_4::renderGraph_noBackendByDefault()
     RenderGraph rg(&g, fill.id(), &grid);
     QCOMPARE(rg.backend(), nullptr);
     cv::Mat canvas = rg.execute();
-    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[0], 50);
-    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[1], 100);
-    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[2], 200);
+    // The compositing canvas is CV_8UC4 BGRA (pixel contract).
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[0], 50);
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[1], 100);
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[2], 200);
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[3], 255);
 }
 
 void tst_P8_4::renderGraph_withCpuBackend_passThroughPreservesPixels()
@@ -446,9 +458,11 @@ void tst_P8_4::renderGraph_withCpuBackend_passThroughPreservesPixels()
     rg.setBackend(&reg);
 
     cv::Mat canvas = rg.execute();
-    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[0], 50);
-    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[1], 100);
-    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[2], 200);
+    // The compositing canvas is CV_8UC4 BGRA (pixel contract).
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[0], 50);
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[1], 100);
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[2], 200);
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[3], 255);
     QCOMPARE(rg.lastTilesDone(), 1);
     QCOMPARE(rg.lastHitCount(), 0);
     QCOMPARE(rg.lastMissCount(), 1);
@@ -469,9 +483,11 @@ void tst_P8_4::renderGraph_backendForceCpu_skipsGpuBackend()
     rg.setBackend(&reg);
 
     cv::Mat canvas = rg.execute();
-    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[0], 10);
-    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[1], 20);
-    QCOMPARE((int)canvas.at<Vec3b>(128, 128)[2], 30);
+    // The compositing canvas is CV_8UC4 BGRA (pixel contract).
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[0], 10);
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[1], 20);
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[2], 30);
+    QCOMPARE((int)canvas.at<Vec4b>(128, 128)[3], 255);
 }
 
 void tst_P8_4::renderGraph_backendSecondPass_doesNotRedispatch()
@@ -524,8 +540,9 @@ void tst_P8_4::renderGraph_parallelWithBackend_threadsSafe()
 
     // Each tile went through CpuBackend (Auto mode, default shared
     // state = CPU). The output must still be the source color.
-    QCOMPARE((int)canvas.at<Vec3b>(100, 100)[0], 50);
-    QCOMPARE((int)canvas.at<Vec3b>(400, 400)[0], 50);
+    // The compositing canvas is CV_8UC4 BGRA (pixel contract).
+    QCOMPARE((int)canvas.at<Vec4b>(100, 100)[0], 50);
+    QCOMPARE((int)canvas.at<Vec4b>(400, 400)[0], 50);
 }
 
 QTEST_MAIN(tst_P8_4)

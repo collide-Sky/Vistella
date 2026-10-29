@@ -372,13 +372,23 @@ void tst_BlendMode::test_layerStack_renderWithBlend()
 
     cv::Mat out = stack.render();
     QVERIFY(!out.empty());
-    const cv::Vec3b pix = out.at<cv::Vec3b>(2, 2);
-    // base canvas (BGR 0,0,200), top blend (BGR 200,0,0), Multiply opacity 0.5
-    //   pixel multiply: (0*200/255, 0*0/255, 200*0/255) = (0, 0, 0)
-    //   alpha 0.5: 0.5*(0,0,200) + 0.5*(0,0,0) = (0, 0, 100)
+    // The render output is CV_8UC4 BGRA (pixel contract), so it must be
+    //   sampled as Vec4b. A Vec3b read would take the B, G, R of one
+    //   pixel and the B of the NEXT pixel as its third component.
+    QCOMPARE(out.channels(), 4);
+    const cv::Vec4b pix = out.at<cv::Vec4b>(2, 2);
+    // The document canvas is white and EVERY layer -- the base image
+    //   included -- is blended over it (LYR-13 / LYR-14).
+    //   base  BGR(0,0,200) over white at opacity 1.0 -> BGR(0,0,200)
+    //   top   BGR(200,0,0), Multiply, opacity 0.5
+    //     multiply: (0*200/255, 0*0/255, 200*0/255) = (0, 0, 0)
+    //     over the base at coverage 0.5:
+    //       B = 0    , G = 0    , R = 0.5*200 = 100
+    //   Measured: BGR(0, 0, 100), alpha 255.
     QCOMPARE(int(pix[0]), 0);     // B
-    QCOMPARE(int(pix[1]), 0);
+    QCOMPARE(int(pix[1]), 0);     // G
     QCOMPARE(int(pix[2]), 100);   // R
+    QCOMPARE(int(pix[3]), 255);   // A
 }
 
 QTEST_MAIN(tst_BlendMode)

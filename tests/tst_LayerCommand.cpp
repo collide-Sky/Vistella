@@ -424,7 +424,9 @@ void tst_LayerCommand::test_merge()
     QCOMPARE(stack.count(), 1);
     QCOMPARE(stack.at(0)->name, QStringLiteral("Base"));
     // Base 颜色: 0.5 * 红 + 0.5 * 蓝 = (BGR 127, 0, 127)
-    const cv::Vec3b pix = stack.at(0)->image.at<cv::Vec3b>(4, 4);
+    // The layer pixels are 4-channel BGRA (pixel contract), so they
+    // are addressed as Vec4b.
+    const cv::Vec4b pix = stack.at(0)->image.at<cv::Vec4b>(4, 4);
     QVERIFY(std::abs(int(pix[0]) - 127) < 5);
 }
 
@@ -513,18 +515,22 @@ void tst_LayerCommand::test_group_redo()
     QUndoStack undoStack;
     undoStack.push(LayerCommand::makeMergeIntoGroup(&stack, {0, 1}));
     QCOMPARE(stack.count(), 2);
-    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
+    // The group is inserted at the position of the topmost selected
+    // layer (PS behaviour): merging A and B puts the group where B was,
+    // so the stack is [Group, C] -- not [C, Group].
+    QCOMPARE(int(stack.at(0)->kind), int(Layer::Group));
+    QCOMPARE(stack.at(1)->name, QStringLiteral("C"));
 
     undoStack.undo();
     QCOMPARE(stack.count(), 3);
     for (int i = 0; i < stack.count(); ++i) {
         QCOMPARE(int(stack.at(i)->kind), int(Layer::Bitmap));
     }
-    // After flatten: [C, A, B] — flattenGroup reinserts children at the
-    // Group's former m_layers position (idx 1), pushing C to idx 0.
-    QCOMPARE(stack.at(0)->name, QStringLiteral("C"));
-    QCOMPARE(stack.at(1)->name, QStringLiteral("A"));
-    QCOMPARE(stack.at(2)->name, QStringLiteral("B"));
+    // After flatten: the children go back to the Group's former
+    // position, so the original layout [A, B, C] is restored.
+    QCOMPARE(stack.at(0)->name, QStringLiteral("A"));
+    QCOMPARE(stack.at(1)->name, QStringLiteral("B"));
+    QCOMPARE(stack.at(2)->name, QStringLiteral("C"));
 }
 
 void tst_LayerCommand::test_ungroup_undo_preserves_children()
@@ -554,8 +560,10 @@ void tst_LayerCommand::test_ungroup_undo_preserves_children()
     // cv::Mat data preserved.
     QCOMPARE(restored[0]->image.rows, 8);
     QCOMPARE(restored[0]->image.cols, 8);
-    QCOMPARE(int(restored[0]->image.at<cv::Vec3b>(4, 4)[2]), 255);  // BGR red
-    QCOMPARE(int(restored[1]->image.at<cv::Vec3b>(4, 4)[0]), 255);  // BGR blue
+    // The layer pixels are 4-channel BGRA (pixel contract), so they
+    // are addressed as Vec4b.
+    QCOMPARE(int(restored[0]->image.at<cv::Vec4b>(4, 4)[2]), 255);  // BGR red
+    QCOMPARE(int(restored[1]->image.at<cv::Vec4b>(4, 4)[0]), 255);  // BGR blue
 }
 
 void tst_LayerCommand::test_group_then_ungroup_roundtrip()
@@ -571,8 +579,12 @@ void tst_LayerCommand::test_group_then_ungroup_roundtrip()
     QUndoStack undoStack;
     undoStack.push(LayerCommand::makeMergeIntoGroup(&stack, {1, 2}));
     QCOMPARE(stack.count(), 3);
-    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
-    const int gIdx = stack.count() - 1;
+    // Merging B and C puts the group where C was, so the stack is
+    // [A, Group, D] -- the group is in the middle, not at the end.
+    QCOMPARE(stack.at(0)->name, QStringLiteral("A"));
+    QCOMPARE(int(stack.at(1)->kind), int(Layer::Group));
+    QCOMPARE(stack.at(2)->name, QStringLiteral("D"));
+    const int gIdx = 1;
 
     undoStack.push(LayerCommand::makeFlattenGroup(&stack, gIdx));
     QCOMPARE(stack.count(), 4);
@@ -580,7 +592,7 @@ void tst_LayerCommand::test_group_then_ungroup_roundtrip()
     // Walk back.
     undoStack.undo();
     QCOMPARE(stack.count(), 3);
-    QCOMPARE(int(stack.at(stack.count() - 1)->kind), int(Layer::Group));
+    QCOMPARE(int(stack.at(1)->kind), int(Layer::Group));
 
     undoStack.undo();
     QCOMPARE(stack.count(), 4);
@@ -771,12 +783,14 @@ void tst_LayerCommand::test_adjustmentLayer_isNonDestructive()
              static_cast<int>(layers::Layer::Adjustment));
 
     // 底图像素没有被改写
-    QCOMPARE(static_cast<int>(stack.baseLayer()->image.at<cv::Vec3b>(0, 0)[0]), 10);
+    //   (the layer pixels are 4-channel BGRA and so is the render
+    //    output -- both are addressed as Vec4b)
+    QCOMPARE(static_cast<int>(stack.baseLayer()->image.at<cv::Vec4b>(0, 0)[0]), 10);
 
     // 渲染结果套用了 LUT
     const cv::Mat rendered = stack.render();
     QVERIFY(!rendered.empty());
-    QCOMPARE(static_cast<int>(rendered.at<cv::Vec3b>(0, 0)[0]), 255 - 10);
+    QCOMPARE(static_cast<int>(rendered.at<cv::Vec4b>(0, 0)[0]), 255 - 10);
 
     // 撤销命令恢复旧 LUT, 渲染结果跟着回到未调整状态
     auto oldLut = stack.at(adjIdx)->adjustmentLut.clone();
@@ -791,7 +805,7 @@ void tst_LayerCommand::test_adjustmentLayer_isNonDestructive()
     QCOMPARE(static_cast<int>(stack.at(adjIdx)->adjustmentLut.at<uchar>(10)), 245);
     const cv::Mat rendered2 = stack.render();
     QVERIFY(!rendered2.empty());
-    QCOMPARE(static_cast<int>(rendered2.at<cv::Vec3b>(0, 0)[0]), 255 - 10);
+    QCOMPARE(static_cast<int>(rendered2.at<cv::Vec4b>(0, 0)[0]), 255 - 10);
 }
 
 // =====================================================================
@@ -920,7 +934,11 @@ void tst_LayerCommand::test_toolEdit_survivesLayerOps()
     cv::Mat *target = stack.activeLayerImage();
     QVERIFY(target != nullptr);
     // 模拟画笔: 在图层像素上写一笔
-    target->at<cv::Vec3b>(4, 4) = cv::Vec3b(0, 0, 255);
+    //   The layer pixels are 4-channel BGRA (pixel contract), so they
+    //   are addressed as Vec4b and the alpha is set explicitly --
+    //   otherwise the red would be written into the alpha channel and
+    //   the stroke would be lost.
+    target->at<cv::Vec4b>(4, 4) = cv::Vec4b(0, 0, 255, 255);
 
     // 切可见性 (以前会 invalidate 缓存, 把笔画冲掉)
     stack.setVisible(0, false);
@@ -932,7 +950,7 @@ void tst_LayerCommand::test_toolEdit_survivesLayerOps()
     // 重新合成: 笔画还在
     const cv::Mat out = stack.render();
     QVERIFY(!out.empty());
-    QCOMPARE(int(out.at<cv::Vec3b>(4, 4)[2]), 255);
+    QCOMPARE(int(out.at<cv::Vec4b>(4, 4)[2]), 255);
 }
 
 //  图层像素编辑的撤销/重做: undo 写回编辑前, redo 写回编辑后.
@@ -944,19 +962,21 @@ void tst_LayerCommand::test_setLayerImage_undoRedo()
 
     cv::Mat before = stack.at(0)->image.clone();
     cv::Mat after = before.clone();
-    after.at<cv::Vec3b>(4, 4) = cv::Vec3b(0, 0, 255);
+    // 4-channel BGRA (pixel contract): addressed as Vec4b, with the
+    // alpha preserved.
+    after.at<cv::Vec4b>(4, 4) = cv::Vec4b(0, 0, 255, 255);
     // 调用方先应用新像素, 再 push 命令
     stack.at(0)->image = after.clone();
 
     undoStack.push(LayerCommand::makeSetLayerImage(
         &stack, 0, before, after, QStringLiteral("stroke")));
-    QCOMPARE(int(stack.at(0)->image.at<cv::Vec3b>(4, 4)[2]), 255);
+    QCOMPARE(int(stack.at(0)->image.at<cv::Vec4b>(4, 4)[2]), 255);
 
     undoStack.undo();
-    QCOMPARE(int(stack.at(0)->image.at<cv::Vec3b>(4, 4)[2]), 200);   // 原色 R=200
+    QCOMPARE(int(stack.at(0)->image.at<cv::Vec4b>(4, 4)[2]), 200);   // 原色 R=200
 
     undoStack.redo();
-    QCOMPARE(int(stack.at(0)->image.at<cv::Vec3b>(4, 4)[2]), 255);
+    QCOMPARE(int(stack.at(0)->image.at<cv::Vec4b>(4, 4)[2]), 255);
 }
 
 QTEST_MAIN(tst_LayerCommand)

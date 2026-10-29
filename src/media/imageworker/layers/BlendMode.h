@@ -30,6 +30,14 @@
 //   - opacity 0.0 = 全 base, 1.0 = 完全混合
 //   - 返回 base 跟 blend 的混合结果 (8U, 3 通道)
 //   - Phase 3: 加 HSV 4 种, 改 Layer::BlendMode 枚举
+//
+// 4 channels (LYR-01 / LYR-35 / CP-07):
+//   The 15 blendXxx primitives above are PURE COLOUR and only know
+//   3 channels.
+//   The 4-channel compositing goes through applyBlend(): split off the
+//   alpha -> compute the colour with blendXxx -> then composite with
+//   Porter-Duff "over" (coverage = source alpha x layer opacity).
+//   See the contract in PixelFormat.h for the compositing maths.
 // =============================================================
 
 #include "Layer.h"
@@ -61,6 +69,8 @@ cv::Mat blendExclusion(const cv::Mat &base, const cv::Mat &blend, float opacity)
 cv::Mat applyBlend(Layer::BlendMode mode, const cv::Mat &base, const cv::Mat &blend, float opacity);
 
 // 工具: 校验 base 跟 blend 尺寸 / 通道匹配
+//   Only meaningful for the 3-channel path -- the 4-channel path
+//   splits the channels before calling the primitives in applyBlend().
 inline bool canBlend(const cv::Mat &base, const cv::Mat &blend)
 {
     return !base.empty() && !blend.empty()

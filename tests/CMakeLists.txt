@@ -257,6 +257,14 @@ add_vistella_test(tst_P8_RenderParity)
 # ctest timeout would report that as a failure.
 set_tests_properties(tst_P8_RenderParity PROPERTIES TIMEOUT 300)
 
+# M1-3 (2026-10-28): the pixel / mask contract (docs/CONTRACTS.md 7.6.1).
+#   Pins INV-PIXEL-1..3, INV-MASK-1..4 and INV-PATH-1..2: the 4-channel
+#   BGRA straight-alpha layer pixels, the single Layer::mask model, the
+#   fact that a mask only ever changes the alpha, the layer opacity
+#   scaling the coverage instead of the colour, the legacy/compositor
+#   parity, and the base image being an ordinary layer.
+add_vistella_test(tst_AlphaMask)
+
 # ---- 能力路径测试 (tst_Path_*) ----
 #   按"用户能力路径"组织, 而不是按类 (docs/CONTRACTS.md 规则 5.3 / 5.7)。
 #   这些测试会真的构造 ImageWindow / MainWindow, 用 QTest 注入真实鼠标键盘事件,

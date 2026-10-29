@@ -54,7 +54,6 @@
 #include "GroupNode.h"
 #include "LayerRasterNode.h"
 #include "LayerAdjustmentNode.h"
-#include "LayerOpacityNode.h"
 #include "SolidCanvasNode.h"
 
 #include <QList>
@@ -102,7 +101,6 @@ public:
         // P8.1.1.y: graph root pieces. `opacities` carries the base
         // layer's own opacity; `canvases` is the white fallback used
         // when the stack has no bitmap base layer.
-        std::vector<std::unique_ptr<LayerOpacityNode>> opacities;
         std::vector<std::unique_ptr<SolidCanvasNode>>  canvases;
 
         // Mask source nodes (adapter-private CompositorNode subclass

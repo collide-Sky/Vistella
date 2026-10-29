@@ -36,6 +36,7 @@
 //   LayerPanel 信号接通需要完整 LayerPanel.h + LayerCommand.h 定义
 #include "imageworker/layers/LayerPanel.h"
 #include "imageworker/layers/LayerCommand.h"
+#include "imageworker/layers/LayerMaskCommand.h"
 // Unified transform dialog replaces chained QInputDialog
 #include "docks/TransformDialog.h"
 #include "../media/mediators/WorkspaceMediator.h"
@@ -1640,8 +1641,11 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
             if (!l) return;
-            const cv::Mat oldMask = l->mask.pixel.clone();
-            const bool wasEnabled = l->mask.enabled;
+            // The single mask model: undo goes through LayerMaskCommand (a
+            // before/after snapshot).
+            //   It used to hold the old layerMask + maskEnabled state, while what
+            //   actually changed was Layer::mask -- so undo could not restore it.
+            const layers::LayerMask beforeMask = l->mask;
             bool ok = false;
             if (maskPath.isEmpty()) {
                 //   go via selection
@@ -1671,9 +1675,12 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                 return;
             }
             if (m_undoStack) {
-                auto *cmd = layers::LayerCommand::makeAddMask(
-                    m_layerStack.get(), index, oldMask, wasEnabled);
-                m_undoStack->push(cmd);
+                const layers::LayerMask *now = m_layerStack->maskAt(index);
+                if (now) {
+                    m_undoStack->push(new layers::LayerMaskCommand(
+                        m_layerStack.get(), index, beforeMask, *now,
+                        QStringLiteral("Add Mask")));
+                }
             }
             invalidateCurrentCache();
             renderToView();
@@ -1687,16 +1694,15 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
             if (!l) return;
-            const cv::Mat oldMask = l->mask.pixel.clone();
-            const bool wasEnabled = l->mask.enabled;
+            const layers::LayerMask beforeMask = l->mask;
             if (!m_layerStack->clearMaskFull(index)) {
                 statusBar()->showMessage(tr("清除蒙版失败"), 3000);
                 return;
             }
             if (m_undoStack) {
-                auto *cmd = layers::LayerCommand::makeClearMask(
-                    m_layerStack.get(), index, oldMask, wasEnabled);
-                m_undoStack->push(cmd);
+                m_undoStack->push(new layers::LayerMaskCommand(
+                    m_layerStack.get(), index, beforeMask, layers::LayerMask(),
+                    QStringLiteral("Clear Mask")));
             }
             invalidateCurrentCache();
             renderToView();
@@ -1709,12 +1715,15 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
             auto l = m_layerStack->at(index);
             if (!l) return;
-            const bool oldEnabled = l->mask.enabled;
+            const layers::LayerMask beforeMask = l->mask;
             if (!m_layerStack->setMaskEnabled(index, enabled)) return;
             if (m_undoStack) {
-                auto *cmd = layers::LayerCommand::makeEnableMask(
-                    m_layerStack.get(), index, oldEnabled);
-                m_undoStack->push(cmd);
+                const layers::LayerMask *now = m_layerStack->maskAt(index);
+                if (now) {
+                    m_undoStack->push(new layers::LayerMaskCommand(
+                        m_layerStack.get(), index, beforeMask, *now,
+                        QStringLiteral("Toggle Mask")));
+                }
             }
             invalidateCurrentCache();
             renderToView();
@@ -1722,23 +1731,46 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                 enabled ? tr("蒙版已启用") : tr("蒙版已禁用"), 2000);
         });
 
-        // setMaskInvertRequested: P1.4.6 simplified path, no undo push
-        //   (consistent with Phase 1).
+        // setMaskInvertRequested: goes through LayerMaskCommand so the
+        //   invert is undoable (LYR-41).
         connect(m_layerPanel, &layers::LayerPanel::setMaskInvertRequested,
                 this, [this](int index, bool invert) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const layers::LayerMask beforeMask = l->mask;
             if (!m_layerStack->setMaskInvert(index, invert)) return;
+            if (m_undoStack) {
+                const layers::LayerMask *now = m_layerStack->maskAt(index);
+                if (now) {
+                    m_undoStack->push(new layers::LayerMaskCommand(
+                        m_layerStack.get(), index, beforeMask, *now,
+                        QStringLiteral("Invert Mask")));
+                }
+            }
             invalidateCurrentCache();
             renderToView();
             statusBar()->showMessage(
                 invert ? tr("蒙版已反相") : tr("蒙版取消反相"), 2000);
         });
 
-        // setMaskDensityRequested: same as above.
+        // setMaskDensityRequested: goes through LayerMaskCommand so the
+        //   density change is undoable (LYR-41).
         connect(m_layerPanel, &layers::LayerPanel::setMaskDensityRequested,
                 this, [this](int index, qreal density) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const layers::LayerMask beforeMask = l->mask;
             if (!m_layerStack->setMaskDensity(index, density)) return;
+            if (m_undoStack) {
+                const layers::LayerMask *now = m_layerStack->maskAt(index);
+                if (now) {
+                    m_undoStack->push(new layers::LayerMaskCommand(
+                        m_layerStack.get(), index, beforeMask, *now,
+                        QStringLiteral("Mask Density")));
+                }
+            }
             invalidateCurrentCache();
             renderToView();
             statusBar()->showMessage(
@@ -1749,7 +1781,18 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
         connect(m_layerPanel, &layers::LayerPanel::setMaskFeatherRequested,
                 this, [this](int index, qreal featherPx) {
             if (!m_layerStack || index < 0 || index >= m_layerStack->count()) return;
+            auto l = m_layerStack->at(index);
+            if (!l) return;
+            const layers::LayerMask beforeMask = l->mask;
             if (!m_layerStack->setMaskFeather(index, featherPx)) return;
+            if (m_undoStack) {
+                const layers::LayerMask *now = m_layerStack->maskAt(index);
+                if (now) {
+                    m_undoStack->push(new layers::LayerMaskCommand(
+                        m_layerStack.get(), index, beforeMask, *now,
+                        QStringLiteral("Mask Feather")));
+                }
+            }
             invalidateCurrentCache();
             renderToView();
             statusBar()->showMessage(
@@ -1793,13 +1836,15 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                          sm.bytesPerLine());
             const cv::Mat grayClone = gray.clone();
             auto l = m_layerStack->at(index);
-            const cv::Mat oldMask = l ? l->mask.pixel.clone() : cv::Mat();
-            const bool wasEnabled = l ? l->mask.enabled : false;
+            const layers::LayerMask beforeMask = l ? l->mask : layers::LayerMask();
             if (!m_layerStack->addPixelMask(index, grayClone)) return;
             if (m_undoStack) {
-                auto *cmd = layers::LayerCommand::makeAddMask(
-                    m_layerStack.get(), index, oldMask, wasEnabled);
-                m_undoStack->push(cmd);
+                const layers::LayerMask *now = m_layerStack->maskAt(index);
+                if (now) {
+                    m_undoStack->push(new layers::LayerMaskCommand(
+                        m_layerStack.get(), index, beforeMask, *now,
+                        QStringLiteral("Add Mask")));
+                }
             }
             invalidateCurrentCache();
             renderToView();

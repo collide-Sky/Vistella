@@ -84,27 +84,23 @@ cv::Mat LayerMaskRenderer::buildAlpha(const LayerMask& mask, const QSize& size) 
     return alpha;
 }
 
-bool LayerMaskRenderer::apply(cv::Mat& layer, const LayerMask& mask) {
+bool LayerMaskRenderer::applyAlpha(cv::Mat& layer, const LayerMask& mask) {
     if (!mask.isActive() || layer.empty()) return false;
+    // Pixel contract: only 4-channel BGRA has an alpha channel to write.
+    //   A 3-channel layer getting here means the caller skipped the
+    //   LayerStack normalisation, so it is rejected outright -- better to
+    //   do nothing than to quietly degenerate into an RGB multiply (CP-07).
+    if (layer.channels() != 4) return false;
 
     const cv::Mat alpha = buildAlpha(mask,
                                       QSize(layer.cols, layer.rows));
     if (alpha.empty()) return false;
 
-    const int channels = layer.channels();
-    for (int y = 0; y < layer.rows; ++y) {
-        const uchar* a = alpha.ptr<uchar>(y);
-        uchar* row = layer.ptr<uchar>(y);
-        for (int x = 0; x < layer.cols; ++x) {
-            const int a01 = int(a[x]);  // 0..255
-            const int inv = 255 - a01;
-            for (int c = 0; c < channels; ++c) {
-                const int idx = x * channels + c;
-                row[idx] = uchar((int(row[idx]) * a01) / 255);
-            }
-            (void)inv;
-        }
-    }
+    // out.a = pixel.a * maskCoverage / 255
+    std::vector<cv::Mat> ch;
+    cv::split(layer, ch);
+    cv::multiply(ch[3], alpha, ch[3], 1.0 / 255.0);
+    cv::merge(ch, layer);
     return true;
 }
 
