@@ -42,9 +42,22 @@ void EyedropperTool::onMousePress(QMouseEvent* /*e*/, ImageWindow* host, const Q
     const int x = static_cast<int>(scenePos.x());
     const int y = static_cast<int>(scenePos.y());
     if (x < 0 || y < 0 || x >= img.cols || y >= img.rows) return;
-    // cv::Mat is BGR, Qt uses RGB
-    const cv::Vec3b bgr = img.at<cv::Vec3b>(y, x);
-    m_sampled = QColor(bgr[2], bgr[1], bgr[0]);
+    // Read the pixel through its REAL channel count.
+    //   The composite is CV_8UC4 BGRA (the pixel contract in
+    //   docs/CONTRACTS.md 7.6.1).
+    //   cv::Vec3b does NOT check the channel count -- Mat::at<T> addresses
+    //   the pixel as data + y*step + x*elemSize(), and elemSize() is 3 for
+    //   Vec3b. On a 4-channel image the real pixel lives at
+    //   data + y*step + x*4, so the Vec3b read silently lands x bytes off
+    //   and returns a NEIGHBOURING pixel with no diagnostic at all.
+    //   The colour channels are BGR in both the 3- and the 4-channel
+    //   case; the alpha channel is not part of the sampled colour.
+    const int ch = img.channels();
+    const uchar *px = img.ptr<uchar>(y) + x * ch;
+    const uchar b = px[0];
+    const uchar g = px[1];
+    const uchar r = px[2];
+    m_sampled = QColor(r, g, b);
     // Status bar feedback
     if (host->statusBar()) {
         host->statusBar()->showMessage(

@@ -568,6 +568,34 @@ ImageWindow::ImageWindow(QWidget *parent)
 
     }
 
+// The filter-preview cache (M1-9).
+//
+//   ROOT-CAUSE FIX: the filter "Apply" preview must NOT live in the
+//   ImageWindow class. Adding a cv::Mat member (144 bytes) to ImageWindow
+//   makes tst_ImageWorker::test_routePng segfault during the ImageWindow()
+//   constructor. Crash stack: Ui_ImageWindow::setupUi -> QFileInfo::filePath
+//   recursion (the QString d-pointer gets stomped). Adding a
+//   unique_ptr<cv::Mat> (8 bytes) partially fixed tst_ImageEditCommand, but
+//   tst_ImageWorker still crashed -- a class layout shift breaks QString's
+//   internal QStringData sharing / copy-on-write path, and it is sensitive to
+//   OpenCV's cv::Mat static initialization order.
+//   Final fix: keep it entirely out of the class layout. The preview cv::Mat
+//   lives in a file-scope static registry
+//   (ImageWindow* -> shared_ptr<cv::Mat>). renderToView does an O(1) hash
+//   lookup each time.
+//
+//   Note: the registry value is a shared_ptr (NOT a weak_ptr), so entries do
+//   NOT disappear on their own -- ~ImageWindow must erase explicitly,
+//   otherwise the preview Mat leaks and the key is a dangling raw ImageWindow*
+//   (a recycled address would show the previous window's preview).
+//
+//   It must be declared BEFORE ~ImageWindow: the destructor erases its own
+//   entry.
+namespace {
+    QMutex s_previewRegistryMutex;
+    QHash<ImageWindow*, std::shared_ptr<cv::Mat>> s_previewRegistry;
+}   // namespace
+
 ImageWindow::~ImageWindow()
 {
     // reset m_brushCursor FIRST, before delete ui
@@ -594,6 +622,19 @@ ImageWindow::~ImageWindow()
     // 作废在飞的异步任务: bump task id, 让所有还没回来的回调自己判定过期.
     //   (关 tab / 关程序时后台 render 可能还在跑, 回调回来时窗口已经没了)
     m_currentTaskId.fetch_add(1);
+
+    // Drop the filter-preview cache entry (M1-9).
+    //   The registry is a file-scope static whose value is a
+    //   shared_ptr<cv::Mat>, so it does NOT disappear when this window is
+    //   destroyed. Not clearing it means: the preview Mat leaks, and the key
+    //   is a dangling raw ImageWindow* -- a recycled address would show the
+    //   previous window's preview. Erase only; do not move the Mat back into
+    //   the class layout (that triggers a constructor-time segfault -- see
+    //   the registry's origin comment above).
+    {
+        QMutexLocker lock(&s_previewRegistryMutex);
+        s_previewRegistry.remove(this);
+    }
 
     // EngineContext 析构会 ~ThreadPool -> shutdown(false)
     //   等所有 worker 退出后再删, 避免后台 task 跑一半 ImageWindow 已经销毁
@@ -1964,19 +2005,9 @@ void ImageWindow::refreshAll()
     renderToView();
 }
 
-// ROOT-CAUSE FIX: filter Apply 预览 — 不放 ImageWindow 成员!
-//   调试 1+ 小时定位到的根因: 在 ImageWindow 里加 cv::Mat 字段 (144 字节)
-//   会让 tst_ImageWorker::test_routePng 在 ImageWindow() 构造期 segfault.
-//   崩溃栈: Ui_ImageWindow::setupUi → QFileInfo::filePath 递归 (QString d-pointer
-//   被踩). 加 unique_ptr<cv::Mat> (8 字节) 部分修好了 tst_ImageEditCommand,
-//   但 tst_ImageWorker 仍 crash — class layout shift 影响 QString 内部 QStringData
-//   共享 / 写时复制路径, 跟 OpenCV 的 cv::Mat 静态初始化顺序敏感.
-//   最终 fix: 完全不进 class layout. 预览 cv::Mat 放文件作用域 static registry
-//   (ImageWindow* → shared_ptr<cv::Mat>). registry 自动随 ImageWindow 析构清空
-//   (weak_ptr 不持 owner). renderToView 每次 O(1) hash 查找.
+// The filter-preview cache itself is declared near the top of this file,
+// right before ~ImageWindow -- the destructor has to erase its own entry.
 namespace {
-    QMutex s_previewRegistryMutex;
-    QHash<ImageWindow*, std::shared_ptr<cv::Mat>> s_previewRegistry;
     std::shared_ptr<cv::Mat> lookupPreview(ImageWindow* w)
     {
         QMutexLocker lock(&s_previewRegistryMutex);

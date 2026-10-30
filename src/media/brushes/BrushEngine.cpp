@@ -216,6 +216,17 @@ void BrushEngine::applyStamp(cv::Mat &target, cv::Point pt, const StampResult &s
     const bool useColor = (color.alpha() > 0);
     const bool grayscale = (ch == 1);
 
+    // The pixel contract (docs/CONTRACTS.md 7.6.1) says the pixels of a
+    // layer in the stack are always CV_8UC4 BGRA with straight alpha, and
+    // the brush writes into the active layer. So the target must be
+    // addressed by its REAL channel count -- reading it as cv::Vec3b would
+    // use a 3-byte stride on a 4-byte buffer, which writes the colour
+    // into the wrong channel and leaves the alpha byte as the colour's
+    // low byte.
+    //
+    // The brush paints COLOUR only. The alpha channel is left untouched:
+    // the layer's transparency comes from the pixel alpha and the mask,
+    // not from the brush (CP-07).
     for (int y = ty0; y < ty1; ++y) {
         for (int x = tx0; x < tx1; ++x) {
             const int sx = x - x0;
@@ -224,32 +235,35 @@ void BrushEngine::applyStamp(cv::Mat &target, cv::Point pt, const StampResult &s
             if (sval == 0) continue;
             const double w = (sval / 255.0) * alpha;
 
+            // The colour channels to paint into: 1 for grayscale, 3 for
+            // BGR and BGRA alike. The 4th channel (alpha) is never painted.
+            const int colorCh = (ch == 4) ? 3 : (ch == 3 ? 3 : 1);
+
+            // Fetch the pixel as a raw pointer so the same code serves
+            // 1, 3 and 4 channel targets.
+            uchar *p = target.ptr<uchar>(y) + x * ch;
+
             if (mode == 1) {  // Erase
                 if (grayscale) {
-                    target.at<uchar>(y, x) = (uchar)std::clamp(int(target.at<uchar>(y, x) * (1.0 - w)), 0, 255);
+                    p[0] = (uchar)std::clamp(int(p[0] * (1.0 - w)), 0, 255);
                 } else {
-                    auto &p = target.at<cv::Vec3b>(y, x);
-                    for (int c = 0; c < 3; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w)), 0, 255);
+                    for (int c = 0; c < colorCh; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w)), 0, 255);
                 }
             } else if (mode == 2) {  // Smudge: future use
                 // For now, treat as paint
                 if (grayscale) {
-                    uchar &p = target.at<uchar>(y, x);
-                    p = (uchar)std::clamp(int(p * (1.0 - w) + 255 * w), 0, 255);
+                    p[0] = (uchar)std::clamp(int(p[0] * (1.0 - w) + 255 * w), 0, 255);
                 } else {
-                    auto &p = target.at<cv::Vec3b>(y, x);
-                    for (int c = 0; c < 3; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w) + 255 * w), 0, 255);
+                    for (int c = 0; c < colorCh; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w) + 255 * w), 0, 255);
                 }
             } else {  // Paint
                 if (grayscale) {
-                    uchar &p = target.at<uchar>(y, x);
-                    p = (uchar)std::clamp(int(p * (1.0 - w) + 255 * w), 0, 255);
+                    p[0] = (uchar)std::clamp(int(p[0] * (1.0 - w) + 255 * w), 0, 255);
                 } else if (useColor) {
-                    auto &p = target.at<cv::Vec3b>(y, x);
                     if (blendMode == 1) {  // Multiply
-                        for (int c = 0; c < 3; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w) + (p[c] * (int)b_color / 255) * w), 0, 255);
+                        for (int c = 0; c < colorCh; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w) + (p[c] * (int)b_color / 255) * w), 0, 255);
                     } else if (blendMode == 2) {  // Screen
-                        for (int c = 0; c < 3; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w) + (255 - ((255 - p[c]) * (255 - (int)b_color) / 255)) * w), 0, 255);
+                        for (int c = 0; c < colorCh; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w) + (255 - ((255 - p[c]) * (255 - (int)b_color) / 255)) * w), 0, 255);
                     } else {  // Normal
                         p[0] = (uchar)std::clamp(int(p[0] * (1.0 - w) + (int)b_color * w), 0, 255);
                         p[1] = (uchar)std::clamp(int(p[1] * (1.0 - w) + (int)g_color * w), 0, 255);
@@ -257,8 +271,7 @@ void BrushEngine::applyStamp(cv::Mat &target, cv::Point pt, const StampResult &s
                     }
                 } else {
                     // No color = white paint (smudge-like)
-                    auto &p = target.at<cv::Vec3b>(y, x);
-                    for (int c = 0; c < 3; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w) + 255 * w), 0, 255);
+                    for (int c = 0; c < colorCh; ++c) p[c] = (uchar)std::clamp(int(p[c] * (1.0 - w) + 255 * w), 0, 255);
                 }
             }
         }

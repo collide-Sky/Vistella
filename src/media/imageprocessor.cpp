@@ -716,10 +716,20 @@ ImageProcessor::PixelInfo ImageProcessor::pixelAt(const cv::Mat &bgr, int x, int
     if (x < 0 || x >= bgr.cols || y < 0 || y >= bgr.rows) return pi;
     pi.pos = QPoint(x, y);
     pi.valid = true;
-    if (bgr.channels() == 1) {
+    // Read the pixel through its REAL channel count.
+    //   The argument is named "bgr" but the caller may hand us a CV_8UC4
+    //   BGRA image (the pixel contract in docs/CONTRACTS.md 7.6.1 makes
+    //   the composite 4-channel).
+    //   cv::Vec3b does NOT check the channel count -- Mat::at<T> addresses
+    //   the pixel as data + y*step + x*elemSize(), and elemSize() is 3 for
+    //   Vec3b. On a 4-channel image the real pixel lives at
+    //   data + y*step + x*4, so the Vec3b read silently lands x bytes off
+    //   and returns a NEIGHBOURING pixel with no diagnostic at all.
+    const int ch = bgr.channels();
+    if (ch == 1) {
         pi.gray = pi.b = pi.g = pi.r = bgr.at<uchar>(y, x);
     } else {
-        const cv::Vec3b &px = bgr.at<cv::Vec3b>(y, x);
+        const uchar *px = bgr.ptr<uchar>(y) + x * ch;
         pi.b = px[0]; pi.g = px[1]; pi.r = px[2];
         pi.gray = int(0.299 * pi.r + 0.587 * pi.g + 0.114 * pi.b);
     }

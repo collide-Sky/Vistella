@@ -71,6 +71,7 @@ private slots:
     // ---- 统计 / 信息 ----
     void test_computeStats();
     void test_pixelAt();
+    void test_pixelAt_4ChannelBgra();
     void test_describe();
 
 private:
@@ -432,6 +433,55 @@ void tst_ImageProcessor::test_pixelAt()
     // 范围外
     auto out = ImageProcessor::pixelAt(bgr, 100, 100);
     QVERIFY(!out.valid);
+}
+
+// The composite is CV_8UC4 BGRA (the pixel contract in
+// docs/CONTRACTS.md 7.6.1). pixelAt() used to read the pixel as
+// cv::Vec3b, which addresses it as
+//
+//     data + y*step + x*elemSize()      (elemSize == 3)
+//
+// while the real pixel of a 4-channel image lives at
+//
+//     data + y*step + x*4
+//
+// so the read drifts by x bytes and returns the wrong pixel for every
+// x > 0. The Mat below VARIES with position on purpose: on a uniform
+// image the drift is invisible and the test would pass with the bug
+// still in place.
+//
+// The colour channels are BGR in the 4-channel case too, and the alpha
+// channel is not part of the sampled colour.
+void tst_ImageProcessor::test_pixelAt_4ChannelBgra()
+{
+    // B = x, G = y, R = 0, A = 255.
+    cv::Mat bgra(8, 8, CV_8UC4, cv::Scalar(0, 0, 0, 255));
+    for (int y = 0; y < bgra.rows; ++y) {
+        for (int x = 0; x < bgra.cols; ++x) {
+            uchar *px = bgra.ptr<uchar>(y) + x * 4;
+            px[0] = uchar(x);
+            px[1] = uchar(y);
+            px[2] = 0;
+            px[3] = 255;
+        }
+    }
+
+    auto info = ImageProcessor::pixelAt(bgra, 3, 5);
+    QVERIFY(info.valid);
+    QCOMPARE(info.pos, QPoint(3, 5));
+    QCOMPARE(info.b, 3);
+    QCOMPARE(info.g, 5);
+    QCOMPARE(info.r, 0);
+    QCOMPARE(info.gray, int(0.299 * 0 + 0.587 * 5 + 0.114 * 3));
+
+    // A different alpha must not change the colour that is reported.
+    cv::Mat bgra2 = bgra.clone();
+    bgra2.setTo(cv::Scalar(0, 0, 0, 0), bgra2 == cv::Scalar(0, 0, 0, 255));
+    auto info2 = ImageProcessor::pixelAt(bgra2, 4, 2);
+    QVERIFY(info2.valid);
+    QCOMPARE(info2.b, 4);
+    QCOMPARE(info2.g, 2);
+    QCOMPARE(info2.r, 0);
 }
 
 void tst_ImageProcessor::test_describe()

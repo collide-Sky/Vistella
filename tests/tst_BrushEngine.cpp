@@ -28,6 +28,8 @@ private slots:
     void apply_paint_blends_color();
     void apply_paint_grayscale();
     void apply_erase_subtracts();
+    void apply_paint_4ChannelBgra();
+    void apply_erase_4ChannelBgra_keepsAlpha();
     void pressure_curve_identity();
     void pressure_curve_minmax();
     void pressure_curve_min_greater_than_max();
@@ -145,6 +147,72 @@ void tst_BrushEngine::apply_erase_subtracts()
     QColor white(255, 255, 255, 255);
     BrushEngine::applyStamp(target, cv::Point(20, 20), stamp, white, 1.0, 1.0, /*mode*/1);
     QVERIFY(target.at<uchar>(20, 20) < 255);   // erased
+}
+
+// M1-3 regression guard: the layer pixels are CV_8UC4 BGRA (pixel
+// contract), and the brush writes into the active layer. applyStamp()
+// used to address the target as cv::Vec3b, which on a 4-byte-per-pixel
+// buffer means a 3-byte stride: the colour landed in the wrong channel
+// and the stroke smeared across the row.
+//
+// Measured before the fix, painting pure red (255,0,0) at the stamp
+// centre of a 4-channel layer:
+//     B=9  G=0  R=0  A=255        <- wrong channel, alpha polluted
+// After the fix:
+//     B=0  G=0  R=212 A=255       <- red in the red channel, alpha intact
+void tst_BrushEngine::apply_paint_4ChannelBgra()
+{
+    BrushSettings s; s.size = 16; s.hardness = 100; s.opacity = 100; s.flow = 100;
+    BrushShape sh; sh.type = ShapeType::Round;
+    auto stamp = BrushEngine::generateStamp(s, sh, 1.0);
+
+    cv::Mat target(40, 40, CV_8UC4, cv::Scalar(0, 0, 0, 255));   // BGRA black
+    QColor red(255, 0, 0, 255);
+    BrushEngine::applyStamp(target, cv::Point(20, 20), stamp, red, 1.0, 1.0);
+
+    // The colour must land in the RED channel of the BGRA pixel.
+    const cv::Vec4b c = target.at<cv::Vec4b>(20, 20);
+    QVERIFY(c[2] >= 180);   // R
+    QVERIFY(c[0] <= 50);    // B stays low
+    QVERIFY(c[1] <= 50);    // G stays low
+
+    // The alpha channel must NOT be painted by the brush.
+    QCOMPARE(int(c[3]), 255);
+
+    // The stroke must stay inside the stamp area. A 3-byte stride over a
+    // 4-byte buffer smears the colour across the whole row.
+    int painted = 0;
+    for (int y = 0; y < target.rows; ++y) {
+        for (int x = 0; x < target.cols; ++x) {
+            const cv::Vec4b p = target.at<cv::Vec4b>(y, x);
+            if (p[0] || p[1] || p[2]) ++painted;
+        }
+    }
+    // A 16px round stamp covers roughly 200 px; a smeared stroke would
+    // touch a whole 40px row (40+ px) many times over.
+    QVERIFY(painted > 100);
+    QVERIFY(painted < 400);
+}
+
+void tst_BrushEngine::apply_erase_4ChannelBgra_keepsAlpha()
+{
+    BrushSettings s; s.size = 16; s.hardness = 100; s.opacity = 100; s.flow = 100;
+    BrushShape sh; sh.type = ShapeType::Round;
+    auto stamp = BrushEngine::generateStamp(s, sh, 1.0);
+
+    // An opaque white BGRA layer.
+    cv::Mat target(40, 40, CV_8UC4, cv::Scalar(255, 255, 255, 255));
+    // mode 1 = Erase
+    BrushEngine::applyStamp(target, cv::Point(20, 20), stamp,
+                            QColor(0, 0, 0, 255), 1.0, 1.0, 1);
+
+    const cv::Vec4b c = target.at<cv::Vec4b>(20, 20);
+    // The colour was erased ...
+    QVERIFY(c[0] <= 50);
+    QVERIFY(c[1] <= 50);
+    QVERIFY(c[2] <= 50);
+    // ... but the alpha is the layer's business, not the brush's.
+    QCOMPARE(int(c[3]), 255);
 }
 
 void tst_BrushEngine::pressure_curve_identity()
