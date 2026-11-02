@@ -78,8 +78,10 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     //   Initial paint + click handlers; double-click = swap. The swatches
     //   stay in lockstep with ColorDock via foregroundColorChanged /
     //   backgroundColorChanged signals.
-    paintColorSwatch(ui->fgSwatch, m_fgColor);
-    paintColorSwatch(ui->bgSwatch, m_bgColor);
+    // M1-8: the initial colours come from the state when one is bound;
+    //   without a state they are the PS defaults (black / white).
+    paintColorSwatch(ui->fgSwatch, foregroundColor());
+    paintColorSwatch(ui->bgSwatch, backgroundColor());
     if (ui->fgSwatch) {
         connect(ui->fgSwatch, &QToolButton::clicked,
                 this, &LeftToolBar::onFgSwatchClicked);
@@ -120,49 +122,110 @@ LeftToolBar::~LeftToolBar()
 
 // fg/bg setter / swatch paint / click handlers
 
+// M1-8: the toolbar renders the state and pushes changes into it.
+QColor LeftToolBar::foregroundColor() const
+{
+    return m_colorState ? m_colorState->foregroundColor() : QColor(Qt::black);
+}
+
+QColor LeftToolBar::backgroundColor() const
+{
+    return m_colorState ? m_colorState->backgroundColor() : QColor(Qt::white);
+}
+
+void LeftToolBar::setColorState(vistella::ColorState* state)
+{
+    if (m_colorState == state) return;
+
+    // Drop the old connections, otherwise the old document's state keeps
+    // writing into this toolbar.
+    if (m_colorState) {
+        m_colorState->disconnect(this);
+    }
+
+    m_colorState = state;
+
+    if (m_colorState) {
+        connect(m_colorState, &vistella::ColorState::foregroundColorChanged,
+                this, &LeftToolBar::onForegroundColorChanged);
+        connect(m_colorState, &vistella::ColorState::backgroundColorChanged,
+                this, &LeftToolBar::onBackgroundColorChanged);
+        // Show the current value right away.
+        onForegroundColorChanged(m_colorState->foregroundColor());
+        onBackgroundColorChanged(m_colorState->backgroundColor());
+    }
+}
+
+// The state the toolbar writes into. Always non-null: when no document
+// is bound the toolbar uses its own state.
+vistella::ColorState* LeftToolBar::effectiveColorState()
+{
+    if (!m_colorState) {
+        if (!m_ownedColorState) {
+            m_ownedColorState = new vistella::ColorState(this);
+        }
+        m_colorState = m_ownedColorState;
+        connect(m_colorState, &vistella::ColorState::foregroundColorChanged,
+                this, &LeftToolBar::onForegroundColorChanged);
+        connect(m_colorState, &vistella::ColorState::backgroundColorChanged,
+                this, &LeftToolBar::onBackgroundColorChanged);
+    }
+    return m_colorState;
+}
+
 void LeftToolBar::setForegroundColor(const QColor& c)
 {
-    if (m_fgColor == c) return;
-    m_fgColor = c;
-    if (ui && ui->fgSwatch) paintColorSwatch(ui->fgSwatch, c);
-    LOG_INFO("[LeftToolBar] foregroundColor: {}", c.name().toStdString());
-    emit foregroundColorChanged(c);
+    // Push into the state; the state decides whether it is a change
+    // (so the same colour does not emit -- that is the echo guard).
+    effectiveColorState()->setForegroundColor(c);
 }
 
 void LeftToolBar::setBackgroundColor(const QColor& c)
 {
-    if (m_bgColor == c) return;
-    m_bgColor = c;
+    effectiveColorState()->setBackgroundColor(c);
+}
+
+// Update the view WITHOUT pushing back into the state (echo guard).
+//
+// The toolbar re-emits the change: the state is the single source of
+// truth, but the toolbar's own signals are part of its public API and
+// are what a consumer (a dock, a test) watches. The echo guard is
+// that this slot never writes back into the state -- it only renders
+// and announces.
+void LeftToolBar::onForegroundColorChanged(const QColor& c)
+{
+    if (ui && ui->fgSwatch) paintColorSwatch(ui->fgSwatch, c);
+    emit foregroundColorChanged(c);
+}
+
+void LeftToolBar::onBackgroundColorChanged(const QColor& c)
+{
     if (ui && ui->bgSwatch) paintColorSwatch(ui->bgSwatch, c);
-    LOG_INFO("[LeftToolBar] backgroundColor: {}", c.name().toStdString());
     emit backgroundColorChanged(c);
 }
 
 void LeftToolBar::swapColors()
 {
-    QColor tmp = m_fgColor;
-    setForegroundColor(m_bgColor);  // emits
-    setBackgroundColor(tmp);        // emits
+    effectiveColorState()->swapColors();
 }
 
 void LeftToolBar::defaultColors()
 {
-    setForegroundColor(Qt::black);  // emits
-    setBackgroundColor(Qt::white);  // emits
+    effectiveColorState()->defaultColors();
 }
 
 void LeftToolBar::onFgSwatchClicked()
 {
-    QColor c = QColorDialog::getColor(m_fgColor, this, "前景色");
-    if (c.isValid() && c != m_fgColor) {
+    QColor c = QColorDialog::getColor(foregroundColor(), this, "前景色");
+    if (c.isValid() && c != foregroundColor()) {
         setForegroundColor(c);
     }
 }
 
 void LeftToolBar::onBgSwatchClicked()
 {
-    QColor c = QColorDialog::getColor(m_bgColor, this, "背景色");
-    if (c.isValid() && c != m_bgColor) {
+    QColor c = QColorDialog::getColor(backgroundColor(), this, "背景色");
+    if (c.isValid() && c != backgroundColor()) {
         setBackgroundColor(c);
     }
 }

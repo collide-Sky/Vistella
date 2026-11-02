@@ -24,6 +24,8 @@
 #include <QGraphicsEllipseItem>
 #include <QGraphicsTextItem>
 
+#include "ColorState.h"
+#include "UndoStack.h"
 #include "imageworker/layers/LayerStack.h"
 #include "imageworker/layers/SmartObjectWatcher.h"
 // LayerPanel accessor 返回 raw pointer, m_layerPanel unique_ptr 需要完整定义
@@ -125,7 +127,8 @@ private:
 };
 
 // 一个编辑命令: 记录 before/after 状态字符串, 描述"调了哪个参数"
-class ImageEditCommand : public QUndoCommand
+class ImageEditCommand : public QUndoCommand,
+                         public vistella::IUndoMemoryFootprint
 {
 public:
     // 描述"参数名=值" 的内部状态
@@ -158,6 +161,17 @@ public:
     // imageBefore/imageAfter 分别是操作前/后 m_current 的完整快照
     ImageEditCommand(class ImageWindow *w, const cv::Mat &imageBefore, const cv::Mat &imageAfter,
                      const QString &text, QUndoCommand *parent = nullptr);
+
+    // M1-7: bytes held by this command.
+    size_t memoryFootprint() const override {
+        return matBytes(m_imgBefore) + matBytes(m_imgAfter);
+    }
+
+    static size_t matBytes(const cv::Mat& m) {
+        if (m.empty()) return 0;
+        return static_cast<size_t>(m.total()) * static_cast<size_t>(m.elemSize());
+    }
+
     void undo() override;
     void redo() override;
 
@@ -227,6 +241,13 @@ public:
     // TransformCommand::redo/undo 调用
     //   接受变换后 cv::Mat, 同步 m_current + 可选 box 状态 (4 mode 切换时)
     void applyTransformImage(const cv::Mat& img, const transform::TransformBox* newBox = nullptr);
+
+    // M1-8: the colour state of this document.
+    //   The foreground / background colour is per DOCUMENT (like
+    //   Photoshop). ColorTab (right panel) and LeftToolBar (left
+    //   toolbar) are views over it; the Brush reads it when it stamps.
+    //   There is exactly ONE copy of the colour in the whole app.
+    vistella::ColorState* colorState() const { return m_colorState; }
 
     //  合成结果 (m_layerStack->render() 的缓存).
     //  只读: 像素的唯一真源是图层, m_current 只是渲染器的输出.
@@ -323,7 +344,15 @@ public:
 
     // 注入 WorkspaceMediator (mainwindow 创建 imagewindow 后调一次)
     void attachWorkspaceMed(mediators::WorkspaceMediator* wsMed);
-    QUndoStack*        undoStack() const { return m_undoStack; }
+    // The undo stack (M1-7: an UndoStack, i.e. a QUndoStack with a
+    //   memory budget).
+    //
+    //   The return type is UndoStack* and NOT QUndoStack*: the byte
+    //   accounting lives in UndoStack::push(), which SHADOWS
+    //   QUndoStack::push() (the base method is not virtual). A caller
+    //   that only sees a QUndoStack* would call the base push and the
+    //   budget would never be enforced.
+    vistella::UndoStack* undoStack() const { return m_undoStack; }
 
     // 右侧 panel 显隐 + 状态查询 (mainwindow 视图菜单 toggle)
     //   之前: setGeometry 浮动覆盖 + 没有 toggle 入口, 用户没法隐藏 dock
@@ -624,7 +653,10 @@ private:
     //   setContentWidget. Qt owns lifetime; raw pointer survives.
     layers::LayerPanel                     *m_layerPanel = nullptr;
 
-    QUndoStack *m_undoStack = nullptr;
+    vistella::UndoStack *m_undoStack = nullptr;
+
+    // M1-8: the document's colour state (the single source of truth).
+    vistella::ColorState* m_colorState = nullptr;
     int         m_savedIndex = 0;   // 上次保存时的栈 index, 用于 isDirty
 
     // ===== ThreadPool v2 异步化 =====

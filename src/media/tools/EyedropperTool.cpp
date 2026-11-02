@@ -58,6 +58,16 @@ void EyedropperTool::onMousePress(QMouseEvent* /*e*/, ImageWindow* host, const Q
     const uchar g = px[1];
     const uchar r = px[2];
     m_sampled = QColor(r, g, b);
+
+    // M1-8: push the sampled colour into the document's colour state.
+    //   This is what makes the eyedropper actually useful: the brush
+    //   picks the colour up, because the brush reads the same state
+    //   (DEBT entry A-EYEDROPPER: the eyedropper must push the sampled
+    //    colour into the shared state).
+    if (auto* state = host->colorState()) {
+        state->setForegroundColor(m_sampled);
+    }
+
     // Status bar feedback
     if (host->statusBar()) {
         host->statusBar()->showMessage(

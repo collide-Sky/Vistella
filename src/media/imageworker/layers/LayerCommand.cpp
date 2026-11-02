@@ -11,7 +11,9 @@
 //   (LayerCommand.h 走前置声明, .cpp 走完整 include, 是标准 PIMPL 风格)
 #include "../../imagewindow.h"
 
-#include <QString>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <vector>
 
 namespace layers {
 
@@ -367,19 +369,119 @@ LayerCommand* LayerCommand::makeSetSmartFilterStrength(LayerStack *stack, int fi
     return cmd;
 }
 
-//  工具编辑: 替换某图层整层像素.
-//    before/after 都是调用方给的快照; 调用方已经把 after 应用到图层上,
+//  Tool edit: replaces the pixels of one layer.
+//    before/after are the snapshots the caller passes in; the caller has
+//    already applied after to the layer, so the command only has to
+//    restore before on undo and write after back on redo.
 //    所以 push 触发的首个 redo 不用再应用一次.
+//
+//  M1-7: only the changed region is stored.
+//    The old code kept two FULL-layer clones: 288 MB per stroke on a
+//    24 MP document. Now the command keeps the patches of the bounding
+//    box of the difference, which for a brush stroke is a small corner
+//    of the image.
 LayerCommand* LayerCommand::makeSetLayerImage(LayerStack *stack, int index,
                                                const cv::Mat &before,
                                                const cv::Mat &after,
                                                const QString &text)
 {
+    // The region that actually changed. Empty when nothing changed.
+    const cv::Rect roi = diffRect(before, after);
+
     auto *cmd = new LayerCommand(stack, SetLayerImage, index);
-    cmd->m_oldMat = before.empty() ? cv::Mat() : before.clone();
-    cmd->m_newMat = after.empty() ? cv::Mat() : after.clone();
+    cmd->m_roi = roi;
+
+    if (roi.width > 0 && roi.height > 0) {
+        // Store the patches of that region only.
+        cmd->m_oldMat = before(roi).clone();
+        cmd->m_newMat = after(roi).clone();
+    } else {
+        // Nothing changed (or the images are not comparable): keep an
+        // empty ROI, which makes undo/redo no-ops. Storing the full
+        // images here would defeat the whole point of the patch.
+        cmd->m_oldMat = cv::Mat();
+        cmd->m_newMat = cv::Mat();
+    }
+
     cmd->setText(text.isEmpty() ? QStringLiteral("Edit Layer Pixels") : text);
     return cmd;
+}
+
+LayerCommand* LayerCommand::makeSetLayerImagePatch(LayerStack *stack, int index,
+                                                    const cv::Mat &beforePatch,
+                                                    const cv::Mat &afterPatch,
+                                                    const cv::Rect &roi,
+                                                    const QString &text)
+{
+    auto *cmd = new LayerCommand(stack, SetLayerImage, index);
+    cmd->m_roi = roi;
+    cmd->m_oldMat = beforePatch.empty() ? cv::Mat() : beforePatch.clone();
+    cmd->m_newMat = afterPatch.empty() ? cv::Mat() : afterPatch.clone();
+    cmd->setText(text.isEmpty() ? QStringLiteral("Edit Layer Pixels") : text);
+    return cmd;
+}
+
+// The bounding box of the pixels that differ between before and after.
+//
+//   The diff is done per channel: a pixel counts as changed when any of
+//   its channels differ. cv::compare with CMP_NE gives a 0/255 mask;
+//   boundingRect of the non-zero part is the ROI.
+//
+//   Returns an empty rect when the images are not comparable (different
+//   size or type) or when they are identical.
+cv::Rect LayerCommand::diffRect(const cv::Mat &before, const cv::Mat &after)
+{
+    if (before.empty() || after.empty()) return cv::Rect();
+    if (before.size() != after.size() || before.type() != after.type()) return cv::Rect();
+
+    cv::Mat diff;
+    cv::absdiff(before, after, diff);
+
+    // Reduce to a single channel: a pixel is changed when any channel
+    // differs.
+    std::vector<cv::Mat> channels;
+    cv::split(diff, channels);
+    cv::Mat anyDiff;
+    if (channels.size() == 1) {
+        anyDiff = channels[0];
+    } else {
+        anyDiff = channels[0].clone();
+        for (size_t i = 1; i < channels.size(); ++i) {
+            cv::bitwise_or(anyDiff, channels[i], anyDiff);
+        }
+    }
+
+    // Find the bounding box of the non-zero pixels.
+    //
+    //   The row/column scan is used instead of cv::findNonZero +
+    //   cv::boundingRect: findNonZero allocates a vector of every changed
+    //   pixel, which for a full-image edit is as big as the image itself.
+    //   Scanning the rows and columns only needs the mask itself.
+    int minX = anyDiff.cols;
+    int minY = anyDiff.rows;
+    int maxX = -1;
+    int maxY = -1;
+
+    for (int y = 0; y < anyDiff.rows; ++y) {
+        const uchar* row = anyDiff.ptr<uchar>(y);
+        // Find the x range of the changed pixels in this row.
+        int rowMinX = -1;
+        int rowMaxX = -1;
+        for (int x = 0; x < anyDiff.cols; ++x) {
+            if (row[x] != 0) {
+                if (rowMinX < 0) rowMinX = x;
+                rowMaxX = x;
+            }
+        }
+        if (rowMinX < 0) continue;   // this row is unchanged
+        if (rowMinX < minX) minX = rowMinX;
+        if (rowMaxX > maxX) maxX = rowMaxX;
+        if (y < minY) minY = y;
+        maxY = y;
+    }
+
+    if (maxX < 0 || maxY < 0) return cv::Rect();
+    return cv::Rect(minX, minY, maxX - minX + 1, maxY - minY + 1);
 }
 
 // =====================================================================
@@ -726,15 +828,28 @@ void LayerCommand::applyState(bool after)
         break;
     }
     case SetLayerImage: {
-        // 工具编辑: 整层像素替换.
-        //   clone 而不是共享: 工具会在图层上就地涂抹, 共享会连带改掉
-        //   命令里存的快照.
+        // Tool edit: write the changed region back (M1-7).
+        //   Two modes:
+        //     - m_roi set: only the patch is written back into that
+        //       region of the layer (copyTo) -- the rest of the layer is
+        //       left alone, so other edits are not touched.
+        //     - m_roi empty: the whole layer is replaced (legacy path).
         auto l = m_stack->at(m_index);
         if (l) {
             const cv::Mat &img = after ? m_newMat : m_oldMat;
             if (!img.empty()) {
-                l->image = img.clone();
-                m_stack->notifyLayerChanged(m_index);
+                if (m_roi.width > 0 && m_roi.height > 0) {
+                    // The ROI must still be inside the layer: the layer can
+                    // have been resized between the edit and the undo.
+                    const cv::Rect clipped = m_roi & cv::Rect(0, 0, l->image.cols, l->image.rows);
+                    if (clipped.width > 0 && clipped.height > 0) {
+                        img(clipped - m_roi.tl()).copyTo(l->image(clipped));
+                        m_stack->notifyLayerChanged(m_index);
+                    }
+                } else {
+                    l->image = img.clone();
+                    m_stack->notifyLayerChanged(m_index);
+                }
             }
         }
         break;

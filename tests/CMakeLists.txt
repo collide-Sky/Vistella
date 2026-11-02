@@ -95,15 +95,12 @@ add_vistella_test(tst_AppBar)
 # F-F (2026-09-09): mainwindow 集成 WorkspaceMediator 4 工作区
 add_vistella_test(tst_F_F_MainWindowWorkspace)
 # F-G (2026-09-09): RightPanelStack 3 dock (颜色/属性/图层) 跟 WorkspaceMediator 联动
-add_vistella_test(tst_RightPanelStack)
 # F-J (2026-09-09): 6 主菜单 + 子菜单结构 (图像/图层/文字/选择/滤镜 5 个新菜单)
 add_vistella_test(tst_F_J_MainMenuStructure)
 # F-K (2026-09-09): AdjustDialogBase + DialogFactory + 5 dialog (1 HSL 实装 + 4 stub)
 add_vistella_test(tst_F_K_AdjustDialog)
 # F-M (2026-09-10): ColorDock 渐变 (5 类型 + 8 预设) + 图案 (6 预设) + ChannelPathPanel (6 通道 + 1 路径)
-add_vistella_test(tst_F_M_Dock_GradientPatternChannel)
 # P6 (2026-10-09): ColorDock Swap + Default button slot 测试
-add_vistella_test(tst_ColorDock)
 # P6 (2026-10-09): ChannelPathPanel Save / Load / Quick Mask 按钮 测试
 add_vistella_test(tst_ChannelPathPanel)
 # F-N (2026-09-10): 8 工具 cursor (Move/SizeAll + Text/IBeam + 6 cross) + ToolContext 事件转发
@@ -272,3 +269,6 @@ add_vistella_test(tst_AlphaMask)
 #   公共设施在 support/PathHarness.h (合成测试图 / 像素探针 / 撤销重做按键 /
 #   Qt 消息记录器)。
 add_vistella_test(tst_Path_OpenEditUndoRedoSave)
+
+# M1-4 / M1-7 / M1-8 (2026-11-02): save chain, undo memory, colour state
+add_vistella_test(tst_M1_4_7_8_Save)

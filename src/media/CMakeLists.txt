@@ -4,6 +4,12 @@ add_library(vistella_media STATIC
     imageprocessor.h
     imageprocessor.cpp
 
+    UndoStack.h
+    UndoStack.cpp
+
+    ColorState.h
+    ColorState.cpp
+
     imagewindow.h
     imagewindow.cpp
     imagewindow.ui
@@ -169,17 +175,9 @@ add_library(vistella_media STATIC
     tools/LeftSidePanel.h
     tools/LeftSidePanel.cpp
 
-    # F-G (2026-09-09): RightPanelStack 右侧 panel 3 dock (颜色/属性/图层)
-    docks/RightPanelStack.h
-    docks/RightPanelStack.cpp
     # F-G.3 Fix (2026-09-10): RightPanelDock 1 widget 4+1 tab 浮动 panel (替代 3 分 dock + addDockWidget)
     docks/RightPanelDock.h
     docks/RightPanelDock.cpp
-    # P7.7 (2026-10-14): ColorDock 4-tab 重拆 (颜色/色板/渐变/图章)
-    #   ColorDock 变成 QTabWidget container, 4 个 sub-page 各自独立 widget.
-    #   ColorDock public API (signals/slots) 保持不变, imagewindow.cpp 不动.
-    docks/ColorDock.h
-    docks/ColorDock.cpp
     docks/ColorTab.h
     docks/ColorTab.cpp
     docks/SwatchTab.h

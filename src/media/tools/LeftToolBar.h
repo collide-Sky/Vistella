@@ -19,6 +19,8 @@
 //
 #pragma once
 
+#include "../ColorState.h"
+
 #include <QWidget>
 #include <QHash>
 #include <QPointer>
@@ -55,8 +57,17 @@ public:
     //   this dock and stay in lockstep with ColorDock. Click fg / bg to
     //   open QColorDialog; double-click triggers swap. Click the small
     //   "swapBtn" arrow to swap manually.
-    QColor foregroundColor() const { return m_fgColor; }
-    QColor backgroundColor() const { return m_bgColor; }
+    // M1-8: the colour lives in the document's ColorState.
+    //   The toolbar is a VIEW: it renders what the state says and pushes
+    //   user changes into it.
+    QColor foregroundColor() const;
+    QColor backgroundColor() const;
+
+    // Bind this toolbar to a document's colour state (the active one).
+    //   Binding again re-points the toolbar at the new state; the old
+    //   connections are dropped.
+    void setColorState(vistella::ColorState* state);
+    vistella::ColorState* colorState() const { return m_colorState; }
     void   setForegroundColor(const QColor& c);
     void   setBackgroundColor(const QColor& c);
     void   swapColors();
@@ -67,6 +78,10 @@ signals:
     void backgroundColorChanged(const QColor& c);
 
 private slots:
+    // M1-8: update the swatch from the colour state WITHOUT pushing
+    //   back into it (echo guard).
+    void onForegroundColorChanged(const QColor& c);
+    void onBackgroundColorChanged(const QColor& c);
     // ToolMediator 信号
     void onToolMediatorSwitched(mediators::ToolId id);
     // P7.1: fg/bg swatch interaction.
@@ -77,6 +92,10 @@ private slots:
     void onBgSwatchDoubleClicked();
 
 private:
+    // The state the toolbar writes into. Always non-null: when no
+    // document is bound, the toolbar falls back to its own state.
+    vistella::ColorState* effectiveColorState();
+
     // 8 工具 factory (加 RectSelect/Lasso/MagicWand/Crop/Text/Brush)
     static ToolState* createMoveTool();
     static ToolState* createRectSelectTool();
@@ -107,8 +126,21 @@ private:
     QPointer<ToolContext>              m_ctx;
 
     // P7.1: fg/bg state.
-    QColor m_fgColor = Qt::black;
-    QColor m_bgColor = Qt::white;
+    // M1-8: the state this toolbar renders.
+    //
+    //   Normally this is the ImageWindow's ColorState (one per
+    //   document). The toolbar is a VIEW: it renders the state and
+    //   pushes user changes into it.
+    //
+    //   When no document is bound yet (the toolbar exists before the
+    //   first image is opened, or in a unit test), the toolbar falls
+    //   back to its OWN ColorState, owned by m_ownedColorState. That
+    //   keeps the invariant "the toolbar always has exactly one
+    //   colour state" -- without it the getters and the setters
+    //   would disagree (the setter would emit, the getter would
+    //   still report the hard-coded default).
+    vistella::ColorState* m_colorState = nullptr;
+    vistella::ColorState* m_ownedColorState = nullptr;
 
     Ui::LeftToolBar* ui = nullptr;  // ui auto-generated
 };

@@ -7,6 +7,7 @@
 #include <QImage>
 #include <QImageWriter>
 #include <QPainter>
+#include <QSaveFile>
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -22,6 +23,33 @@
 #include "../core/ThreadPool/executor.hpp"
 
 // --------- I/O ---------
+
+namespace {
+
+// File extension -> QImageWriter format name.
+//
+//   QImage::save(path) infers the format from the extension, but a
+//   QImageWriter that writes to a device (here a QSaveFile) cannot see
+//   the file name, so the mapping has to be done explicitly.
+//
+//   Only the formats the project actually offers are mapped; anything
+//   else returns an empty string, which the caller reports as an
+//   unsupported destination.
+QString formatFromPath(const QString& path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    if (suffix == QStringLiteral("png"))  return QStringLiteral("PNG");
+    if (suffix == QStringLiteral("jpg") || suffix == QStringLiteral("jpeg")
+        || suffix == QStringLiteral("jpe")) return QStringLiteral("JPEG");
+    if (suffix == QStringLiteral("tif") || suffix == QStringLiteral("tiff"))
+        return QStringLiteral("TIFF");
+    if (suffix == QStringLiteral("webp")) return QStringLiteral("WEBP");
+    if (suffix == QStringLiteral("bmp"))  return QStringLiteral("BMP");
+    if (suffix == QStringLiteral("gif"))  return QStringLiteral("GIF");
+    return QString();
+}
+
+}   // namespace
 
 bool ImageProcessor::saveImage(const cv::Mat &img, const QString &path, QString *err)
 {
@@ -73,37 +101,65 @@ bool ImageProcessor::saveImage(const cv::Mat &img, const QString &path,
     //   QImage::save(path, format, quality) 接受 0-100 quality (JPEG/WebP 有效)
     //   PNG 走 compression (QImage::save 不支持, 但 Qt 6.5+ 用 QImageWriter 走 png compression)
     //   TIFF compression 同样不支持直接走, 用 QImageWriter
-    const QString fmt = opts.format.isEmpty()
-                          ? QString()
-                          : opts.format.toUpper();
-
-    if (opts.quality >= 0 || !fmt.isEmpty()) {
-        // 走 QImageWriter 拿完整 format/compression 支持
-        QImageWriter writer(path, fmt.toLatin1());
-        if (opts.quality >= 0) writer.setQuality(opts.quality);
-        // TIFF compression 走 QImageWriter::Compression 枚举 (Qt TIFF driver 支持 1=None / 5=LZW)
-        //   "None" / "LZW" / "Deflate" 字符串名映射到 driver enum
-        if (!opts.tiffCompression.isEmpty()
-            && (fmt == QStringLiteral("TIFF"))) {
-            if (opts.tiffCompression == QStringLiteral("None")) {
-                writer.setCompression(1);
-            } else {
-                writer.setCompression(99);  // LZW / Deflate 默认走 driver max compression
-            }
-        }
-        // PNG compression 走 QImageWriter::Compression (Qt 6.5+)
-        if (opts.pngCompression >= 0 && (fmt == QStringLiteral("PNG") || fmt.isEmpty())) {
-            writer.setCompression(opts.pngCompression);
-        }
-        if (!writer.write(qimg)) {
-            if (err) *err = QString("QImageWriter::write failed: %1").arg(writer.errorString());
-            return false;
-        }
-        return true;
+    // Format inference.
+    //
+    //   QImage::save(path) infers the format from the file extension, but
+    //   a QImageWriter that writes to a device (here a QSaveFile) cannot
+    //   see the file name -- so the extension is mapped explicitly.
+    QString fmt = opts.format.isEmpty()
+                      ? formatFromPath(path)
+                      : opts.format.toUpper();
+    if (fmt.isEmpty()) {
+        if (err) *err = QStringLiteral("cannot infer the image format from: %1").arg(path);
+        return false;
     }
 
-    if (!qimg.save(path)) {
-        if (err) *err = QString("QImage::save failed for: %1").arg(path);
+    // Atomic write (M1-4).
+    //
+    //   The old code used QImage::save(path) / QImageWriter(path), and
+    //   both open the destination directly with QFile. A failure halfway
+    //   through the write (disk full, permissions, a crash) truncated the
+    //   previous good file with nothing to roll back to.
+    //
+    //   QSaveFile writes to a temporary file and only replaces the target
+    //   on commit(), so the old content survives any failure. A failed
+    //   commit returns false, which keeps the caller from marking the
+    //   document as saved.
+    QSaveFile saveFile(path);
+    if (!saveFile.open(QIODevice::WriteOnly)) {
+        if (err) *err = QString("cannot open for writing: %1").arg(saveFile.errorString());
+        return false;
+    }
+
+    // QImageWriter gives the full format / compression support.
+    QImageWriter writer(&saveFile, fmt.toLatin1());
+    if (opts.quality >= 0) writer.setQuality(opts.quality);
+    // TIFF compression uses the QImageWriter::Compression enum (the Qt
+    //   TIFF driver supports 1=None / 5=LZW).
+    //   "None" / "LZW" / "Deflate" map onto the driver enum.
+    if (!opts.tiffCompression.isEmpty()
+        && (fmt == QStringLiteral("TIFF"))) {
+        if (opts.tiffCompression == QStringLiteral("None")) {
+            writer.setCompression(1);
+        } else if (opts.tiffCompression == QStringLiteral("LZW")) {
+            writer.setCompression(99);  // LZW / Deflate default to the driver max compression
+        }
+    }
+    // PNG compression uses QImageWriter::Compression (Qt 6.5+).
+    if (opts.pngCompression >= 0 && (fmt == QStringLiteral("PNG"))) {
+        writer.setCompression(opts.pngCompression);
+    }
+    if (!writer.write(qimg)) {
+        if (err) *err = QString("QImageWriter::write failed: %1").arg(writer.errorString());
+        saveFile.cancelWriting();   // drop the temp file, leave the old one alone
+        return false;
+    }
+    // Commit the device. QImageWriter has no commit() of its own -- it
+    // writes straight into the device -- so the QSaveFile commit is the
+    // single atomic step: it flushes, fsyncs and then renames the temp
+    // file over the target.
+    if (!saveFile.commit()) {
+        if (err) *err = QString("cannot commit the saved file: %1").arg(saveFile.errorString());
         return false;
     }
     return true;

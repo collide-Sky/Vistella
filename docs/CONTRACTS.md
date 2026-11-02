@@ -362,6 +362,46 @@
 - **INV-PATH-2**　渲染循环**覆盖全栈**（LYR-13 / LYR-14）：底图是普通图层，
   不是根；隐藏底图真的会露出下面的内容。文档画布是**不透明白**（alpha = 255）。
 
+### 7.6.2 保存链、撤销内存与颜色契约（M1-4 / M1-7 / M1-8）
+
+这一节的实现在 `src/media/ColorState.h`（颜色模型）、
+`src/media/UndoStack.h`（撤销内存预算）、
+`src/media/imageworker/layers/LayerCommand.cpp`（ROI 补丁）、
+`src/media/imageprocessor.cpp` + `src/ui/docwindow.cpp`（原子写）。
+下面是**可断言的规则**，测试见 `tests/tst_M1_4_7_8_Save.cpp`。
+
+#### 保存链
+
+- **INV-SAVE-1**　保存写盘的像素**必须是当前图层栈的同步渲染结果**，
+  不得直接读渲染缓存 `m_current`。缓存对 >1MP 的图片是**异步**刷新的，
+  缓存里可能还是上一帧。
+- **INV-SAVE-2**　写盘**必须原子**：先写临时文件，`commit()` 成功才替换目标。
+  任何失败都**不得破坏上一个好文件**（`QSaveFile`）。
+- **INV-SAVE-3**　写盘失败时文档**必须仍是脏的**（不得调 `markSaved()`），
+  且 flush / commit 的结果必须检查 —— 未检查的 flush 会在文件被截断时仍报“成功”。
+
+#### 撤销内存
+
+- **INV-UNDO-1**　工具编辑的撤销命令**不得存整层副本**：只存**变动区域**的补丁。
+  24MP 图片一笔存两份整层 = 288MB，100 笔 = 28GB。
+- **INV-UNDO-2**　撤销栈必须有**字节预算**，不只有命令数上限。
+  超预算时从栈底部丢旧命令，并通知报报主人调整“已保存”标记。
+  淘汰**必须真的删除命令**（`count()` 与 `memoryUsedBytes()` 必须一致），
+  且**不得动文档**（淘汰过程中不得触发任何命令的 `undo()` / `redo()`）。
+  *口径：Qt 的 `QUndoStack` 无法从已填充的栈里删除底部命令，
+  因此 `UndoStack` 自行持有真实命令并在淘汰时重建（见 `docs/DEBT.md` 的 `A-UNDOLIMIT`）。*
+- **INV-UNDO-3**　选区的**手势**（套序 / 矩形 / 神光棍）必须**可撤销**，
+  且 undo/redo 必须**原样恢复 before/after 快照**，不得重跑操作（重跑会让 `Invert` 双重反选）。
+
+#### 颜色状态
+
+- **INV-COLOR-1**　前景/背景色**唯一所有者**是文件的 `ColorState`（`src/media/ColorState.h`）。
+  `ColorTab`、`LeftToolBar` 是它的**视图**，画笔在落笔时读它。
+  不得再存第二份副本。
+- **INV-COLOR-2**　颜色是**按文档**（每张图片一个）的；左侧工具栏是全局的，
+  它在切换活动图片时重绑到**当前图片**的状态。
+- **INV-COLOR-3**　吸管取到的颜色**必须写回** `ColorState`，所以画笔会紧跟变。
+
 ### 7.7 依赖方向
 
 - **INV-DEP-1**　依赖单向：`core → media/base → media/layers → media/render → media/tools → ui → app`。

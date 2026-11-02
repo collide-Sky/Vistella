@@ -15,7 +15,6 @@
 #include "../media/masks/RefineEdge.h"
 #include "../media/masks/ColorRange.h"
 #include "../media/mediators/ToolMediator.h"
-#include "../media/docks/ColorDock.h"  // MainWindow docks 接管 LeftToolBar fg/bg sync
 #include "../media/docks/RightPanelDock.h"  // P7.6.x v3: image->colorDock()->colorDock() 完整类型
 #include "../ui/dock/VTabPageBase.h"        // status bar GPU/CPU stats
 #include "../ui/dock/VDraggableTabWidget.h" // P7.11: iterate 3 sub-dock pages
@@ -3429,21 +3428,18 @@ void MainWindow::bindLeftDockWidgets(ImageWindow* iw)
                                 m_brushOpt);
     }
 
-    // fg/bg swatch: LeftToolBar fg/bg 改 → active image 的 ColorDock 同步 (避免回声).
-    //   iw->colorDock() 返回 RightPanelDock* (整个右侧 dock); 内部 colorDock() getter 拿到
-    //   真正的 ColorDock widget (Dock contains 一组 tab).
-    //   detach 期间 detach() 已 disconnect 本侧; RightPanelDock.colorDock() 在 ImageWindow
-    //   切走时仍存在, 所以这里用 Qt::UniqueConnection 防止多次 connect 堆积.
+    // M1-8: the fg/bg swatches drive the current image's ColorState.
+    //   The old connection was DEAD: it went through
+    //   RightPanelDock::colorDock(), a deprecated accessor that returns
+    //   nullptr -- so the connect never ran and the toolbar colour never
+    //   reached the colour panel.
+    //   The toolbar is now a VIEW of the ColorState: it writes into the
+    //   current image's state, and the state is read back by the toolbar.
+    //   bindLeftDockWidgets runs on every active-image change, so the
+    //   toolbar follows the current image automatically.
     if (leftToolBar) {
-        if (auto* rightDock = iw->colorDock()) {
-            if (auto* colorDock = rightDock->colorDock()) {
-                connect(leftToolBar, &tools::LeftToolBar::foregroundColorChanged,
-                        colorDock, &docks::ColorDock::setForegroundColor,
-                        Qt::UniqueConnection);
-                connect(leftToolBar, &tools::LeftToolBar::backgroundColorChanged,
-                        colorDock, &docks::ColorDock::setBackgroundColor,
-                        Qt::UniqueConnection);
-            }
+        if (auto* colorState = iw->colorState()) {
+            leftToolBar->setColorState(colorState);
         }
     }
 }

@@ -248,13 +248,6 @@ QSize RightPanelDock::minimumSizeHint() const
 // been migrated yet still compile (the deref will then fail).
 // ---------------------------------------------------------------------------
 
-ColorDock*        RightPanelDock::colorDock()        const
-{
-    LOG_WARN("[RightPanelDock] DEPRECATED colorDock() called; "
-             "use colorPage() instead (returns VColorPage*).");
-    return nullptr;
-}
-
 PropertiesDock*   RightPanelDock::propertiesDock()   const
 {
     LOG_WARN("[RightPanelDock] DEPRECATED propertiesDock() called; "

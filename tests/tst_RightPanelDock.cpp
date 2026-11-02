@@ -10,7 +10,7 @@
 //   - Composite strategy defaults to Sequential on all 3 sub-docks.
 //   - Sub-dock 1 (color-group) is hidden when WorkspaceMediator says so;
 //     sub-dock 3 (layer-group) is always visible (core editing area).
-//   - Deprecated shims return nullptr (colorDock/layersDock/...).
+//   - Deprecated shims return nullptr (layersDock/...).
 //   - setAdjustmentPanel is a no-op (does not add a tab).
 //   - setUndoStack propagates to VHistoryPage (pageTitleChanged smoke).
 //   - setLayerPanel wires the panel into VLayerPage->inner()->setContentWidget(0).
@@ -174,7 +174,6 @@ void tst_RightPanelDock::subDockCompositeStrategy_settable()
 // ---------------------------------------------------------------------------
 void tst_RightPanelDock::deprecatedShims_returnNullptr()
 {
-    QCOMPARE(m_dock->colorDock(),        nullptr);
     QCOMPARE(m_dock->propertiesDock(),   nullptr);
     QCOMPARE(m_dock->layersDock(),       nullptr);
     QCOMPARE(m_dock->channelPathPanel(), nullptr);

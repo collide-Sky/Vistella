@@ -22,6 +22,7 @@
 //
 #pragma once
 
+#include "../UndoStack.h"
 #include <QUndoCommand>
 #include <QPointer>
 #include <opencv2/core.hpp>
@@ -31,7 +32,8 @@ class ImageWindow;
 
 namespace filter {
 
-class FilterCommand : public QUndoCommand
+class FilterCommand : public QUndoCommand,
+                     public vistella::IUndoMemoryFootprint
 {
 public:
     // ctor (P0-5.8 default): takes the host and the filter kind, applies the
@@ -48,6 +50,15 @@ public:
     FilterCommand(ImageWindow *host, FilterStrategy *strategy,
                   const QString &text, QUndoCommand *parent = nullptr);
 
+    // M1-7: bytes held by this command.
+    size_t memoryFootprint() const override {
+        return matBytes(m_before) + matBytes(m_after);
+    }
+
+    static size_t matBytes(const cv::Mat& m) {
+        if (m.empty()) return 0;
+        return static_cast<size_t>(m.total()) * static_cast<size_t>(m.elemSize());
+    }
     void undo() override;
     void redo() override;
 

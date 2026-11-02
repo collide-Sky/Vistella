@@ -57,9 +57,14 @@ Brush::~Brush()
 
 void Brush::onEnter(ImageWindow* host)
 {
-    Q_UNUSED(host);
     m_active = false;
     m_lastStampDist = 0;
+    // M1-8: bind to the document's colour state.
+    //   The Brush instance is destroyed and recreated on every tool
+    //   switch, so the colour has to be re-read from the state here --
+    //   otherwise the brush comes back with a stale (or default black)
+    //   paint colour.
+    if (host) setColorState(host->colorState());
     LOG_DEBUG("[Brush] onEnter (P1.1 full impl)");
 }
 
@@ -119,8 +124,26 @@ void Brush::setPreset(const brushes::BrushPreset &p)
     m_smoother->setEnabled(p.dynamics.smoothing.enabled);
 }
 
-void Brush::setPaintColor(const QColor &c) { m_paintColor = c; }
-QColor Brush::paintColor() const { return m_paintColor; }
+void Brush::setPaintColor(const QColor &c)
+{
+    m_paintColor = c;
+    // M1-8: when a state is bound, the state is the truth -- push the
+    //   colour into it so the panel and the toolbar follow.
+    if (m_colorState) m_colorState->setForegroundColor(c);
+}
+
+QColor Brush::paintColor() const
+{
+    // M1-8: read from the state when there is one.
+    if (m_colorState) return m_colorState->foregroundColor();
+    return m_paintColor;
+}
+
+void Brush::setColorState(vistella::ColorState* state)
+{
+    m_colorState = state;
+    if (m_colorState) m_paintColor = m_colorState->foregroundColor();
+}
 
 // ===== Mouse event handlers =====
 
@@ -243,7 +266,11 @@ void Brush::paintSingleStamp(ImageWindow* host, const QPointF& scenePos, double 
     const int ix = int(std::round(scenePos.x()));
     const int iy = int(std::round(scenePos.y()));
     // Q4.2.3: pass m_blendMode through to applyStamp (0=Normal default, 1=Multiply, 2=Screen).
-    brushes::BrushEngine::applyStamp(*target, cv::Point(ix, iy), stamp, m_paintColor, opacity, flow, 0, m_blendMode);
+    // M1-8: read the colour from the state at stamp time.
+    //   Reading it per stamp (instead of caching it in the tool) is what
+    //   makes a colour change take effect immediately, and it cannot go
+    //   stale across a tool switch.
+    brushes::BrushEngine::applyStamp(*target, cv::Point(ix, iy), stamp, paintColor(), opacity, flow, 0, m_blendMode);
 }
 
 void Brush::finalizeStroke(ImageWindow* host)

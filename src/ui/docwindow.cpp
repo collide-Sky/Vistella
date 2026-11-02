@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QPlainTextEdit>
+#include <QSaveFile>
 #include <QTextStream>
 
 DocWindow::DocWindow(QWidget *parent)
@@ -85,15 +86,37 @@ bool DocWindow::saveAsFile(const QString &path, QString *err)
     if (target.isEmpty())
         return false;
 
-    QFile f(target);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+    // Atomic write (M1-4).
+    //   The old code used QFile + Truncate, which destroys the previous
+    //   content the moment the file is opened. A failure after that point
+    //   (disk full, permissions, a crash) left an empty or half-written
+    //   file behind, and because the QTextStream flush result was never
+    //   checked, saveAsFile could still return true -- marking a truncated
+    //   document as saved.
+    //   QSaveFile writes to a temporary file and only replaces the target
+    //   on commit(), so the old content survives any failure.
+    QSaveFile f(target);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
         if (err) *err = f.errorString();
         return false;
     }
-    QTextStream out(&f);
-    out.setEncoding(QStringConverter::Utf8);
-    out << ui->editor->toPlainText();
-    f.close();
+    {
+        QTextStream out(&f);
+        out.setEncoding(QStringConverter::Utf8);
+        out << ui->editor->toPlainText();
+        // Flush the encoder and check it: a full disk fails HERE, not at
+        // close time.
+        out.flush();
+        if (out.status() != QTextStream::Ok) {
+            if (err) *err = f.errorString();
+            f.cancelWriting();
+            return false;
+        }
+    }
+    if (!f.commit()) {
+        if (err) *err = f.errorString();
+        return false;
+    }
 
     const bool pathChanged = (m_filePath != target);
     m_filePath = target;

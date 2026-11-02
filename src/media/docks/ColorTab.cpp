@@ -31,7 +31,7 @@ ColorTab::ColorTab(QWidget* parent) : QWidget(parent)
     m_bgSwatch->setAutoFillBackground(true);
     {
         QPalette p = m_bgSwatch->palette();
-        p.setColor(QPalette::Window, m_background);
+        p.setColor(QPalette::Window, QColor(Qt::white));
         m_bgSwatch->setPalette(p);
     }
     swatchRow->addWidget(m_bgSwatch);
@@ -43,7 +43,7 @@ ColorTab::ColorTab(QWidget* parent) : QWidget(parent)
     m_fgSwatch->setAutoFillBackground(true);
     {
         QPalette p = m_fgSwatch->palette();
-        p.setColor(QPalette::Window, m_foreground);
+        p.setColor(QPalette::Window, QColor(Qt::black));
         m_fgSwatch->setPalette(p);
     }
     swatchRow->addWidget(m_fgSwatch);
@@ -81,57 +81,88 @@ ColorTab::ColorTab(QWidget* parent) : QWidget(parent)
 
 ColorTab::~ColorTab() = default;
 
+// M1-8: the swatch painting, in one place.
+static void paintSwatch(QFrame* swatch, const QColor& c)
+{
+    if (!swatch) return;
+    QPalette p = swatch->palette();
+    p.setColor(QPalette::Window, c);
+    swatch->setPalette(p);
+}
+
+QColor ColorTab::foregroundColor() const
+{
+    return m_state ? m_state->foregroundColor() : QColor(Qt::black);
+}
+
+QColor ColorTab::backgroundColor() const
+{
+    return m_state ? m_state->backgroundColor() : QColor(Qt::white);
+}
+
+void ColorTab::setColorState(vistella::ColorState* state)
+{
+    if (m_state == state) return;
+
+    // Drop the old connections, otherwise the old state keeps writing
+    // into this view.
+    if (m_state) {
+        m_state->disconnect(this);
+    }
+
+    m_state = state;
+
+    if (m_state) {
+        connect(m_state, &vistella::ColorState::foregroundColorChanged,
+                this, &ColorTab::onForegroundColorChanged);
+        connect(m_state, &vistella::ColorState::backgroundColorChanged,
+                this, &ColorTab::onBackgroundColorChanged);
+        // Show the current value right away.
+        onForegroundColorChanged(m_state->foregroundColor());
+        onBackgroundColorChanged(m_state->backgroundColor());
+    }
+}
+
 void ColorTab::setForegroundColor(const QColor& c)
 {
-    if (m_foreground == c) return;
-    m_foreground = c;
-    if (m_fgSwatch) {
-        QPalette p = m_fgSwatch->palette();
-        p.setColor(QPalette::Window, c);
-        m_fgSwatch->setPalette(p);
+    // Push into the state; the state decides whether it is a change.
+    if (m_state) {
+        m_state->setForegroundColor(c);
+        return;
     }
+    // No state bound (e.g. in a unit test): keep the old behaviour and
+    // still signal, so the panel is usable standalone.
+    paintSwatch(m_fgSwatch, c);
     emit foregroundColorChanged(c);
     LOG_DEBUG("[ColorTab] foreground: {} {} {}", c.red(), c.green(), c.blue());
 }
 
 void ColorTab::setBackgroundColor(const QColor& c)
 {
-    if (m_background == c) return;
-    m_background = c;
-    if (m_bgSwatch) {
-        QPalette p = m_bgSwatch->palette();
-        p.setColor(QPalette::Window, c);
-        m_bgSwatch->setPalette(p);
+    if (m_state) {
+        m_state->setBackgroundColor(c);
+        return;
     }
+    paintSwatch(m_bgSwatch, c);
     emit backgroundColorChanged(c);
 }
 
 void ColorTab::onForegroundColorChanged(const QColor& c)
 {
-    if (m_foreground == c) return;
-    m_foreground = c;
-    if (m_fgSwatch) {
-        QPalette p = m_fgSwatch->palette();
-        p.setColor(QPalette::Window, c);
-        m_fgSwatch->setPalette(p);
-    }
-    // No emit (echo guard)
+    paintSwatch(m_fgSwatch, c);
+    // No emit: this slot is connected TO the state, so emitting here
+    // would be an echo loop.
 }
 
 void ColorTab::onBackgroundColorChanged(const QColor& c)
 {
-    if (m_background == c) return;
-    m_background = c;
-    if (m_bgSwatch) {
-        QPalette p = m_bgSwatch->palette();
-        p.setColor(QPalette::Window, c);
-        m_bgSwatch->setPalette(p);
-    }
+    paintSwatch(m_bgSwatch, c);
+    // No emit (echo guard)
 }
 
 void ColorTab::onPickClicked()
 {
-    QColor c = QColorDialog::getColor(m_foreground, this, tr("选择前景色"));
+    QColor c = QColorDialog::getColor(foregroundColor(), this, tr("选择前景色"));
     if (c.isValid()) {
         setForegroundColor(c);
     }
@@ -139,13 +170,21 @@ void ColorTab::onPickClicked()
 
 void ColorTab::onSwapClicked()
 {
-    QColor tmp = m_foreground;
-    setForegroundColor(m_background);
+    if (m_state) {
+        m_state->swapColors();
+        return;
+    }
+    const QColor tmp = foregroundColor();
+    setForegroundColor(backgroundColor());
     setBackgroundColor(tmp);
 }
 
 void ColorTab::onDefaultClicked()
 {
+    if (m_state) {
+        m_state->defaultColors();
+        return;
+    }
     setForegroundColor(Qt::black);
     setBackgroundColor(Qt::white);
 }

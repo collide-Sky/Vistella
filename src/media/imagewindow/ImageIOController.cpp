@@ -92,7 +92,24 @@ void ImageIOController::onSave()
 bool ImageIOController::buildSaveComposite(cv::Mat& out) const
 {
     if (!m_host) return false;
-    out = m_host->currentImage();
+
+    // Render a FRESH composite from the layer stack, do NOT use the
+    // render cache (m_current).
+    //
+    //   m_current is only refreshed by ImageWindow::rebuildCurrentCache(),
+    //   and for images above 1 MP that path is ASYNCHRONOUS: it submits a
+    //   background render and returns immediately, so m_current still holds
+    //   the PREVIOUS frame until the callback lands. Saving right after an
+    //   edit therefore wrote stale pixels (audit 05-03).
+    //
+    //   The layer stack is the single source of truth for the pixels
+    //   (docs/CONTRACTS.md 7.6.1); the cache is just a cache. A save must
+    //   read the truth, so render it synchronously here.
+    out = m_host->layerStack() ? m_host->layerStack()->render() : cv::Mat();
+    if (out.empty()) {
+        // No layer stack (or it rendered nothing) -- fall back to the cache.
+        out = m_host->currentImage();
+    }
     if (out.empty()) return false;
     auto* text = m_host->textOverlay();
     if (!text) return true;

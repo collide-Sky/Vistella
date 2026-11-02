@@ -23,14 +23,11 @@
 #include "imagewindow/AdjustmentPanel.h"
 #include "mediators/DialogMediator.h"
 #include "dialogs/AdjustDialogBase.h"
-// RightPanelStack 3 dock (颜色/属性/图层) — 浮动在 imagewindow 右上角
-#include "docks/RightPanelStack.h"
 #include "docks/RightPanelDock.h"
 #include "docks/LayersDock.h"
 #include "docks/ChannelPathPanel.h"
 #include "docks/PropertiesDock.h"
 #include "docks/HistoryDock.h"
-#include "docks/ColorDock.h"  // RightPanelDock connectors
 #include "tools/Brush.h"      // P6: dynamic_cast to setPaintColor
 // LayerPanel 实例化 + 注入 LayersDock tab 0
 //   LayerPanel 信号接通需要完整 LayerPanel.h + LayerCommand.h 定义
@@ -413,8 +410,16 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   both setters, so the chain terminates after the first round.
     // ColorDock moved into VColorPage ->
     //   access via colorPage()->inner() (the underlying ColorTab widget).
+    // M1-8: the document's colour state.
+    //   One state per document. The ColorTab (right panel) becomes a
+    //   view over it; MainWindow binds the LeftToolBar (left toolbar) to
+    //   the ACTIVE document's state.
+    m_colorState = new vistella::ColorState(this);
+
     if (auto* colorPage = m_rightDock->colorPage()) {
         if (auto* colorTab = colorPage->inner()) {
+            // The panel renders the state; the state is the truth.
+            colorTab->setColorState(m_colorState);
             connect(colorTab, &docks::ColorTab::foregroundColorChanged,
                     this, &ImageWindow::onForegroundColorChanged);
         }
@@ -551,11 +556,25 @@ ImageWindow::ImageWindow(QWidget *parent)
     // 兜底: 文字 item 都不锁双击 (启动时非涂抹模式)
     for (auto *ti : m_textCtrl->textItems()) { if (ti) ti->setBlockDoubleClickEdit(false); }
 
-    // 撤销栈
-    m_undoStack = new QUndoStack(this);
+    // The undo stack (M1-7: the UndoStack with a memory budget).
+    //   setUndoLimit(200) only bounds the COMMAND COUNT -- it knows
+    //   nothing about the memory. One stroke on a 24 MP image used to
+    //   store a full copy of the layer = 288 MB, so 100 strokes = 28 GB
+    //   -- the process is killed by the OS long before the command count
+    //   limit is reached. That is why there is an extra byte budget: when
+    //   it is exceeded the oldest commands are dropped from the bottom.
+    //   The budget is set to about 4 GB for a 24 MP document (the audit
+    //   acceptance criterion: 100 steps stay below 4 GB).
+    // Dropping the old commands shifts every stack index down -> the
+    // "saved" marker has to move with them, otherwise the document's
+    // dirty state becomes wrong.
+    m_undoStack = new vistella::UndoStack(this);
     m_undoStack->setUndoLimit(200);
+    m_undoStack->setMemoryBudgetBytes(4ull * 1024ull * 1024ull * 1024ull);
     m_savedIndex = 0;
     connect(m_undoStack, &QUndoStack::indexChanged, this, &ImageWindow::onStackChanged);
+    connect(m_undoStack, &vistella::UndoStack::indexShifted, this,
+            [this](int count) { m_savedIndex -= count; });
     // 同步主窗口的 撤销/重做 action: 用 undoStack 的 canUndo/canRedo 状态
     // 主窗口在 onUndo/onRedo 里直接调 m_undoStack->undo/redo
 
@@ -2687,14 +2706,17 @@ void ImageWindow::onCaptureRequested(int kind)
 
 void ImageWindow::onForegroundColorChanged(const QColor& c)
 {
-    // P6: Color dock foreground change -> push into the active painting tool.
-    //   Brush has setPaintColor(); dynamic_cast is fine because only Brush /
-    //   Pencil / similar paint tools carry m_paintColor. Move / Crop / Text
-    //   etc. ignore foreground color (matches PS behavior).
-    if (!m_ctx) return;
-    if (auto* brush = dynamic_cast<tools::Brush*>(m_ctx->currentState())) {
-        brush->setPaintColor(c);
-    }
+    // M1-8: the colour goes into the state, and the state notifies
+    //   everyone that needs it.
+    //   The old code pushed the colour into the ACTIVE Brush through a
+    //   dynamic_cast. That had two holes:
+    //     - the Brush is destroyed and recreated on every tool switch,
+    //       so a colour set while another tool was active was lost, and
+    //     - the colour panel was the only source; the toolbar swatch
+    //       never reached it (the connect was dead).
+    //   Now there is one state per document and both the panel and the
+    //   toolbar write into it.
+    if (m_colorState) m_colorState->setForegroundColor(c);
 }
 
 void ImageWindow::onSaveSelectionRequested()

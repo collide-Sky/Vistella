@@ -18,6 +18,7 @@
 #include "TransformBox.h"
 
 #include <opencv2/core.hpp>
+#include "../UndoStack.h"
 #include <QUndoCommand>
 #include <QPointer>
 
@@ -25,7 +26,8 @@ class ImageWindow;
 
 namespace transform {
 
-class TransformCommand : public QUndoCommand
+class TransformCommand : public QUndoCommand,
+                     public vistella::IUndoMemoryFootprint
 {
 public:
     // 简单构造: before / after box 状态 + cv::Mat 像素
@@ -43,6 +45,15 @@ public:
                      const QString& text = QStringLiteral("变换"));
 
     void redo() override;
+    // M1-7: bytes held by this command.
+    size_t memoryFootprint() const override {
+        return matBytes(m_beforeMat) + matBytes(m_afterMat);
+    }
+
+    static size_t matBytes(const cv::Mat& m) {
+        if (m.empty()) return 0;
+        return static_cast<size_t>(m.total()) * static_cast<size_t>(m.elemSize());
+    }
     void undo() override;
 
     // 合并多个微调 (拖动过程中合并, 不每像素都 push command)

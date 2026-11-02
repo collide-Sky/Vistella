@@ -19,6 +19,7 @@
 #include <QSlider>
 #include <QVBoxLayout>
 #include <QWidget>
+#include "../selection/SelectionCommand.h"
 
 namespace tools {
 
@@ -69,7 +70,17 @@ void Lasso::onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF& sce
         //   button state). Modifier keys (Shift/Alt) still override when held.
         mode = m_selectionMode;
     }
+    // M1-7: the gesture is undoable.
+    //   Capture the mask BEFORE the change, apply the change, then push
+    //   the command with the after-state. The command restores the
+    //   states verbatim, so redo is idempotent.
+    const QImage before = sel->mask();
     sel->setMask(mask, mode);
+    const QImage after = sel->mask();
+    if (auto* stack = host->undoStack()) {
+        stack->push(selection::SelectionCommand::makeSetMask(
+            sel, before, after, QStringLiteral("Lasso select")));
+    }
     LOG_INFO("[Lasso] onMouseRelease: mask={}x{} mode={}",
              mask.width(), mask.height(), static_cast<int>(mode));
 }

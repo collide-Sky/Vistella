@@ -2,6 +2,7 @@
 
 #include <QPointer>
 #include <QString>
+#include "../UndoStack.h"
 #include <QUndoCommand>
 #include <opencv2/core.hpp>
 
@@ -16,12 +17,26 @@ namespace tools {
 // the canvas repaints.
 //
 // One stroke == one undo step (not per dab).
-class MaskBrushCommand : public QUndoCommand {
+class MaskBrushCommand : public QUndoCommand,
+                     public vistella::IUndoMemoryFootprint,
+                     public vistella::IUndoFirstRedo {
+    // M1-7: see LayerCommand::consumeFirstRedo().
+    void consumeFirstRedo() override { m_firstRedo = false; }
+
 public:
     MaskBrushCommand(ImageWindow* host, int layerIndex,
                     cv::Mat before, cv::Mat after,
                     QUndoCommand* parent = nullptr);
 
+    // M1-7: bytes held by this command.
+    size_t memoryFootprint() const override {
+        return matBytes(m_before) + matBytes(m_after);
+    }
+
+    static size_t matBytes(const cv::Mat& m) {
+        if (m.empty()) return 0;
+        return static_cast<size_t>(m.total()) * static_cast<size_t>(m.elemSize());
+    }
     void undo() override;
     void redo() override;
 

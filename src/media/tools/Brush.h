@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "../ColorState.h"
+
 #include "ToolState.h"
 
 #include <QColor>
@@ -54,9 +56,21 @@ public:
     void setPreset(const brushes::BrushPreset &p);
     const brushes::BrushPreset& preset() const { return m_preset; }
 
-    // Paint color (foreground)
+    // Paint color (foreground).
+    //
+    //   M1-8: the colour lives in the document's ColorState. The Brush
+    //   reads it from there when it stamps, so it can never go stale
+    //   (the Brush instance is destroyed and recreated on every tool
+    //   switch, which used to reset the paint colour to black).
+    //
+    //   setPaintColor / paintColor are kept for the options panel, which
+    //   shows the current colour; they write into the state when one is
+    //   bound.
     void setPaintColor(const QColor &c);
     QColor paintColor() const;
+
+    // Bind the brush to the document's colour state.
+    void setColorState(vistella::ColorState* state);
 
     // Q4.2.3: blend mode (for ModeSelectorBar buttons).
     //   0=Normal (default), 1=Multiply, 2=Screen. PS standard top modes.
@@ -74,7 +88,12 @@ private:
     brushes::BrushPreset     m_preset;
     brushes::PressureCurve*   m_pressureCurve;
     brushes::StrokeSmoother* m_smoother;
+
+    // M1-8: the paint colour comes from the document's ColorState.
+    //   m_paintColor is only the fallback for a brush that is not bound
+    //   to a state (e.g. in a unit test).
     QColor                    m_paintColor;
+    vistella::ColorState*     m_colorState = nullptr;
 
     // Q4.2.3: blend mode (0=Normal default, 1=Multiply, 2=Screen).
     int                       m_blendMode = 0;

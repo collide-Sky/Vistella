@@ -15,11 +15,16 @@
 
 | 阶段 | 状态 | 提交 |
 |---|---|---|
-| M0 止血（9 项） | ✅ 完成并推送 | `c6d5c4f` |
+| M0 止血（9 项） | ✅ 完成并推送（9/9 逐条核对源码确认） | `c6d5c4f` |
 | M1-1 像素真相收敛 | ✅ 完成并推送 | `cb0c813` |
 | M1-2 图层身份 | ✅ 完成并推送 | `0d8add7` |
-| **M1-3 alpha/蒙版** | 🔧 **进行中（工作区未提交）** | — |
-| M1-4 ~ M1-9 | ⬜ 未开始 | — |
+| **M1-3 alpha/蒙版** | ✅ 完成并推送 | `e8e2d7a` / `4f509b0` |
+| M1-4 保存链路 | ✅ 完成（本轮） | 待提交 |
+| M1-5 16bit/通道格式 | ✅ 完成（审计核对） | `e8e2d7a` |
+| M1-6 工具写图层 | ✅ 完成（本轮） | 待提交 |
+| M1-7 撤销内存 | ✅ 完成（本轮） | 待提交 |
+| M1-8 颜色单一真源 | ✅ 完成（本轮） | 待提交 |
+| M1-9 预览缓存 | ✅ 完成（本轮） | 待提交 |
 | M2 / M3 | ⬜ 未开始 | — |
 
 ---
@@ -121,7 +126,136 @@
 
 ## 4. 剩余工作清单（按顺序做）
 
-### 4.1 【阻塞】5 个测试文件编译不过
+### 4.1 M1-4 / M1-7 / M1-8 本轮完工记录（2026-11-02）
+
+本节是本轮（M1-4 / M1-7 / M1-8）的实现记录。
+上面的 4.1（M1-3 的阻塞清单）已全部解决，保留原文作为历史记录。
+
+---
+
+#### 4.1.1 M1-4 保存链路
+
+| 修改 | 文件 | 内容 |
+|---|---|---|
+| 原子写 | `src/media/imageprocessor.cpp` | `saveImage()` 改用 `QSaveFile`（写失败不破坏旧文件）；新增匿名 namespace `formatFromPath()` 做扩展名 → 格式映射（png/jpg/jpeg/jpe/tif/tiff/webp/bmp/gif），映射不了返回 false + 错误信息 |
+| 保存前同步渲染 | `src/media/imagewindow/ImageIOController.cpp` | `buildSaveComposite()` 改用 `m_host->layerStack()->render()` **同步**渲染（空则回落 `currentImage()`），不再读可能过期的 `m_current` 缓存 |
+| 原子写 | `src/ui/docwindow.cpp` | `saveAsFile()` 改用 `QSaveFile` + 检查 `QTextStream::flush()` 状态 + 检查 `commit()`，不再用 `QFile`+`Truncate` |
+
+> **为什么不能用 `rebuildCurrentCache()`**：它在 >1MP 的路径上是**异步**的，
+> 调用后缓存仍是旧帧。保存必须用同步的 `layerStack()->render()`。
+
+---
+
+#### 4.1.2 M1-7 撤销内存
+
+**(a) ROI 补丁** —— `src/media/imageworker/layers/LayerCommand.h/.cpp`
+
+`SetLayerImage` 不再存两份全图 clone，只存**变动区域的补丁**：
+
+- 新增 `cv::Rect m_roi`
+- 新增静态 `diffRect(before, after)`（手写行列扫描算包围盒，
+  避免 `cv::findNonZero` 的分配 + 缺 `imgproc.hpp`）
+- 新增 `makeSetLayerImagePatch()` 工厂
+- `applyState` 用 `copyTo` 写回 ROI（ROI 与图层求交，防越界）
+
+> **ROI 在 push 时算，而不是让每个工具累加 dirty rect** ——
+> `ImageWindow::pushLayerImageEdit()` 是所有工具编辑的单一喽嘘点，一处实现覆盖全部工具。
+
+**(b) 字节预算** —— `src/media/UndoStack.h/.cpp`（新文件）
+
+- `UndoStack : QUndoStack` + `IUndoMemoryFootprint` 接口
+- `push()` 影子方法统计字节；超预算从**栈底**丢旧命令；发 `indexShifted(int)` 信号
+- `setMemoryBudgetBytes()` / `memoryUsedBytes()` / `evictedCommandCount()`
+- 预算默认 **4GB**（对齐审计验收“24MP 文档 100 步操作内存 < 4GB”）
+- 8 个命令实现 `IUndoMemoryFootprint`：`LayerCommand` / `ImageEditCommand` / `FilterCommand` /
+  `LiquifyCommand` / `TransformCommand` / `LayerMaskCommand` / `MaskBrushCommand` / `SelectionCommand`
+
+> **`ImageWindow::undoStack()` 的返回类型必须是 `UndoStack*`**：
+> `QUndoStack::push()` 非 virtual，返回 `QUndoStack*` 会绕过字节预算。
+
+**(c) 选区手势可撤销** —— `src/media/selection/SelectionCommand.h/.cpp`
+
+- 新增 `Op::SetMask` + 静态 `makeSetMask(model, before, after, text)`
+- `redo()` 对 SetMask **原样恢复 after**（顺带修掉旧 op 版重复 redo 会双重反选的隐性 bug）
+- `RectSelect` / `Lasso` / `MagicWand` 三个工具接线：捕获 before mask → 应用 → 捕获 after → push
+
+---
+
+#### 4.1.3 M1-8 颜色单一真源（Option B）
+
+新增 `src/media/ColorState.h/.cpp`：`ColorState : QObject`，持有 fg / bg，
+发 `foregroundColorChanged` / `backgroundColorChanged`，颜色相同时不发信号。
+
+| 角色 | 新身份 | 文件 |
+|---|---|---|
+| `ImageWindow` | **唯一所有者**（每张图一个 `ColorState`） | `src/media/imagewindow.h/.cpp` |
+| `ColorTab` | 视图（推入 state，只重绘不 emit） | `src/media/docks/ColorTab.h/.cpp` |
+| `LeftToolBar` | 视图（同上） | `src/media/tools/LeftToolBar.h/.cpp` |
+| `Brush` | **落笔时实时读 state**（不再自存副本） | `src/media/tools/Brush.h/.cpp` |
+| `EyedropperTool` | 取色后写入 state | `src/media/tools/EyedropperTool.cpp` |
+
+> **为什么选 Option B（颜色跟文档）**：每张图有自己的前景/背景色，
+> 像 Photoshop。工具栏是全局的，在 `mainwindow.cpp` 的 `bindLeftDockWidgets()` 里
+> 重绑到当前图的 state。
+>
+> **这同时修掉了“切工具后画笔回黑”的洞**（Brush 实例每次切工具都重建，
+> `m_paintColor` 被重置为黑字）。
+
+**死代码岛清理**（用户已拍板）：删除 `ColorDock` / `RightPanelStack` /
+`RightPanelDock::colorDock()` 以及对应的 3 个测试文件（走 mavis-trash）。
+`PropertiesDock` / `LayersDock` **仍被 `VPages.h` 使用，不可删**。
+
+---
+
+#### 4.1.4 退离进程中发现的一个真 bug（不是测试期望值问题）
+
+**`QUndoStack::setUndoLimit()` 在非空栈上是 no-op（Qt 6）**。
+
+```cpp
+// qtbase/src/gui/util/qundostack.cpp:1243  (Qt 6.11.1)
+void QUndoStack::setUndoLimit(int limit)
+{
+    Q_D(QUndoStack);
+    if (Q_UNLIKELY(!d->command_list.isEmpty())) {
+        qWarning("QUndoStack::setUndoLimit(): an undo limit can only be set when the stack is empty");
+        return;                      // 静默不做事
+    }
+    ...
+}
+```
+
+原实现用 `setUndoLimit(limit - 1)` 从栈底丢命令 —— Qt 只打一条 warning 就返回，
+**命令根本没被删掉**，而我方的字节计数却照旧减少 → 计数与真实栈失配。
+
+**最终实现（重建式淘汰）**：
+
+1. `QUndoStack` 里只放轻量的 `ReplayGuard` 包装（转发 undo/redo + 转发 footprint）。
+   **guard 拥有真实命令** —— 只有一个 owner，才不会释放重复、也不会留悬空指针。
+   `UndoStack` 只保留一份账本（`m_inners` / `m_footprints`）。
+2. 淘汰时：把所有 guard 标记 `setObsolete(true)`，然后 `undo()` 到空 ——
+   **Qt 对 obsolete 命令只删不 `undo()`，因此文档一点都没被碰**（已用 probe 实测验证）。
+3. 栈空了才能 `setUndoLimit()` —— 这是 Qt 唯一接受新 limit 的时机。
+4. 存活者的旧 guard 先 **detach**（不释放真实命令），然后存活者以 **replay 模式**
+   （首个 redo 被吞掉）推回去 —— 文档不被重放。
+5. 被淘汰的真实命令随它的 guard 一起消毁 —— **这才是真正释放内存的地方**。
+6. 下标恢复：`index()` 计的是“已应用的命令数”。被淘汰的命令在**栈底**
+   （也已应用），删掉它并不改变已应用数量 → 下标保持不变（封顶到新栈大小）。
+
+> **还有一个 Qt 自己的行为要注意**：`QUndoStack::push()` 会**删掉当前下标之上的命令**
+> （“重做尾”）。即使用户刚 undo 过几步就推新命令，那几步就永远丢了 ——
+> 这是 Qt 的行为，不是本项目的选择。**但账本必须跟上**：
+> 被丢掉的命令必须也从字节计数里消失（否则栈会误以为自己超预算）。
+
+为此新增 `IUndoFirstRedo::consumeFirstRedo()` 接口，
+`LayerCommand` / `LayerMaskCommand` / `MaskBrushCommand` 实现它（只清标志，不应用任何状态），
+否则重建后的下一次真实 redo 会被吞掉 → 重做静默失效。
+
+---
+
+#### 4.1.5 新增测试
+
+`tests/tst_M1_4_7_8_Save.cpp`（17 个用例），已在 `tests/CMakeLists.txt` 尾部注册。
+
 
 | 文件 | 错误数 | 怎么改 |
 |---|---|---|

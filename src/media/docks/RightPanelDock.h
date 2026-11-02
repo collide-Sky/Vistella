@@ -53,7 +53,6 @@ namespace docks {
 
 // Forward declared. The old widget classes are kept around as deprecated
 // shims for callers that haven't migrated yet.
-class ColorDock;
 class PropertiesDock;
 class LayersDock;
 class ChannelPathPanel;
@@ -127,8 +126,11 @@ public:
     //
     // Remove in a future commit once all callers have been migrated.
     // -----------------------------------------------------------------
-    // TODO(P8.5): this deprecated accessor returns nullptr, so the toolbar foreground/background chain never connects -- see docs/DEBT.md#A-COLORDOCK
-    ColorDock*        colorDock()        const;
+    // M1-8: colorDock() is GONE. It was a deprecated accessor returning
+    //   nullptr, and the connect that used it was therefore dead -- the
+    //   toolbar foreground/background chain never connected at all.
+    //   The colour now goes through the document's ColorState
+    //   (src/media/ColorState.h); the live panel is colorPage().
     PropertiesDock*   propertiesDock()   const;
     LayersDock*       layersDock()       const;
     ChannelPathPanel* channelPathPanel() const;

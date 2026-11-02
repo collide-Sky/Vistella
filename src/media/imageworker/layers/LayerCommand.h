@@ -47,11 +47,25 @@
 #include <QTransform>
 #include <QPointer>
 
+#include "../../UndoStack.h"
+
 namespace layers {
 
-class LayerCommand : public QUndoCommand
+class LayerCommand : public QUndoCommand,
+                     public vistella::IUndoMemoryFootprint,
+                     public vistella::IUndoFirstRedo
 {
 public:
+
+    // M1-7: the undo stack's eviction rebuild replays the surviving
+    // commands with their first redo swallowed, so the document is not
+    // touched. The command then has to forget that its first redo is
+    // still pending -- otherwise the next real redo would be
+    // swallowed too and the redo would silently do nothing.
+    //
+    // Clearing the flag applies nothing.
+    void consumeFirstRedo() override { m_firstRedo = false; }
+
     enum Op {
         Add, Remove, Move, Opacity, Visible, Locked, Linked,
         Blend, Rename, Merge, Group, Ungroup,
@@ -73,7 +87,8 @@ public:
         MoveSmartFilter,        // reorder (m_intVal=newSlot)
         SetSmartFilterEnabled,  // enable/disable (m_boolVal=old enabled)
         SetSmartFilterStrength, // strength (m_floatVal=old strength)
-        // 工具编辑: 替换某图层整层像素
+        // Tool edit: replaces the pixels of one layer
+        //   (M1-7: only the changed region is stored)
         //   m_oldMat = 编辑前的像素, m_newMat = 编辑后的像素
         SetLayerImage,
     };
@@ -169,15 +184,59 @@ public:
                                                    bool oldEnabled);
     static LayerCommand* makeSetSmartFilterStrength(LayerStack *stack, int filterIdx,
                                                     double oldStrength);
-    // 工具编辑: 替换某图层整层像素 (画笔/修复/红眼 等)
-    //   before: 编辑前的图层像素, after: 编辑后的图层像素
-    //   调用方自己把 after 应用到图层上, 再 push 这条命令;
+    // Tool edit: replaces the pixels of one layer
+    //   (M1-7: only the changed region is stored)
+    //   before: the layer pixels before the edit, after: after the edit.
     //   undo 写回 before, redo 写回 after.
+    //
+    //   M1-7: the command does NOT keep two full-layer clones any more. It
+    //   keeps only the PATCH of the region that actually changed:
+    //     - a 24 MP layer used to cost 2 x 144 MB = 288 MB per stroke,
+    //     - now it costs the bounding box of the stroke.
+    //   The ROI is computed here (a full-image diff) instead of being
+    //   tracked by each tool, because every tool edit goes through this
+    //   one factory.
+    //
+    //   When before and after are identical the ROI is empty and the
+    //   command stores nothing -- undo/redo are then no-ops.
     static LayerCommand* makeSetLayerImage(LayerStack *stack, int index,
                                            const cv::Mat &before,
                                            const cv::Mat &after,
                                            const QString &text);
 
+    // Same, but the caller supplies the already-cropped patches and the
+    // region they belong to. Used when the caller knows the changed
+    // region (or wants to avoid the diff).
+    static LayerCommand* makeSetLayerImagePatch(LayerStack *stack, int index,
+                                                const cv::Mat &beforePatch,
+                                                const cv::Mat &afterPatch,
+                                                const cv::Rect &roi,
+                                                const QString &text);
+
+    // The bounding box of the pixels that differ between before and
+    // after. Empty when the two are identical (or not comparable).
+    static cv::Rect diffRect(const cv::Mat &before, const cv::Mat &after);
+
+    // M1-7: bytes held by this command (the undo stack budgets on this).
+    size_t memoryFootprint() const override {
+        size_t bytes = matBytes(m_oldMat) + matBytes(m_newMat);
+        // Add / Remove / Merge hold whole Layer objects, and a Layer
+        // carries its own cv::Mat.
+        bytes += matBytes(m_layer.image);
+        bytes += matBytes(m_mergeBefore.image);
+        bytes += matBytes(m_mergeAfter.image);
+        bytes += matBytes(m_mergeUpper.image);
+        bytes += matBytes(m_afterLayer.image);
+        for (const auto& child : m_flattenChildren) {
+            if (child) bytes += matBytes(child->image);
+        }
+        return bytes;
+    }
+
+    static size_t matBytes(const cv::Mat& m) {
+        if (m.empty()) return 0;
+        return static_cast<size_t>(m.total()) * static_cast<size_t>(m.elemSize());
+    }
     void undo() override;
     void redo() override;
 
@@ -220,8 +279,15 @@ private:
     QColor      m_oldColor;          // Phase 3: SetTextFont old color
     cv::Mat     m_oldMat;            // Phase 3: SetAdjustmentLut old LUT
                                     // P0-3.3: 同时作 "before image 快照" (跟 host 一起用)
+                                    // M1-7: for SetLayerImage this is the BEFORE PATCH of m_roi,
+                                    //        not a full layer.
     cv::Mat     m_newMat;            // P0-3.3: "after image 快照" (仅 host 模式用)
                                     // Also used for the new LUT of SetAdjustmentLut
+                                    // M1-7: for SetLayerImage this is the AFTER PATCH of m_roi,
+                                    //        not a full layer.
+    // M1-7: the region of the layer that m_oldMat / m_newMat cover.
+    //   Empty = the whole layer (legacy full-image behaviour).
+    cv::Rect    m_roi;
 
     // ---- after 状态 (新值) ----
     //   构造时由 captureAfter() 从图层上读出, redo 时原样写回.
