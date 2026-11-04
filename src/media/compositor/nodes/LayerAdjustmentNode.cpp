@@ -31,6 +31,19 @@ LayerAdjustmentNode::LayerAdjustmentNode(CompositorNode::NodeId canvas,
                   && m_lut.type() == CV_8U;
 }
 
+void LayerAdjustmentNode::setAdjustmentParams(const layers::AdjustmentParams& params)
+{
+    m_params = params;
+}
+
+void LayerAdjustmentNode::setChannelLuts(const QVector<cv::Mat>& luts)
+{
+    m_channelLuts.clear();
+    for (const cv::Mat& m : luts) {
+        m_channelLuts.push_back(m.empty() ? cv::Mat() : m.clone());
+    }
+}
+
 QList<CompositorNode::NodeId> LayerAdjustmentNode::inputNodes() const
 {
     return { m_canvas };
@@ -50,13 +63,24 @@ cv::Mat LayerAdjustmentNode::compute(int tileX, int tileY,
 
     // Nothing to apply: pass the canvas through untouched, matching the
     // legacy branch that `continue`s when the LUT is unusable.
-    if (!m_hasUsableLut) return canvas;
+    //
+    //   M2-6b: a per-pixel transform (HSL / B&W / ChannelMixer) takes
+    //   precedence over the LUT, because those adjustments depend on all
+    //   three channels of a pixel and cannot be a 1D table.
+    const bool hasTransform = m_params.kind != layers::AdjustKind::Lut;
+    if (!hasTransform && !m_hasUsableLut) return canvas;
 
-    // The LUT only touches the colour channels -- running the alpha
-    // through the LUT as well would scramble the canvas transparency.
+    // The adjustment only touches the colour channels -- running the
+    // alpha through it as well would scramble the canvas transparency.
     cv::Mat bgr, alpha, adjustedBgr, adjusted;
     layers::splitBgra(canvas, bgr, alpha);
-    cv::LUT(bgr, m_lut, adjustedBgr);
+    bool changed = false;
+    if (hasTransform) {
+        changed = layers::applyAdjustmentTransform(bgr, m_params, adjustedBgr);
+    } else {
+        changed = layers::applyChannelLuts(bgr, m_lut, m_channelLuts, adjustedBgr);
+    }
+    if (!changed) return canvas;
     std::vector<cv::Mat> ch;
     cv::split(adjustedBgr, ch);
     ch.push_back(alpha);

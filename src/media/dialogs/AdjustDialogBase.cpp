@@ -7,6 +7,7 @@
 
 #include <QDialogButtonBox>
 #include <QPushButton>
+#include <QShowEvent>
 #include <QVBoxLayout>
 
 namespace dialogs {
@@ -66,14 +67,55 @@ void AdjustDialogBase::updateParam(const QString& key, const QVariant& value)
 
 void AdjustDialogBase::triggerPreview()
 {
+    // No preview before the dialog was shown.
+    //
+    // setInitialArgs() in the constructor calls setValue() on the sliders, which fires
+    // valueChanged -> onSliderChanged -> triggerPreview(). At that moment the dialog
+    // is not visible yet and the host has no baseline snapshot -- a preview could not be rolled back.
+    // So nothing is emitted before the first showEvent.
+    if (!m_previewArmed) {
+        LOG_DEBUG("[AdjustDialog] preview suppressed (not armed yet)");
+        return;
+    }
     LOG_DEBUG("[AdjustDialog] preview: {}", m_args.size());
+    // Start the session before the first real preview, so the host can take the baseline.
+    startPreviewSession();
     emit preview(m_args);
+}
+
+void AdjustDialogBase::showEvent(QShowEvent* event)
+{
+    QDialog::showEvent(event);
+    // Arm the preview after the first show.
+    if (!m_previewArmed) {
+        m_previewArmed = true;
+        LOG_DEBUG("[AdjustDialog] preview armed");
+    }
+}
+
+void AdjustDialogBase::startPreviewSession()
+{
+    if (m_sessionStarted && !m_sessionCommitted) return;
+    m_sessionStarted   = true;
+    m_sessionCommitted = false;
+    emit previewSessionStarted();
+}
+
+void AdjustDialogBase::endPreviewSession(bool committed)
+{
+    if (!m_sessionStarted) return;
+    m_sessionStarted   = false;
+    m_sessionCommitted = committed;
+    emit previewSessionEnded(committed);
 }
 
 void AdjustDialogBase::applyAdjust()
 {
     // 子类 override, 默认 no-op
     LOG_INFO("[AdjustDialog] applyAdjust: {}", m_args.size());
+    // Make sure the session is running before the commit (the user may not have touched any control,
+    // and may just press Apply / OK).
+    startPreviewSession();
     emit applied(m_args);
 }
 
@@ -82,20 +124,39 @@ void AdjustDialogBase::onApplyClicked()
     m_modified = false;
     if (m_applyBtn) m_applyBtn->setEnabled(false);
     applyAdjust();
+    // Apply: freeze the current state into ONE undo command, but do NOT end the session --
+    // the dialog stays open and the user can keep adjusting and previewing.
+    // The baseline becomes "the state that was just committed", so the next Cancel returns here.
+    endPreviewSession(/*committed=*/true);
 }
 
 void AdjustDialogBase::onAccepted()
 {
-    if (m_modified) {
-        applyAdjust();
-    }
     accept();
 }
 
 void AdjustDialogBase::onRejected()
 {
-    LOG_DEBUG("[AdjustDialog] cancelled");
     reject();
+}
+
+void AdjustDialogBase::accept()
+{
+    if (m_modified) {
+        applyAdjust();
+    }
+    // OK: commit and end the session. The host freezes the previewed state into one undo command.
+    endPreviewSession(/*committed=*/true);
+    QDialog::accept();
+}
+
+void AdjustDialogBase::reject()
+{
+    LOG_DEBUG("[AdjustDialog] cancelled");
+    // Cancel: first let the host restore the canvas to the state before the dialog opened (without leaving an undo entry),
+    // and only then close the dialog.
+    endPreviewSession(/*committed=*/false);
+    QDialog::reject();
 }
 
 } // namespace dialogs

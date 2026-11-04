@@ -7,6 +7,7 @@
 #include "ToolContext.h"
 #include "MagicWand.h"
 #include "Lasso.h"
+#include "RectSelect.h"
 #include "Crop.h"
 #include "Brush.h"
 #include "EyedropperTool.h"
@@ -220,6 +221,7 @@ void ModeSelectorBar::showPageForTool(mediators::ToolId id)
     switch (id) {
     case mediators::ToolId::MagicWand:
     case mediators::ToolId::Lasso:
+    case mediators::ToolId::RectSelect:
         idx = 0;
         break;
     case mediators::ToolId::Crop:
@@ -255,6 +257,12 @@ void ModeSelectorBar::refreshButtonsFromTool()
         if (!ls) return;
         QSignalBlocker block(m_pageSelection.group);
         const int mode = static_cast<int>(ls->selectionMode());
+        if (auto* btn = m_pageSelection.group->button(mode)) btn->setChecked(true);
+    } else if (m_currentTool == mediators::ToolId::RectSelect) {
+        auto* rs = dynamic_cast<RectSelect*>(tool);
+        if (!rs) return;
+        QSignalBlocker block(m_pageSelection.group);
+        const int mode = static_cast<int>(rs->selectionMode());
         if (auto* btn = m_pageSelection.group->button(mode)) btn->setChecked(true);
     } else if (m_currentTool == mediators::ToolId::Crop) {
         auto* cr = dynamic_cast<Crop*>(tool);
@@ -295,6 +303,9 @@ void ModeSelectorBar::onSelectionModeBtn(int idx)
     } else if (auto* ls = dynamic_cast<Lasso*>(tool)) {
         ls->setSelectionMode(mode);
         LOG_DEBUG("{} Lasso selectionMode -> {}", kLog, idx);
+    } else if (auto* rs = dynamic_cast<RectSelect*>(tool)) {
+        rs->setSelectionMode(mode);
+        LOG_DEBUG("{} RectSelect selectionMode -> {}", kLog, idx);
     }
 }
 

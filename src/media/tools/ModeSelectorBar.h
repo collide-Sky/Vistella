@@ -6,7 +6,8 @@
 // ImageOptionBar in left dock. Shows tool-specific mode buttons for
 // the 5 "mode-driven" tools (Crop/MagicWand/Lasso/Brush/Eyedropper):
 //
-//   MagicWand + Lasso: 4 selection-mode buttons (New/Add/Subtract/Intersect)
+//   MagicWand + Lasso + RectSelect:
+//                          4 selection-mode buttons (New/Add/Subtract/Intersect)
 //   Crop:              4 aspect-ratio buttons (Free/1:1/4:3/16:9)
 //   Brush:             3 blend-mode buttons (Normal/Multiply/Screen)
 //   Eyedropper:        4 sample-size buttons (Point/3x3/5x5/11x11)
@@ -47,7 +48,7 @@ public:
 private slots:
     void onToolChanged(mediators::ToolId id);
 
-    // Selection mode handlers (MagicWand + Lasso share)
+    // Selection mode handlers (MagicWand + Lasso + RectSelect share)
     void onSelectionModeBtn(int idx);  // 0..3 -> Replace/Add/Subtract/Intersect
 
     // Aspect ratio handlers (Crop)
@@ -68,14 +69,14 @@ private:
     // 文档级 weak ref: 文档销毁后自动置 null
     QPointer<ToolContext> m_ctx;
 
-    // 4 mode buttons per tool (selection mode shared between MagicWand + Lasso,
-    //   but each tool keeps its own button group + page).
+    // 4 mode buttons per tool (selection mode shared between MagicWand +
+    //   Lasso + RectSelect, but each tool keeps its own button group + page).
     struct Page {
         QWidget*     widget     = nullptr;
         QButtonGroup* group     = nullptr;
         QList<QToolButton*> buttons;
     };
-    Page m_pageSelection;  // MagicWand OR Lasso (mutually exclusive tool selection)
+    Page m_pageSelection;  // MagicWand OR Lasso OR RectSelect (one tool at a time)
     Page m_pageCrop;
     Page m_pageBrush;
     Page m_pageEyedropper;

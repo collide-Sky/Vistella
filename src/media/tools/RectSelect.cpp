@@ -29,15 +29,35 @@ RectSelect::~RectSelect() = default;
 
 void RectSelect::onEnter(ImageWindow* host)
 {
-    Q_UNUSED(host);
-    LOG_DEBUG("[RectSelect] onEnter");
+    // Bind the document's selection model: it owns the persistent
+    //   selection mode, so the mode survives a tool switch.
+    m_selectionModel = host ? host->selectionModel() : nullptr;
+    LOG_DEBUG("[RectSelect] onEnter: selectionModel={}",
+              m_selectionModel ? "bound" : "none");
 }
 
 void RectSelect::onExit(ImageWindow* host)
 {
     Q_UNUSED(host);
     if (m_strategy) m_strategy->cancel();
+    m_selectionModel = nullptr;
     LOG_DEBUG("[RectSelect] onExit");
+}
+
+void RectSelect::setSelectionMode(selection::SelectionModel::Mode m)
+{
+    if (m_selectionModel) {
+        // The document model is the owner -- write straight into it.
+        m_selectionModel->setSelectionMode(m);
+        return;
+    }
+    m_detachedMode = m;
+}
+
+selection::SelectionModel::Mode RectSelect::selectionMode() const
+{
+    if (m_selectionModel) return m_selectionModel->selectionMode();
+    return m_detachedMode;
 }
 
 void RectSelect::onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)
@@ -63,6 +83,12 @@ void RectSelect::onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF
     if (!sel) return;
     // P0-4.6: modifier key mode (Shift/Alt/Shift+Alt)
     auto mode = selection::SelectionModel::modifierKeyToMode(e->modifiers());
+    if (mode == selection::SelectionModel::Mode::Replace) {
+        // No modifier held -> use the mode picked in the mode bar
+        //   (it lives in the document's SelectionModel, so it survives
+        //   a tool switch). Modifier keys still override when held.
+        mode = selectionMode();
+    }
     // M1-7: the gesture is undoable.
     //   Capture the mask BEFORE the change, apply the change, then push
     //   the command with the after-state. The command restores the

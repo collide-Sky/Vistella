@@ -39,6 +39,7 @@
 #include <QPainterPath>
 #include <QTransform>
 
+#include "AdjustmentTransform.h"
 #include "LayerMask.h"
 
 #include <memory>
@@ -126,6 +127,28 @@ struct Layer {
     // ---- Adjustment payload (kind == Adjustment, Phase 3) ----
     QString adjustmentType;       // "curves" / "levels" / "hueSat" / "colorBalance" / ...
     cv::Mat adjustmentLut;        // 256x1 CV_8U (curves / levels LUT)
+
+    // The per-pixel part of an adjustment (M2-6b).
+    //
+    //   A 1D LUT can only express a per-channel function, so it is
+    //   enough for Curves / Levels -- but NOT for HSL, BlackWhite or
+    //   ChannelMixer, which depend on all three channels of a pixel.
+    //   Those travel in adjustmentParams instead, and the render paths
+    //   pick whichever of the two is active:
+    //
+    //     adjustmentParams.kind == AdjustKind::Lut -> use adjustmentLut
+    //     any other kind                          -> use the transform
+    //
+    //   See AdjustmentTransform.h for the contract.
+    AdjustmentParams adjustmentParams;
+
+    // Per-channel LUTs for a channel-aware Curves edit (M2-6b).
+    //
+    //   Empty  -> adjustmentLut applies to all three channels.
+    //   3 luts -> entry 0 to blue, 1 to green, 2 to red (OpenCV BGR
+    //              order); the Curves dialog's R / G / B selector
+    //              produces this.
+    QVector<cv::Mat> adjustmentChannelLuts;
 
     // ---- SmartFilter payload (kind == SmartFilter, P1.4.4 2026-09-17) ----
     //   Sub-filter of a SmartObject layer. References parent via

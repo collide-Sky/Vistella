@@ -47,11 +47,14 @@ public:
     void setTolerance(int t);
     void setContiguous(bool c);
 
-    // Q4.2.3: selection mode (for ModeSelectorBar buttons).
-    //   Default Replace. Modifier keys at click time still override
+    // Q4.2.3 / M2-5: selection mode (for ModeSelectorBar buttons).
+    //   The persistent value lives in the document's SelectionModel --
+    //   see SelectionModel.h. These two are thin accessors onto it, so
+    //   the mode survives a tool switch (the tool instance does not).
+    //   Modifier keys at click time still override
     //   (Shift -> Add, Alt -> Subtract, Shift+Alt -> Intersect).
-    void setSelectionMode(selection::SelectionModel::Mode m) { m_selectionMode = m; }
-    selection::SelectionModel::Mode selectionMode() const { return m_selectionMode; }
+    void setSelectionMode(selection::SelectionModel::Mode m);
+    selection::SelectionModel::Mode selectionMode() const;
 
 private:
     std::unique_ptr<selection::MagicWandSelectionStrategy> m_strategy;
@@ -61,10 +64,14 @@ private:
     QCheckBox* m_contiguous = nullptr;
     QSpinBox*  m_sampleAll  = nullptr;   // P1 reserved (disabled)
 
-    // Q4.2.3: explicit selection mode (Replace/Add/Subtract/Intersect).
-    //   Modifier keys override per-click; this is the default mode
-    //   when user clicks without modifier.
-    selection::SelectionModel::Mode m_selectionMode = selection::SelectionModel::Mode::Replace;
+    // Weak view onto the document's selection model (bound in onEnter).
+    //   nullptr while the tool is detached from a document.
+    selection::SelectionModel* m_selectionModel = nullptr;
+
+    // Fallback used ONLY while no document is attached (unit tests and
+    //   tool previews). It is never read while a document is attached,
+    //   so there is only ever one live copy of the mode.
+    selection::SelectionModel::Mode m_detachedMode = selection::SelectionModel::Mode::Replace;
 };
 
 } // namespace tools

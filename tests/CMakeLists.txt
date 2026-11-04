@@ -272,3 +272,29 @@ add_vistella_test(tst_Path_OpenEditUndoRedoSave)
 
 # M1-4 / M1-7 / M1-8 (2026-11-02): save chain, undo memory, colour state
 add_vistella_test(tst_M1_4_7_8_Save)
+
+# M2-5 (2026-11-03): the selection system.
+#   feather keeps the grayscale ramp (no re-binarisation), the 4
+#   selection modes (regression guard), the persistent selection mode
+#   lives in the SelectionModel and survives a tool switch, RectSelect
+#   honours the mode, the marching-ants outline follows the real
+#   contour, and painting is clipped to the selection.
+add_vistella_test(tst_M2_5_Selection)
+
+# M2-6a (2026-11-03): real-time preview + cancel rollback for the 5
+#   standalone adjustment dialogs (Curves/Levels/HSL/B&W/ChannelMixer).
+#   Preview must not touch the undo stack, Cancel must restore the
+#   pre-dialog pixels byte for byte, OK must leave exactly ONE undo entry.
+add_vistella_test(tst_M2_6_AdjustPreview)
+
+# M2-6b (2026-11-03): the per-pixel adjustment transforms.
+#   HSL / B&W / ChannelMixer are per-pixel RGB transforms and cannot be
+#   expressed as a 1D LUT. The test uses RAMP images throughout: a
+#   uniform image hides channel and offset mistakes completely.
+add_vistella_test(tst_M2_6_AdjustTransform)
+
+# M2-6b (2026-11-03): the AdjustmentPanel wiring.
+#   The panel is the only thing that puts an adjustment into a document,
+#   so it must write the per-pixel payload (HSL / B&W / ChannelMixer)
+#   into the adjustment layer, and undo must restore it.
+add_vistella_test(tst_M2_6_AdjustWiring)

@@ -45,6 +45,21 @@ ImageWorkspace::ImageWorkspace(QWidget *parent)
 ImageWorkspace::~ImageWorkspace()
 {
     // m_imageWindow parent = this, 自动 delete
+    //   After releaseImageWindow() the window has been reparented to
+    //   nullptr, so nothing is deleted here.
+}
+
+ImageWindow *ImageWorkspace::releaseImageWindow()
+{
+    if (!m_imageWindow) return nullptr;
+    // Take the window out of the layout first: a widget that is still
+    // managed by a layout cannot be reparented safely.
+    if (auto *box = qobject_cast<QVBoxLayout*>(layout())) {
+        box->removeWidget(m_imageWindow);
+    }
+    // Detach from this workspace so the workspace destructor leaves it alone.
+    m_imageWindow->setParent(nullptr);
+    return m_imageWindow;
 }
 
 // ---- IWorkspace 接口 (全部转发到 m_imageWindow) ----

@@ -187,6 +187,10 @@ void tst_AdjustmentDialogs::levels_slider_emits_update()
 {
     LevelsAdjustDialog dlg(QVariantMap{});
     QSignalSpy previewSpy(&dlg, &AdjustDialogBase::preview);
+    // The preview is armed on the first show (M2-6a): the constructor's
+    // setInitialArgs() must not fire a preview the host cannot roll back.
+    dlg.show();
+    pump();
 
     QSlider* inLow = dlg.findChildren<QSlider*>().at(0);
     inLow->setValue(100);
@@ -235,6 +239,9 @@ void tst_AdjustmentDialogs::bw_slider_change_emits_update()
 {
     BlackWhiteAdjustDialog dlg(QVariantMap{});
     QSignalSpy previewSpy(&dlg, &AdjustDialogBase::preview);
+    // The preview is armed on the first show (M2-6a).
+    dlg.show();
+    pump();
 
     QSlider* s = dlg.findChildren<QSlider*>().at(0);   // reds
     s->setValue(150);
@@ -277,6 +284,9 @@ void tst_AdjustmentDialogs::channelMixer_slider_writes_args()
 {
     ChannelMixerAdjustDialog dlg(QVariantMap{});
     QSignalSpy previewSpy(&dlg, &AdjustDialogBase::preview);
+    // The preview is armed on the first show (M2-6a).
+    dlg.show();
+    pump();
 
     QSlider* s = dlg.findChildren<QSlider*>().at(0);   // m00 = rR
     s->setValue(-100);
@@ -292,6 +302,9 @@ void tst_AdjustmentDialogs::channelMixer_monochrome_emits_args()
     QCheckBox* box = dlg.findChild<QCheckBox*>();
     QVERIFY(box != nullptr);
     QSignalSpy previewSpy(&dlg, &AdjustDialogBase::preview);
+    // The preview is armed on the first show (M2-6a).
+    dlg.show();
+    pump();
 
     box->setChecked(true);
     pump();

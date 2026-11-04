@@ -392,6 +392,39 @@ ImageWindow::ImageWindow(QWidget *parent)
             this, [this](const QString& dialogId, QObject* dlgObj) {
         auto* dlg = qobject_cast<dialogs::AdjustDialogBase*>(dlgObj);
         if (!dlg) return;
+        // The lifecycle of the preview session (M2-6a).
+        //
+        //   previewSessionStarted  -> take the baseline snapshot
+        //   preview                -> write the adjustment, push no undo command (the canvas changes live)
+        //   previewSessionEnded(true)  -> freeze it into exactly one undo command
+        //   previewSessionEnded(false) -> restore the baseline (Cancel rolls back)
+        //
+        // Connected here and not in the DialogMediator: the DialogMediator only owns the
+        // creation / lifecycle of a dialog and does not know the AdjustmentPanel; the per window state
+        // (AdjustmentPanel + undo stack) lives in the ImageWindow, so this is the only place
+        // where both ends are reachable.
+        connect(dlg, &dialogs::AdjustDialogBase::previewSessionStarted, this,
+                [this, dialogId]() {
+            if (m_adjustmentPanel) {
+                m_adjustmentPanel->beginPreviewSession(dialogId);
+            }
+        });
+        connect(dlg, &dialogs::AdjustDialogBase::preview, this,
+                [this, dialogId](const QVariantMap& args) {
+            if (m_adjustmentPanel) {
+                m_adjustmentPanel->previewStandaloneParams(dialogId, args);
+            }
+        });
+        connect(dlg, &dialogs::AdjustDialogBase::previewSessionEnded, this,
+                [this, dialogId](bool committed) {
+            if (!m_adjustmentPanel) return;
+            if (committed) {
+                m_adjustmentPanel->commitPreviewSession(dialogId);
+            } else {
+                m_adjustmentPanel->cancelPreviewSession(dialogId);
+            }
+        });
+        // OK / Apply commits (the parameters land for good)
         connect(dlg, &dialogs::AdjustDialogBase::applied, this,
                 [this, dialogId](const QVariantMap& args) {
             if (m_adjustmentPanel) {
@@ -922,8 +955,106 @@ void ImageWindow::pushLayerImageEdit(int index, const cv::Mat &before,
     if (!m_layerStack || !m_undoStack || index < 0) return;
     if (before.empty() || after.empty()) return;
     if (before.size() != after.size() || before.type() != after.type()) return;
+
+    // M2-5: the active selection clips every pixel edit.
+    //   Outside the selection the pixels keep their pre-edit value, so a
+    //   stroke that crosses the selection boundary only changes what is
+    //   inside it (Photoshop: outside a selection is not editable).
+    //   The clipped image is what lands in the undo command AND back in
+    //   the layer, so undo/redo and the visible pixels agree.
+    cv::Mat clipped;
+    if (clipEditToSelection(before, after, clipped)) {
+        // Write the clipped pixels back into the layer in place, so the
+        //   buffer identity (and every pointer the tools hold) stays valid.
+        if (layers::LayerPtr l = m_layerStack->at(index)) {
+            if (!l->image.empty() && l->image.size() == clipped.size()
+                && l->image.type() == clipped.type()) {
+                clipped.copyTo(l->image);
+            } else {
+                l->image = clipped.clone();
+            }
+        }
+        m_undoStack->push(layers::LayerCommand::makeSetLayerImage(
+            m_layerStack.get(), index, before, clipped, text));
+        return;
+    }
+
     m_undoStack->push(layers::LayerCommand::makeSetLayerImage(
         m_layerStack.get(), index, before, after, text));
+}
+
+// M2-5: clip a pixel edit to the active selection.
+//
+//   The selection mask is 1-channel, 0..255, the same size as the image.
+//   For every pixel:
+//     alpha == 0   -> the pre-edit value is restored (outside the
+//                     selection)
+//     alpha == 255 -> the edited value is kept (inside the selection)
+//     0 < a < 255  -> the two are blended by a/255 (a feathered edge)
+//
+//   The mask is read row by row straight from the QImage bits, which is
+//   a plain byte lookup -- no per-pixel contains() call, no allocation
+//   per pixel.
+//
+//   Returns false when there is no selection (nothing to clip) or when
+//   the mask does not match the image size.
+bool ImageWindow::clipEditToSelection(const cv::Mat &before, const cv::Mat &after,
+                                       cv::Mat &out) const
+{
+    if (!m_selection) return false;
+    if (m_selection->isEmpty()) return false;
+    if (before.empty() || after.empty()) return false;
+    if (before.size() != after.size() || before.type() != after.type()) return false;
+
+    const QImage mask = m_selection->mask();
+    if (mask.isNull()) return false;
+    if (mask.width() != after.cols || mask.height() != after.rows) return false;
+
+    const int W = after.cols;
+    const int H = after.rows;
+    const int ch = after.channels();
+    const int maskStride = mask.bytesPerLine();
+
+    // Fast path: a fully opaque selection (every pixel 255) means the
+    //   edit is completely inside the selection -- nothing to clip.
+    bool fullyInside = true;
+    for (int y = 0; y < H && fullyInside; ++y) {
+        const uchar* mrow = mask.constScanLine(y);
+        for (int x = 0; x < W; ++x) {
+            if (mrow[x] != 255) { fullyInside = false; break; }
+        }
+    }
+    if (fullyInside) return false;
+
+    out = after.clone();
+    const int outStride = static_cast<int>(out.step);
+    const int beforeStride = static_cast<int>(before.step);
+
+    for (int y = 0; y < H; ++y) {
+        const uchar* mrow = mask.constScanLine(y);
+        uchar*       orow = out.ptr<uchar>(y);
+        const uchar* brow = before.ptr<uchar>(y);
+        for (int x = 0; x < W; ++x) {
+            const int a = mrow[x];
+            if (a == 255) continue;          // fully inside -> keep the edit
+            if (a == 0) {
+                // Fully outside -> restore the pre-edit pixels.
+                std::memcpy(orow + x * ch, brow + x * ch, static_cast<size_t>(ch));
+                continue;
+            }
+            // Feathered edge -> blend the two by the selection alpha.
+            //   The alpha byte of the layer is never painted (CP-07), so
+            //   only the colour channels are blended.
+            const int colourCh = (ch == 4) ? 3 : ch;
+            for (int c = 0; c < colourCh; ++c) {
+                const int b = brow[x * ch + c];
+                const int e = orow[x * ch + c];
+                const int v = b + (e - b) * a / 255;
+                orow[x * ch + c] = static_cast<uchar>(v < 0 ? 0 : (v > 255 ? 255 : v));
+            }
+        }
+    }
+    return true;
 }
 
 //  把 pixels 写进指定图层的像素缓冲, 通知图层栈 + 重绘画布.

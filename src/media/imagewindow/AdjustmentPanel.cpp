@@ -12,7 +12,7 @@
 #include "../imageworker/layers/LayerCommand.h"   // LayerCommand::SetAdjustmentLut
 #include "../imageworker/layers/LayerStack.h"     // P0-3.3: LayerStack* + selection()
 
-#include <QtWidgets>  // 一次性 include 所有 QtWidgets (QSlider/QLabel/QPushButton/QGridLayout/etc)
+#include <QtWidgets>  // one include for all the QtWidgets classes (QSlider/QLabel/QPushButton/QGridLayout/etc)
 
 #include <QPainter>
 #include <QPen>
@@ -29,8 +29,11 @@
 
 #include <opencv2/imgproc.hpp>
 
+#include <QUndoCommand>
+
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 // =============================================================
 // CurveEditor - 自定义 QWidget, 显示 + 编辑 8 控制点曲线
@@ -209,6 +212,46 @@ const char* kHslSatNames[8] = {
 const char* kBwColorNames[6] = {
     "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas"
 };
+
+// Two adjustment layers carry the same adjustment when their LUT, their
+// per-pixel payload and their per-channel LUTs all match.
+//
+// Used in two places:
+//   - the debounce commit, to tell whether the user really changed
+//     anything (a drag that ends on the old value must not push an
+//     undo command),
+//   - the preview session, to tell whether the dialog changed anything
+//     at all.
+bool sameAdjustmentState(const layers::Layer& a, const layers::Layer& b)
+{
+    if (a.adjustmentParams != b.adjustmentParams) return false;
+
+    const cv::Mat& la = a.adjustmentLut;
+    const cv::Mat& lb = b.adjustmentLut;
+    if (la.empty() != lb.empty()) return false;
+    if (!la.empty()) {
+        if (la.size() != lb.size() || la.type() != lb.type()) return false;
+        const size_t bytes = static_cast<size_t>(la.total())
+                           * static_cast<size_t>(la.elemSize());
+        if (std::memcmp(la.data, lb.data, bytes) != 0) return false;
+    }
+
+    if (a.adjustmentChannelLuts.size() != b.adjustmentChannelLuts.size()) {
+        return false;
+    }
+    for (int i = 0; i < a.adjustmentChannelLuts.size(); ++i) {
+        const cv::Mat& x = a.adjustmentChannelLuts.at(i);
+        const cv::Mat& y = b.adjustmentChannelLuts.at(i);
+        if (x.empty() != y.empty()) return false;
+        if (!x.empty()) {
+            if (x.size() != y.size() || x.type() != y.type()) return false;
+            const size_t bytes = static_cast<size_t>(x.total())
+                               * static_cast<size_t>(x.elemSize());
+            if (std::memcmp(x.data, y.data, bytes) != 0) return false;
+        }
+    }
+    return true;
+}
 }  // namespace
 
 AdjustmentPanel::AdjustmentPanel(QWidget* parent) : QWidget(parent)
@@ -662,15 +705,89 @@ cv::Mat AdjustmentPanel::buildCurrentTabLut() const
             return ImageProcessor::buildBlackWhiteLUT(m_bw.rgbMixer);
         }
         case kTabChannelMixer: {
-            // P0-3.1 暂时没有 3x3 矩阵版本, 用 cyanRed 通道 1D 近似
-            //   rR, rG, rB 平均近似 Red 通道强度
-            //   P0-3.x 加 3x3 版本
+            // The 1D LUT is only a fallback: the tab carries the real
+            // 3x3 matrix as a per-pixel payload (see buildTabParams),
+            // and the render path prefers the payload.
             const int avgR = (m_cm.rR + m_cm.rG + m_cm.rB) / 3;
             // avgR - 100 = 偏移, 200 中性 → 0 偏移
             return ImageProcessor::buildColorBalanceLUT(avgR - 100, 0, 0);
         }
     }
     return cv::Mat();
+}
+
+// M2-6b: the per-pixel payload of a tab.
+//
+// HSL / black & white / channel mixer are not per-channel functions:
+//   - HSL shifts the hue and the saturation PER COLOUR BAND, so the
+//     result of a pixel depends on the hue of THAT pixel,
+//   - black & white turns every pixel grey with six colour-weighted
+//     mixers,
+//   - the channel mixer is a 3x3 matrix over R / G / B.
+// None of them fits into a 256 entry table, so they travel as an
+// AdjustmentParams and the render path applies them per pixel.
+//
+// Curves and levels keep the 1D LUT path (kind == Lut).
+layers::AdjustmentParams AdjustmentPanel::buildTabParams(int tab) const
+{
+    layers::AdjustmentParams p;
+    switch (tab) {
+        case kTabHsl: {
+            p.kind = layers::AdjustKind::Hsl;
+            p.hueShifts = m_hsl.hueShifts;
+            p.satShifts  = m_hsl.satShifts;
+            p.lightness  = m_hsl.lightness;
+            break;
+        }
+        case kTabBlackWhite: {
+            p.kind = layers::AdjustKind::BlackWhite;
+            p.bwMixers = m_bw.rgbMixer;
+            break;
+        }
+        case kTabChannelMixer: {
+            p.kind = layers::AdjustKind::ChannelMixer;
+            // The rows are the output channels (red, green, blue) and
+            // the columns are the input channels (red, green, blue).
+            p.cmMatrix[0] = m_cm.rR; p.cmMatrix[1] = m_cm.rG; p.cmMatrix[2] = m_cm.rB;
+            p.cmMatrix[3] = m_cm.gR; p.cmMatrix[4] = m_cm.gG; p.cmMatrix[5] = m_cm.gB;
+            p.cmMatrix[6] = m_cm.bR; p.cmMatrix[7] = m_cm.bG; p.cmMatrix[8] = m_cm.bB;
+            p.cmMonochrome = m_cm.monochrome;
+            break;
+        }
+        default:
+            break;   // curves / levels: the 1D LUT path
+    }
+    return p;
+}
+
+// M2-6b: the per-channel LUTs of the curves tab.
+//
+// The Curves dialog has a channel selector, so the tab keeps one curve
+// per channel. A channel that was never edited follows the master
+// curve.
+//
+// The three LUTs are returned in the OpenCV BGR order (blue, green,
+// red), which is the order applyChannelLuts() expects.
+QVector<cv::Mat> AdjustmentPanel::buildTabChannelLuts(int tab) const
+{
+    QVector<cv::Mat> luts;
+    if (tab != kTabCurves) return luts;
+
+    const QPolygonF& red   = m_curves.redPoints;
+    const QPolygonF& green = m_curves.greenPoints;
+    const QPolygonF& blue  = m_curves.bluePoints;
+    if (red.isEmpty() && green.isEmpty() && blue.isEmpty()) {
+        return luts;   // master curve only
+    }
+
+    const QPolygonF& master = m_curves.controlPoints;
+    luts.push_back(ImageProcessor::buildCurvesLUT(
+        blue.isEmpty() ? master : blue));      // blue
+    luts.push_back(ImageProcessor::buildCurvesLUT(
+        green.isEmpty() ? master : green));    // green
+    luts.push_back(ImageProcessor::buildCurvesLUT(
+        red.isEmpty() ? master : red));        // red
+    return luts;
 }
 
 // =============================================================
@@ -686,13 +803,18 @@ cv::Mat AdjustmentPanel::buildCurrentTabLut() const
 void AdjustmentPanel::applyCurrentTab()
 {
     if (!m_host) return;
+    const int tab = m_currentTab;
     cv::Mat lut = buildCurrentTabLut();
-    if (lut.empty()) return;
+    const layers::AdjustmentParams params = buildTabParams(tab);
+    const QVector<cv::Mat> channelLuts = buildTabChannelLuts(tab);
 
     auto* stack = m_host->layerStack();
     if (!stack) return;
+    if (lut.empty() && params.kind == layers::AdjustKind::Lut
+        && channelLuts.isEmpty()) {
+        return;
+    }
 
-    const int tab = m_currentTab;
     int layerIdx = m_adjLayerIndex[tab];
     bool needCreate = false;
     if (layerIdx < 0 || layerIdx >= stack->count()
@@ -709,15 +831,27 @@ void AdjustmentPanel::applyCurrentTab()
         if (layerIdx < 0) return;
         m_adjLayerIndex[tab] = layerIdx;
         m_pendingLut[tab].release();
+        m_pendingValid[tab] = false;
+        m_pendingParams[tab] = layers::AdjustmentParams();
+        m_pendingChannelLuts[tab].clear();
     } else {
         auto l = stack->at(layerIdx);
-        //  debounce 窗口的起点: 记下改值之前的 LUT, 撤销时恢复它
-        if (m_pendingLut[tab].empty()) {
+        //  the start of the debounce window: remember the whole adjustment state from before the change, so the undo can restore it
+        if (!m_pendingValid[tab]) {
             m_pendingLut[tab] = l->adjustmentLut.empty() ? cv::Mat()
                                                           : l->adjustmentLut.clone();
+            m_pendingParams[tab] = l->adjustmentParams;
+            m_pendingChannelLuts[tab] = l->adjustmentChannelLuts;
+            m_pendingValid[tab] = true;
         }
         stack->setAdjustmentLut(layerIdx, lut);
     }
+
+    //  M2-6b: the per-pixel payload and the per-channel LUTs.
+    //  The render path prefers the payload over the LUT, so a tab that
+    //  carries one does not need its 1D LUT at all.
+    stack->setAdjustmentParams(layerIdx, params);
+    stack->setAdjustmentChannelLuts(layerIdx, channelLuts);
 
     //  重绘画布 (图层内容变了 -> 合成缓存失效 -> 重新渲染)
     m_host->refreshCanvasNow();
@@ -737,31 +871,45 @@ void AdjustmentPanel::commitUndoDebounced()
     auto* stack = m_host->layerStack();
     if (!stack) return;
     for (int tab = 0; tab < kTabCount; ++tab) {
-        if (m_pendingLut[tab].empty()) continue;
+        if (!m_pendingValid[tab]) continue;
         const int layerIdx = m_adjLayerIndex[tab];
         if (layerIdx < 0 || layerIdx >= stack->count()) {
             m_pendingLut[tab].release();
+            m_pendingValid[tab] = false;
+            m_pendingParams[tab] = layers::AdjustmentParams();
+            m_pendingChannelLuts[tab].clear();
             continue;
         }
         auto l = stack->at(layerIdx);
         if (!l) {
             m_pendingLut[tab].release();
+            m_pendingValid[tab] = false;
+            m_pendingParams[tab] = layers::AdjustmentParams();
+            m_pendingChannelLuts[tab].clear();
             continue;
         }
-        //  LUT 没变就不 push (用户没真改)
-        if (m_pendingLut[tab].size == l->adjustmentLut.size
-            && m_pendingLut[tab].type() == l->adjustmentLut.type()) {
-            const size_t bytes = m_pendingLut[tab].total() * m_pendingLut[tab].elemSize();
-            if (std::memcmp(m_pendingLut[tab].data, l->adjustmentLut.data, bytes) == 0) {
-                m_pendingLut[tab].release();
-                continue;
-            }
+        //  nothing changed -> no undo command (the user did not really change anything)
+        layers::Layer pending;
+        pending.adjustmentLut = m_pendingLut[tab].empty() ? cv::Mat()
+                                                          : m_pendingLut[tab].clone();
+        pending.adjustmentParams = m_pendingParams[tab];
+        pending.adjustmentChannelLuts = m_pendingChannelLuts[tab];
+        if (sameAdjustmentState(pending, *l)) {
+            m_pendingLut[tab].release();
+            m_pendingValid[tab] = false;
+            m_pendingParams[tab] = layers::AdjustmentParams();
+            m_pendingChannelLuts[tab].clear();
+            continue;
         }
-        //  撤销命令存的是"旧 LUT" —— 恢复它就等于恢复调整前的效果
-        auto* cmd = layers::LayerCommand::makeSetAdjustmentLut(
-            stack, layerIdx, m_pendingLut[tab]);
+        //  the undo command holds the OLD adjustment state -- restoring it restores the effect from before the adjustment
+        auto* cmd = layers::LayerCommand::makeSetAdjustmentState(
+            stack, layerIdx, m_pendingLut[tab], m_pendingParams[tab],
+            m_pendingChannelLuts[tab]);
         m_host->undoStack()->push(cmd);
         m_pendingLut[tab].release();
+        m_pendingValid[tab] = false;
+        m_pendingParams[tab] = layers::AdjustmentParams();
+        m_pendingChannelLuts[tab].clear();
     }
 }
 
@@ -783,17 +931,17 @@ void AdjustmentPanel::pushUndoCommand()
 void AdjustmentPanel::setStandaloneParams(const QString& dialogId, const QVariantMap& args)
 {
     if (dialogId == "Curves") {
-        applyCurvesFromArgs(args);
+        applyCurvesFromArgs(args, /*previewMode=*/false);
     } else if (dialogId == "Levels") {
-        applyLevelsFromArgs(args);
+        applyLevelsFromArgs(args, /*previewMode=*/false);
     } else if (dialogId == "B&W") {
-        applyBnWFromArgs(args);
+        applyBnWFromArgs(args, /*previewMode=*/false);
     } else if (dialogId == "ChannelMixer") {
-        applyChannelMixerFromArgs(args);
+        applyChannelMixerFromArgs(args, /*previewMode=*/false);
     } else if (dialogId == "HSL") {
         // HslAdjustDialog rewritten to use
         //   8 hue + 8 sat + 1 lightness (PS-compatible). Args land here.
-        applyHslFromArgs(args);
+        applyHslFromArgs(args, /*previewMode=*/false);
     } else {
         LOG_WARN("[AdjustmentPanel] setStandaloneParams unknown dialogId: {}",
                  dialogId.toStdString());
@@ -801,9 +949,15 @@ void AdjustmentPanel::setStandaloneParams(const QString& dialogId, const QVarian
     }
 }
 
-void AdjustmentPanel::applyCurvesFromArgs(const QVariantMap& args)
+void AdjustmentPanel::applyCurvesFromArgs(const QVariantMap& args, bool previewMode)
 {
     // {"channel": "RGB", "points": [{x,y}, ...]}
+    // M2-6b: switch the tab BEFORE the values go into the inline UI.
+    //   Setting a slider fires valueChanged, and the slider handler
+    //   calls applyCurrentTab() -- so the tab has to be the right one
+    //   already, otherwise the apply lands on the previous tab and
+    //   creates an adjustment layer of the wrong kind.
+    m_tabWidget->setCurrentIndex(kTabCurves);
     const QVariantList ptsVar = args.value("points").toList();
     QPolygonF pts;
     pts.reserve(ptsVar.size());
@@ -812,18 +966,40 @@ void AdjustmentPanel::applyCurvesFromArgs(const QVariantMap& args)
         pts << QPointF(pt.value("x").toDouble(), pt.value("y").toDouble());
     }
     if (pts.isEmpty()) pts = CurveEditor::defaultPoints();
-    m_curves.controlPoints = pts;
-    // Refresh inline UI
-    if (m_curvesEditor) m_curvesEditor->setControlPoints(pts);
+    // M2-6b: the dialog edits ONE channel at a time, so the curve goes
+    // into the slot of that channel. The inline editor always shows the
+    // master (RGB) curve.
+    const QString channel = args.value(QString("channel"),
+                                        QStringLiteral("RGB")).toString();
+    if (channel.compare(QStringLiteral("Red"), Qt::CaseInsensitive) == 0) {
+        m_curves.redPoints = pts;
+    } else if (channel.compare(QStringLiteral("Green"), Qt::CaseInsensitive) == 0) {
+        m_curves.greenPoints = pts;
+    } else if (channel.compare(QStringLiteral("Blue"), Qt::CaseInsensitive) == 0) {
+        m_curves.bluePoints = pts;
+    } else {
+        m_curves.controlPoints = pts;
+        // Refresh inline UI
+        if (m_curvesEditor) m_curvesEditor->setControlPoints(pts);
+    }
     // Switch to curves tab and apply
-    m_tabWidget->setCurrentIndex(kTabCurves);
     emit paramChanged();
-    applyCurrentTab();
+    if (previewMode) {
+        applyTabLutInPreviewMode(kTabCurves, buildCurrentTabLut());
+    } else {
+        applyCurrentTab();
+    }
 }
 
-void AdjustmentPanel::applyLevelsFromArgs(const QVariantMap& args)
+void AdjustmentPanel::applyLevelsFromArgs(const QVariantMap& args, bool previewMode)
 {
     // {"channel", "inLow", "inHigh", "gamma", "outLow", "outHigh"}
+    // M2-6b: switch the tab BEFORE the values go into the inline UI.
+    //   Setting a slider fires valueChanged, and the slider handler
+    //   calls applyCurrentTab() -- so the tab has to be the right one
+    //   already, otherwise the apply lands on the previous tab and
+    //   creates an adjustment layer of the wrong kind.
+    m_tabWidget->setCurrentIndex(kTabLevels);
     m_levels.inLow  = args.value("inLow", 0).toInt();
     m_levels.inHigh = args.value("inHigh", 255).toInt();
     m_levels.gamma  = args.value("gamma", 1.0).toDouble();
@@ -847,12 +1023,22 @@ void AdjustmentPanel::applyLevelsFromArgs(const QVariantMap& args)
     if (m_levelsOutHighVal) m_levelsOutHighVal->setText(QString::number(m_levels.outHigh));
     m_tabWidget->setCurrentIndex(kTabLevels);
     emit paramChanged();
-    applyCurrentTab();
+    if (previewMode) {
+        applyTabLutInPreviewMode(kTabLevels, buildCurrentTabLut());
+    } else {
+        applyCurrentTab();
+    }
 }
 
-void AdjustmentPanel::applyBnWFromArgs(const QVariantMap& args)
+void AdjustmentPanel::applyBnWFromArgs(const QVariantMap& args, bool previewMode)
 {
     // {"color0".."color5", "tintHue", "tintSat"}
+    // M2-6b: switch the tab BEFORE the values go into the inline UI.
+    //   Setting a slider fires valueChanged, and the slider handler
+    //   calls applyCurrentTab() -- so the tab has to be the right one
+    //   already, otherwise the apply lands on the previous tab and
+    //   creates an adjustment layer of the wrong kind.
+    m_tabWidget->setCurrentIndex(kTabBlackWhite);
     if (m_bw.rgbMixer.size() != 6) m_bw.rgbMixer.resize(6, 100.0);
     for (int i = 0; i < 6; ++i) {
         const int v = args.value(QString("color%1").arg(i), 100).toInt();
@@ -865,12 +1051,22 @@ void AdjustmentPanel::applyBnWFromArgs(const QVariantMap& args)
     // Store values; LUT extension to apply tint is deferred to P0-3.x v2.
     m_tabWidget->setCurrentIndex(kTabBlackWhite);
     emit paramChanged();
-    applyCurrentTab();
+    if (previewMode) {
+        applyTabLutInPreviewMode(kTabBlackWhite, buildCurrentTabLut());
+    } else {
+        applyCurrentTab();
+    }
 }
 
-void AdjustmentPanel::applyChannelMixerFromArgs(const QVariantMap& args)
+void AdjustmentPanel::applyChannelMixerFromArgs(const QVariantMap& args, bool previewMode)
 {
     // {"m00".."m22", "monochrome"}
+    // M2-6b: switch the tab BEFORE the values go into the inline UI.
+    //   Setting a slider fires valueChanged, and the slider handler
+    //   calls applyCurrentTab() -- so the tab has to be the right one
+    //   already, otherwise the apply lands on the previous tab and
+    //   creates an adjustment layer of the wrong kind.
+    m_tabWidget->setCurrentIndex(kTabChannelMixer);
     m_cm.rR = args.value("m00", 200).toInt();
     m_cm.rG = args.value("m01", 0).toInt();
     m_cm.rB = args.value("m02", 0).toInt();
@@ -890,14 +1086,24 @@ void AdjustmentPanel::applyChannelMixerFromArgs(const QVariantMap& args)
     // Monochrome checkbox not in inline tab yet (deferred).
     m_tabWidget->setCurrentIndex(kTabChannelMixer);
     emit paramChanged();
-    applyCurrentTab();
+    if (previewMode) {
+        applyTabLutInPreviewMode(kTabChannelMixer, buildCurrentTabLut());
+    } else {
+        applyCurrentTab();
+    }
 }
 
 // HSL standalone dialog args land
 //   here. 8 hue + 8 sat + 1 lightness (PS-compatible band layout:
 //   master + R, Y, G, C, B, M).
-void AdjustmentPanel::applyHslFromArgs(const QVariantMap& args)
+void AdjustmentPanel::applyHslFromArgs(const QVariantMap& args, bool previewMode)
 {
+    // M2-6b: switch the tab BEFORE the values go into the inline UI.
+    //   Setting a slider fires valueChanged, and the slider handler
+    //   calls applyCurrentTab() -- so the tab has to be the right one
+    //   already, otherwise the apply lands on the previous tab and
+    //   creates an adjustment layer of the wrong kind.
+    m_tabWidget->setCurrentIndex(kTabHsl);
     // m_hsl.hueShifts / m_hsl.satShifts default to 8 zeros in ctor.
     if (m_hsl.hueShifts.size() != 8) m_hsl.hueShifts.resize(8);
     if (m_hsl.satShifts.size() != 8) m_hsl.satShifts.resize(8);
@@ -917,5 +1123,366 @@ void AdjustmentPanel::applyHslFromArgs(const QVariantMap& args)
     if (m_hslLightness) m_hslLightness->setValue(m_hsl.lightness);
     m_tabWidget->setCurrentIndex(kTabHsl);
     emit paramChanged();
-    applyCurrentTab();
+    if (previewMode) {
+        applyTabLutInPreviewMode(kTabHsl, buildCurrentTabLut());
+    } else {
+        applyCurrentTab();
+    }
+}
+// =============================================================
+// M2-6a: the live preview session
+//
+// The live preview of the standalone adjustment dialogs (Curves/Levels/HSL/B&W/ChannelMixer).
+//
+// Why applyCurrentTab cannot be reused:
+//   applyCurrentTab is the "write the adjustment + push one undo command after a 200ms debounce" path.
+//   The preview would push a command per slider drag, the stack would explode, and Cancel
+//   would leave the junk entries the preview left in the undo stack.
+//
+// So the preview takes another route:
+//   1. beginPreviewSession  -- takes the baseline snapshot (the state of the adjustment layer of that tab)
+//   2. previewStandaloneParams -- writes the adjustment, pushes no undo command
+//   3. commitPreviewSession -- freezes it into EXACTLY ONE undo command
+//   4. cancelPreviewSession -- restores the baseline snapshot (and removes the layer the preview created)
+//
+// The undo command that freezes the preview is the PreviewCommitCommand of this file:
+//   it holds the state of the adjustment layer of that tab before the session started (exists / does not exist, LUT,
+//   opacity, full Layer snapshot), undo writes it back as it was; redo writes the state at the end of the
+//   session back. One undo = the picture from before the dialog opened, one redo =
+//   the picture from when the dialog closed.
+//
+// Why not LayerCommand::SetAdjustmentLut:
+//   that command holds one old LUT and writes it back on undo -- but it does NOT remove the
+//   adjustment layer the preview created. Undoing after the preview created a layer leaves an identity LUT
+//   adjustment layer in the stack: the picture may look the same, but the layer structure is dirty.
+// =============================================================
+
+namespace {
+
+// The undo command that freezes the preview (only used in this file).
+//
+// The before / after states describe the adjustment layer of a tab at two moments:
+//   existed  -- did the layer exist then
+//   index   -- its index if it existed (a layer the session created sits on top of the stack at the end)
+//   lut     -- its LUT if it existed
+//   opacity -- its opacity if it existed
+//   layer   -- its full Layer snapshot if it existed (used to put the layer back in its place)
+//
+// undo(): writes the before state. redo(): writes the after state.
+class PreviewCommitCommand : public QUndoCommand
+{
+public:
+    struct State {
+        bool        existed = false;
+        int         index   = -1;
+        float       opacity = 1.0f;
+        cv::Mat     lut;
+        layers::Layer layer;
+    };
+
+    PreviewCommitCommand(layers::LayerStack* stack,
+                         const State& before,
+                         const State& after,
+                         const QString& text)
+        : QUndoCommand(text),
+          m_stack(stack),
+          m_before(before),
+          m_after(after)
+    {
+    }
+
+    void undo() override { apply(m_before); }
+    void redo() override { apply(m_after); }
+
+private:
+    void apply(const State& s)
+    {
+        if (!m_stack) return;
+
+        // First remove the adjustment layer the session may have created -- it belongs to
+        // the history of no tab, only this command knows its stableId.
+        if (m_after.existed && m_after.layer.stableId != 0) {
+            const int idx = m_stack->indexById(m_after.layer.stableId);
+            if (idx >= 0) {
+                m_stack->removeLayer(idx);
+            }
+        }
+
+        // Then write the target state back.
+        if (!s.existed) return;
+
+        // The layer does not exist -> create one (at s.index, or on top of the stack)
+        const int insertAt = (s.index >= 0 && s.index <= m_stack->count())
+                                 ? s.index
+                                 : m_stack->count();
+        layers::Layer l = s.layer;
+        l.adjustmentLut = s.lut.empty() ? cv::Mat() : s.lut.clone();
+        l.opacity = s.opacity;
+        const int added = m_stack->insertLayer(insertAt, l);
+        if (added >= 0) {
+            m_stack->notifyLayerChanged(added);
+        }
+    }
+
+    layers::LayerStack* m_stack = nullptr;
+    State m_before;
+    State m_after;
+};
+
+}  // namespace
+
+int AdjustmentPanel::tabIndexForDialogId(const QString& dialogId)
+{
+    if (dialogId == "Curves")       return kTabCurves;
+    if (dialogId == "Levels")       return kTabLevels;
+    if (dialogId == "HSL")          return kTabHsl;
+    if (dialogId == "B&W")          return kTabBlackWhite;
+    if (dialogId == "ChannelMixer") return kTabChannelMixer;
+    return -1;
+}
+
+int AdjustmentPanel::adjustmentLayerIndexForTab(int tab) const
+{
+    if (tab < 0 || tab >= kTabCount) return -1;
+    int idx = m_adjLayerIndex[tab];
+    if (idx < 0) return -1;
+    if (!m_host) return -1;
+    auto* stack = m_host->layerStack();
+    if (!stack) return -1;
+    if (idx >= stack->count()) return -1;
+    auto l = stack->at(idx);
+    if (!l || l->kind != layers::Layer::Adjustment) return -1;
+    return idx;
+}
+
+bool AdjustmentPanel::beginPreviewSession(const QString& dialogId)
+{
+    const int tab = tabIndexForDialogId(dialogId);
+    if (tab < 0) {
+        LOG_WARN("[AdjustmentPanel] beginPreviewSession unknown dialogId: {}",
+                 dialogId.toStdString());
+        return false;
+    }
+    if (!m_host) return false;
+    auto* stack = m_host->layerStack();
+    if (!stack) return false;
+
+    PreviewSession s;
+    s.active   = true;
+    s.dialogId = dialogId;
+    s.tab      = tab;
+
+    // The baseline: the state of the adjustment layer of this tab right now
+    const int idx = adjustmentLayerIndexForTab(tab);
+    if (idx >= 0) {
+        auto l = stack->at(idx);
+        s.layerExisted    = true;
+        s.layerIndex      = idx;
+        s.baselineOpacity = l->opacity;
+        s.baselineLut     = l->adjustmentLut.empty() ? cv::Mat() : l->adjustmentLut.clone();
+        s.baselineLayerSnapshot = *l;
+    } else {
+        s.layerExisted    = false;
+        s.layerIndex      = -1;
+        s.baselineOpacity = 1.0f;
+        s.baselineLut.release();
+    }
+
+    m_previewSession = s;
+    LOG_DEBUG("[AdjustmentPanel] beginPreviewSession: id={} tab={} layerExisted={}",
+              dialogId.toStdString(), tab, s.layerExisted);
+    return true;
+}
+
+void AdjustmentPanel::previewStandaloneParams(const QString& dialogId,
+                                              const QVariantMap& args)
+{
+    const int tab = tabIndexForDialogId(dialogId);
+    if (tab < 0) {
+        LOG_WARN("[AdjustmentPanel] previewStandaloneParams unknown dialogId: {}",
+                 dialogId.toStdString());
+        return;
+    }
+    if (!m_host) return;
+    auto* stack = m_host->layerStack();
+    if (!stack) return;
+
+    // The parameters are routed exactly like setStandaloneParams -- only the final write
+    // pushes no undo command.
+    if (dialogId == "Curves") {
+        applyCurvesFromArgs(args, /*previewMode=*/true);
+    } else if (dialogId == "Levels") {
+        applyLevelsFromArgs(args, /*previewMode=*/true);
+    } else if (dialogId == "B&W") {
+        applyBnWFromArgs(args, /*previewMode=*/true);
+    } else if (dialogId == "ChannelMixer") {
+        applyChannelMixerFromArgs(args, /*previewMode=*/true);
+    } else if (dialogId == "HSL") {
+        applyHslFromArgs(args, /*previewMode=*/true);
+    } else {
+        LOG_WARN("[AdjustmentPanel] previewStandaloneParams unknown dialogId: {}",
+                 dialogId.toStdString());
+        return;
+    }
+    (void)tab;
+}
+
+void AdjustmentPanel::applyTabLutInPreviewMode(int tab, const cv::Mat& lut)
+{
+    if (!m_host) return;
+    auto* stack = m_host->layerStack();
+    if (!stack) return;
+    if (lut.empty()) return;
+
+    int layerIdx = adjustmentLayerIndexForTab(tab);
+    if (layerIdx < 0) {
+        // This tab has no adjustment layer yet -> create one. A layer the preview creates does not go into the undo stack,
+        // the undo / Cancel restores the baseline (see cancelPreviewSession).
+        layerIdx = stack->addAdjustmentLayer(tabName(tab), tabName(tab).toLower(), lut);
+        if (layerIdx < 0) return;
+        m_adjLayerIndex[tab] = layerIdx;
+        m_pendingLut[tab].release();
+        m_pendingValid[tab] = false;
+    } else {
+        // Write the adjustment, but do NOT touch m_pendingLut (that is the "before" of the debounce commit).
+        // The before of the preview lives in the baseline snapshot.
+        stack->setAdjustmentLut(layerIdx, lut);
+    }
+
+    //  M2-6b: the preview writes the per-pixel payload and the per-channel LUTs too, otherwise the previewed picture
+    //  would differ from the picture of a real apply.
+    stack->setAdjustmentParams(layerIdx, buildTabParams(tab));
+    stack->setAdjustmentChannelLuts(layerIdx, buildTabChannelLuts(tab));
+
+    // The canvas changes at once (that is what a preview is for)
+    m_host->refreshCanvasNow();
+
+    // Note: the commit timer is deliberately NOT started here -- the preview pushes no undo command.
+}
+
+void AdjustmentPanel::commitPreviewSession(const QString& dialogId)
+{
+    if (!m_previewSession.active) return;
+    if (!m_host) return;
+    auto* stack = m_host->layerStack();
+    if (!stack) return;
+
+    const int tab = m_previewSession.tab;
+
+    // The after state = the state of the adjustment layer of this tab right now
+    PreviewCommitCommand::State after;
+    const int idx = adjustmentLayerIndexForTab(tab);
+    if (idx >= 0) {
+        auto l = stack->at(idx);
+        after.existed = true;
+        after.index   = idx;
+        after.opacity = l->opacity;
+        after.lut     = l->adjustmentLut.empty() ? cv::Mat() : l->adjustmentLut.clone();
+        after.layer   = *l;
+    }
+
+    PreviewCommitCommand::State before;
+    before.existed = m_previewSession.layerExisted;
+    before.index   = m_previewSession.layerIndex;
+    before.opacity = m_previewSession.baselineOpacity;
+    before.lut     = m_previewSession.baselineLut;
+    before.layer   = m_previewSession.baselineLayerSnapshot;
+
+    // A layer the preview created is not in the baseline -> before.existed == false,
+    // and the undo command removes it.
+
+    m_previewSession.active = false;
+
+    // Clean up the tail of the debounce path.
+    //
+    // OK / Apply go through applied -> setStandaloneParams -> applyCurrentTab(),
+    // and that path writes the adjustment and starts the 200ms debounce timer. Left alone, 200ms later
+    // commitUndoDebounced() would push ANOTHER undo command -- one OK would leave two.
+    // So the timer is stopped here and the pending "before" is dropped: the preview session holds
+    // the baseline itself and does not need the one of the debounce path.
+    if (m_commitTimer && m_commitTimer->isActive()) {
+        m_commitTimer->stop();
+    }
+    m_pendingLut[tab].release();
+
+    // Nothing changed -> no undo command (the user opened the dialog and closed it again)
+    //
+    // M2-6b: the comparison covers the WHOLE adjustment state, not just the LUT. The HSL hue slider
+    // does not change the 1D LUT at all, so comparing the LUT alone would miss the whole adjustment.
+    if (!before.existed && !after.existed) return;
+    if (before.existed && after.existed) {
+        if (sameAdjustmentState(before.layer, after.layer)) {
+            // The adjustment state did not change -> there is nothing to undo
+            return;
+        }
+    }
+
+    auto* cmd = new PreviewCommitCommand(
+        stack, before, after,
+        QStringLiteral("Adjustment ") + dialogId);
+    if (m_host->undoStack()) {
+        m_host->undoStack()->push(cmd);
+    } else {
+        delete cmd;
+    }
+    LOG_DEBUG("[AdjustmentPanel] commitPreviewSession: id={} undoCount={}",
+              dialogId.toStdString(),
+              m_host->undoStack() ? m_host->undoStack()->count() : -1);
+}
+
+void AdjustmentPanel::cancelPreviewSession(const QString& dialogId)
+{
+    if (!m_previewSession.active) return;
+    if (!m_host) return;
+    auto* stack = m_host->layerStack();
+    if (!stack) return;
+
+    const int tab = m_previewSession.tab;
+    const bool existed  = m_previewSession.layerExisted;
+    const int  baseIdx  = m_previewSession.layerIndex;
+    const float baseOp  = m_previewSession.baselineOpacity;
+    const cv::Mat baseLut = m_previewSession.baselineLut;
+    const layers::Layer baseLayer = m_previewSession.baselineLayerSnapshot;
+
+    m_previewSession.active = false;
+
+    // The current state (the preview may have created a layer)
+    const int idx = adjustmentLayerIndexForTab(tab);
+
+    if (!existed) {
+        // The baseline has no adjustment layer -> remove the one the preview created
+        if (idx >= 0) {
+            stack->removeLayer(idx);
+            m_adjLayerIndex[tab] = -1;
+        }
+    } else {
+        // The baseline has one -> restore its whole adjustment state and its opacity
+        if (idx >= 0) {
+            auto l = stack->at(idx);
+            l->adjustmentLut = baseLut.empty() ? cv::Mat() : baseLut.clone();
+            // M2-6b: the per-pixel payload and the per-channel LUTs have to be restored too, otherwise after Cancel
+            // the layer would still carry the HSL / black & white parameters of the preview.
+            l->adjustmentParams = baseLayer.adjustmentParams;
+            l->adjustmentChannelLuts = baseLayer.adjustmentChannelLuts;
+            l->opacity = baseOp;
+            stack->notifyLayerChanged(idx);
+        } else {
+            // Something else removed the layer during the preview -> put it back
+            const int insertAt = (baseIdx >= 0 && baseIdx <= stack->count())
+                                     ? baseIdx
+                                     : stack->count();
+            layers::Layer l = baseLayer;
+            l.adjustmentLut = baseLut.empty() ? cv::Mat() : baseLut.clone();
+            l.opacity = baseOp;
+            const int added = stack->insertLayer(insertAt, l);
+            if (added >= 0) {
+                m_adjLayerIndex[tab] = added;
+                stack->notifyLayerChanged(added);
+            }
+        }
+    }
+
+    // The canvas returns to the state before the session started
+    m_host->refreshCanvasNow();
+    LOG_DEBUG("[AdjustmentPanel] cancelPreviewSession: id={}", dialogId.toStdString());
 }

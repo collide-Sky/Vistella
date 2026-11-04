@@ -36,10 +36,19 @@ public:
 
 signals:
     // 实时预览 (子控件 valueChanged 调 emit preview(args))
-    // TODO(P8.5): the preview() signal has no connect, so the adjust dialogs apply only on OK -- see docs/DEBT.md#A-ADJUSTPREVIEW
     void preview(const QVariantMap& args);
     // OK / Apply 提交 (applyAdjust 完成, 参数已应用)
     void applied(const QVariantMap& args);
+    // The lifecycle of the preview session (M2-6a).
+    //
+    // When the host (ImageWindow) receives previewSessionStarted it takes the
+    // baseline snapshot in the AdjustmentPanel; when it receives
+    // previewSessionEnded(true) it freezes the previewed state into EXACTLY ONE
+    // undo command; when it receives previewSessionEnded(false) it restores the canvas to the state before the dialog opened.
+    //
+    // committed=false means Cancel / reject -- the host has to roll back.
+    void previewSessionStarted();
+    void previewSessionEnded(bool committed);
 
 protected:
     // 子类必须 override
@@ -54,6 +63,21 @@ protected:
     void updateParam(const QString& key, const QVariant& value);
     void triggerPreview();
 
+    // Arm the preview in showEvent (only after the first show may triggerPreview really emit)
+    void showEvent(QShowEvent* event) override;
+
+public:
+    // The single entry point for closing the dialog.
+    //
+    // QDialog::reject() is the entry point of the Esc key, of the window close button
+    // and of any programmatic call; QDialogButtonBox::rejected is only one of those paths.
+    // So the end of the preview session has to hang on reject() / accept() and not only on the button slots -- otherwise
+    // pressing Esc or calling reject() programmatically would not roll back.
+    void reject() override;
+    void accept() override;
+
+protected:
+
     QVariantMap m_args;
 
 private slots:
@@ -62,10 +86,24 @@ private slots:
     void onRejected();
 
 private:
+    // The state of the preview session (M2-6a)
+    //
+    // m_previewArmed: set to true after the first showEvent. setInitialArgs in the constructor
+    //   calls setValue(), which fires valueChanged -> onSliderChanged -> triggerPreview.
+    //   At that moment the dialog is not visible yet, so it must not preview (otherwise the canvas would change as soon as the dialog opens).
+    // m_sessionStarted: previewSessionStarted has been emitted.
+    // m_sessionCommitted: the last session ended with a commit (after Apply the
+    //   user can keep previewing, and this flag decides whether previewSessionStarted is emitted again).
+    void startPreviewSession();
+    void endPreviewSession(bool committed);
+
     QVBoxLayout*     m_body       = nullptr;
     QDialogButtonBox* m_btnBox    = nullptr;
     QPushButton*     m_applyBtn   = nullptr;
     bool             m_modified   = false;
+    bool             m_previewArmed   = false;
+    bool             m_sessionStarted = false;
+    bool             m_sessionCommitted = false;
 };
 
 } // namespace dialogs

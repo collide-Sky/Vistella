@@ -325,8 +325,11 @@ void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
         p->restore();
     }
 
-    // Build outline: scan each row, find runs of selected pixels, draw rects
-    //   For typical PS-style "rect + lasso" selections, this gives clean outline
+    // Build outline: the SelectionModel scans each row of the mask for
+    //   runs of selected pixels and returns the boundary of every run as
+    //   a straight segment. Drawing those segments traces the real
+    //   contour of the selection -- a round or lasso selection gets a
+    //   round or lasso outline, not the bounding box.
     p->save();
     p->setRenderHint(QPainter::Antialiasing, false);   // crisp dashes
     const qreal phaseOffset = m_ants ? (m_ants->phase() * 0.5) : 0.0;
@@ -334,7 +337,18 @@ void ImageCanvas::drawForeground(QPainter* p, const QRectF& /*rect*/)
     penBlack.setDashOffset(phaseOffset);
     penBlack.setCosmetic(true);   // 1px regardless of zoom
     p->setPen(penBlack);
-    p->drawRect(sceneBbox);
+    const QList<selection::SelectionModel::Segment> contour = m_sel->contourSegments();
+    if (!contour.isEmpty()) {
+        // Mask pixel coordinates -> scene coordinates (the pixmap is not
+        //   transformed independently, so the mapping is a plain offset).
+        for (const selection::SelectionModel::Segment& seg : contour) {
+            p->drawLine(origin + seg.a, origin + seg.b);
+        }
+    } else {
+        // No contour (an empty mask): fall back to the bounding box so
+        //   the user still sees where the selection is.
+        p->drawRect(sceneBbox);
+    }
     p->restore();
 
     // 自由变换 box 渲染 — 10 handle + 1 rotation line

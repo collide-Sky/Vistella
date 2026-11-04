@@ -78,7 +78,8 @@ public:
     int  addSmartObjectLayer(const QString &name, const QString &sourceFilePath,
                              bool embed = false);
     int  addAdjustmentLayer(const QString &name, const QString &adjustmentType,
-                            const cv::Mat &lut = cv::Mat());
+                            const cv::Mat &lut = cv::Mat(),
+                            const AdjustmentParams &params = AdjustmentParams());
 
     // Group / Ungroup (LayerKind::Group based)
     //   mergeIntoGroup: pack N adjacent layers (>= 2) into a new Group container
@@ -137,6 +138,12 @@ public:
     bool setSmartObjectSource(int index, const QString &path, bool embed);
     bool setAdjustmentType(int index, const QString &type);
     bool setAdjustmentLut(int index, const cv::Mat &lut);
+    // Write the per-pixel adjustment payload (M2-6b).
+    //   kind == AdjustKind::Lut -> the layer uses its 1D LUT.
+    //   any other kind          -> the layer uses this transform.
+    bool setAdjustmentParams(int index, const AdjustmentParams &params);
+    // Write the per-channel LUTs (empty = single LUT for all channels).
+    bool setAdjustmentChannelLuts(int index, const QVector<cv::Mat> &luts);
 
     // 智能对象扩展 API
     //   refresh(index): 重新从源文件加载 (嵌入时也重新复制到 cache)

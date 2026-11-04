@@ -37,6 +37,7 @@
 #include "themegallerydialog.h"
 #include "logindialog.h"
 #include "../core/MediaDispatcher.h"
+#include "../media/imageworker/ImageWorkspace.h"
 #include "../core/FileExtensionRegistry.h"
 #include "../core/ThemeManager.h"
 #include "../core/SessionManager.h"
@@ -48,6 +49,9 @@
 
 #include <QActionGroup>
 #include <QApplication>
+#include <QClipboard>
+#include <QVector>
+#include <QMimeData>
 #include <QCloseEvent>
 #include <QShowEvent>
 #include <QDesktopServices>
@@ -133,6 +137,7 @@ MainWindow::MainWindow(QWidget *parent)
     //m_btnTheme->setObjectName(QStringLiteral("themeBtn"));
 
     buildActions();
+    buildGlobalToolActions();
     buildTitleBar();        // 替代 buildMenuCorner: 自绘标题栏 (3 段 + 窗控)
     buildInfoTree();
     // PS/WPS/VS 风格主页切换 HomePage 装到 mainStack page 0 (homePageContainer)
@@ -341,8 +346,185 @@ void MainWindow::onToggleTheme()
 
 // ----------------- 构建 -----------------
 
+// =============================================================
+//  Tear down the menu bar (M2-8)
+// =============================================================
+//
+//  Removes every menu this class added to the menu bar and deletes the
+//  actions buildActions() created. Called from buildActions() so the whole
+//  menu bar can be rebuilt after a language switch.
+//
+//  Only the actions that belong to the menu bar are deleted. The global
+//  tool actions (m_globalToolActions) and the actions created by
+//  rebuildDocsMenu() are NOT touched: they are not part of the menu bar
+//  and their lifetime is managed elsewhere. A blanket findChildren()
+//  delete would take them down as well and leave m_globalToolActions
+//  holding dangling pointers.
+
+void MainWindow::destroyActions()
+{
+    // The menu bar may have been re-parented into the custom title bar
+    // (see buildTitleBar()); clear() works either way.
+    if (auto *mb = menuBar()) {
+        mb->clear();
+    }
+
+    // The member actions are parented to the MainWindow, so deleting them
+    // here is what actually frees them -- without this they would leak
+    // one set per language switch.
+    const QList<QAction*> owned = {
+        m_actNew, m_actOpen, m_actSave, m_actSaveAs, m_actExport,
+        m_actCloseCur, m_actCloseOthers, m_actCloseSameType, m_actCloseAll,
+        m_actUndo, m_actRedo, m_actCut, m_actCopy, m_actPaste,
+        m_actSelAll, m_actFind, m_actReplace,
+        m_actZoomIn, m_actZoomOut, m_actResetLayout, m_actToggleTheme,
+        m_actFreeTransform, m_actImageFlipH, m_actImageFlipV,
+        m_actImageRotate90CW, m_actImageRotate90CCW, m_actImageRotate180,
+    };
+    for (QAction *a : owned) {
+        if (a) delete a;
+    }
+
+    m_actNew = nullptr;
+    m_actOpen = nullptr;
+    m_actSave = nullptr;
+    m_actSaveAs = nullptr;
+    m_actExport = nullptr;
+    m_actCloseCur = nullptr;
+    m_actCloseOthers = nullptr;
+    m_actCloseSameType = nullptr;
+    m_actCloseAll = nullptr;
+    m_actUndo = nullptr;
+    m_actRedo = nullptr;
+    m_actCut = nullptr;
+    m_actCopy = nullptr;
+    m_actPaste = nullptr;
+    m_actSelAll = nullptr;
+    m_actFind = nullptr;
+    m_actReplace = nullptr;
+    m_actZoomIn = nullptr;
+    m_actZoomOut = nullptr;
+    m_actResetLayout = nullptr;
+    m_actToggleTheme = nullptr;
+    m_actFreeTransform = nullptr;
+    m_actImageFlipH = nullptr;
+    m_actImageFlipV = nullptr;
+    m_actImageRotate90CW = nullptr;
+    m_actImageRotate90CCW = nullptr;
+    m_actImageRotate180 = nullptr;
+    m_docsMenu = nullptr;
+    m_pluginsMenu = nullptr;
+    m_windowMenu = nullptr;
+}
+
+// =============================================================
+//  Global tool shortcut actions (M2-8)
+// =============================================================
+//
+//  15 single-key shortcuts (V/M/L/W/C/T/B/I/U/P/S/J) that switch the
+//  active tool. They are not in any menu -- the entry points live in the
+//  LeftToolBar -- so they are registered as MainWindow actions with
+//  Qt::ApplicationShortcut so they fire even when the focus is elsewhere.
+//
+//  This runs exactly once: the actions are NOT part of the menu bar, so
+//  rebuilding the menu bar on a language switch must not recreate them.
+
+// =============================================================
+//  The tool shortcut table (M2-8)
+// =============================================================
+//
+//  One table, used by both buildGlobalToolActions() (which creates the
+//  actions) and refreshGlobalToolActionLabels() (which re-translates
+//  them). Keeping a single source means the two can never disagree.
+//
+//  It lives in this file rather than the header because ToolId is only
+//  forward-declared there -- a struct holding a ToolId by value needs
+//  the complete type.
+
+namespace {
+
+struct ToolShortcut {
+    const char* text;
+    mediators::ToolId id;
+    const char* shortcut;
+};
+
+QVector<ToolShortcut> toolShortcuts()
+{
+    return {
+        { "移动 (Move)",           mediators::ToolId::Move,       "V" },
+        { "矩形选框 (RectSelect)", mediators::ToolId::RectSelect, "M" },
+        { "套索 (Lasso)",          mediators::ToolId::Lasso,      "L" },
+        { "魔棒 (Magic Wand)",     mediators::ToolId::MagicWand,  "W" },
+        { "裁剪 (Crop)",           mediators::ToolId::Crop,       "C" },
+        { "文字 (Text)",           mediators::ToolId::Text,       "T" },
+        { "画笔 (Brush)",          mediators::ToolId::Brush,      "B" },
+        { "吸管 (Eyedropper)",     mediators::ToolId::Eyedropper, "I" },
+        { "形状 (Shape)",          mediators::ToolId::Shape,      "U" },
+        { "钢笔 (Pen)",            mediators::ToolId::Pen,        "P" },
+        { "仿制图章 (Clone)",      mediators::ToolId::Clone,      "S" },
+        { "修复画笔 (Heal)",       mediators::ToolId::Heal,       "J" },
+        { "补修 (Patch)",          mediators::ToolId::Patch,      "" },
+        { "红眼 (RedEye)",         mediators::ToolId::RedEye,     "" },
+        { "蒙版画笔 (MaskBrush)",  mediators::ToolId::MaskBrush,  "" },
+    };
+}
+
+} // namespace
+
+void MainWindow::buildGlobalToolActions()
+{
+    if (!m_globalToolActions.isEmpty()) return;   // already built
+
+    for (const ToolShortcut &e : toolShortcuts()) {
+        auto* act = new QAction(tr(e.text), this);
+        if (e.shortcut && e.shortcut[0]) {
+            act->setShortcut(QKeySequence(QString::fromLatin1(e.shortcut)));
+        }
+        // Key: associate MainWindow as shortcutContext, so the action fires
+        // even though it is not in any menu
+        // (Qt widget + QAction + shortcutContext = MainWindow).
+        // TODO(P8.5): application-scope shortcuts outrank the focused widget, so single-letter keys type nothing in text tools -- see docs/DEBT.md#A-SHORTKEYS
+        act->setShortcutContext(Qt::ApplicationShortcut);
+        connect(act, &QAction::triggered, this, [this, id = e.id]() {
+            onSwitchTool(id);
+        });
+        addAction(act);
+        m_globalToolActions.push_back(act);
+    }
+}
+
+// =============================================================
+//  Refresh the global tool action labels (M2-8)
+// =============================================================
+//
+//  The 15 global tool actions are created once, outside the menu bar, so
+//  rebuilding the menu bar does not touch them. Their labels are still
+//  translated text, so they have to be refreshed when the language
+//  changes. The source text comes from the same table
+//  buildGlobalToolActions() uses, so the two can never drift apart.
+
+void MainWindow::refreshGlobalToolActionLabels()
+{
+    if (m_globalToolActions.isEmpty()) return;
+    const QVector<ToolShortcut> entries = toolShortcuts();
+    const int n = qMin(static_cast<int>(m_globalToolActions.size()),
+                       entries.size());
+    for (int i = 0; i < n; ++i) {
+        m_globalToolActions[i]->setText(tr(entries[i].text));
+    }
+}
+
 void MainWindow::buildActions()
 {
+    // This function runs twice: once at construction and once more when
+    // the user switches the language (see retranslateUiTexts()).
+    //
+    // The second run has to start from a clean slate, otherwise the old
+    // menus stay in the menu bar and the member actions still point at
+    // the first run's objects, whose labels are in the old language.
+    destroyActions();
+
     // ----- 文件 -----
     m_actNew      = new QAction(tr("新建"),       this);
     m_actOpen     = new QAction(tr("打开..."),    this);
@@ -438,7 +620,7 @@ void MainWindow::buildActions()
     auto *mb = menuBar();
     mb->setNativeMenuBar(false);   // 在 Windows 强制内嵌, 视觉一致
 
-    QMenu *mFile = mb->addMenu(tr("文件"));
+    QMenu *mFile = new QMenu(tr("文件"), mb);
     mFile->addAction(m_actNew);
     mFile->addAction(m_actOpen);
     mFile->addSeparator();
@@ -451,7 +633,7 @@ void MainWindow::buildActions()
     mFile->addAction(m_actCloseSameType);
     mFile->addAction(m_actCloseAll);
 
-    QMenu *mEdit = mb->addMenu(tr("编辑"));
+    QMenu *mEdit = new QMenu(tr("编辑"), mb);
     mEdit->addAction(m_actUndo);
     mEdit->addAction(m_actRedo);
     mEdit->addSeparator();
@@ -477,7 +659,7 @@ void MainWindow::buildActions()
     //   - 增效工具: 空 placeholder (留入口待 P7.11 真做插件管理).
     //   - 窗口: 全量 — 文档列表 + 工作区 submenu (从视图搬过来) + 平铺/堆叠 +
     //     关闭所有 / 全部最小化.
-    QMenu *mView = mb->addMenu(tr("视图"));
+    QMenu *mView = new QMenu(tr("视图"), mb);
     mView->addAction(m_actZoomIn);
     mView->addAction(m_actZoomOut);
     mView->addAction(m_actResetLayout);
@@ -490,52 +672,15 @@ void MainWindow::buildActions()
         iw->onFitWindow();
     });
 
-    // P7.2: 15 工具快捷键全局注册 (Ctrl+B/V/M/L/W/C/T/I/U/P/S/J/X/Y).
-    //   - 不 addAction 到菜单 — 入口全归 LeftToolBar (P7.1 已落地 PS 紧凑布局).
-    //   - 快捷键经过 MainWindow 时直接转发到 onSwitchTool, 跟用户按 LeftToolBar
-    //     按钮等效 (因为菜单已无入口, 防止快捷键失效).
-    //   - 字段保留在 m_globalToolActions 防止 GC, MainWindow 销毁时一起回收.
-    {
-        struct Entry { const char* text; mediators::ToolId id; const char* shortcut; };
-        const Entry toolEntries[] = {
-            {"移动 (Move)",           mediators::ToolId::Move,       "V"},
-            {"矩形选框 (RectSelect)", mediators::ToolId::RectSelect, "M"},
-            {"套索 (Lasso)",          mediators::ToolId::Lasso,      "L"},
-            {"魔棒 (Magic Wand)",     mediators::ToolId::MagicWand,  "W"},
-            {"裁剪 (Crop)",           mediators::ToolId::Crop,       "C"},
-            {"文字 (Text)",           mediators::ToolId::Text,       "T"},
-            {"画笔 (Brush)",          mediators::ToolId::Brush,      "B"},
-            {"吸管 (Eyedropper)",     mediators::ToolId::Eyedropper, "I"},
-            {"形状 (Shape)",          mediators::ToolId::Shape,      "U"},
-            {"钢笔 (Pen)",            mediators::ToolId::Pen,        "P"},
-            {"仿制图章 (Clone)",      mediators::ToolId::Clone,      "S"},
-            {"修复画笔 (Heal)",       mediators::ToolId::Heal,       "J"},
-            {"修补 (Patch)",          mediators::ToolId::Patch,      ""},
-            {"红眼 (RedEye)",         mediators::ToolId::RedEye,     ""},
-            {"蒙版画笔 (MaskBrush)",  mediators::ToolId::MaskBrush,  ""},
-        };
-        for (const auto& e : toolEntries) {
-            auto* act = new QAction(tr(e.text), this);
-            if (e.shortcut && e.shortcut[0]) {
-                act->setShortcut(QKeySequence(QString::fromLatin1(e.shortcut)));
-            }
-            // 关键: 关联 MainWindow 为 shortcutContext, 不 addAction 到任何菜单也能
-            // 接收全局快捷键 (Qt widget + QAction + shortcutContext = MainWindow).
-            // TODO(P8.5): application-scope shortcuts outrank the focused widget, so single-letter keys type nothing in text tools -- see docs/DEBT.md#A-SHORTKEYS
-            act->setShortcutContext(Qt::ApplicationShortcut);
-            connect(act, &QAction::triggered, this, [this, id = e.id]() {
-                onSwitchTool(id);
-            });
-            addAction(act);
-            m_globalToolActions.push_back(act);
-        }
-    }
-
+    // The 15 global tool shortcut actions are created by
+    // buildGlobalToolActions() -- they are NOT part of the menu bar and
+    // must not be recreated when the menu bar is rebuilt on a language
+    // switch (see destroyActions()).
     // P7.2: 工具 → 设置 改名 (PS 标准).
     //   15 工具 entry 已迁出到 LeftToolBar + 全局快捷键; 保留 4 全局设置项.
     //   同时解决 Ctrl+T 冲突: 自由变换 (编辑) 跟 主题切换冲突 — 优先级 Qt 自动处理,
     //   但为避免歧义把主题切换 (m_actToggleTheme Ctrl+T) 改名无快捷键 (走标题栏 ☀).
-    QMenu *mSetup = mb->addMenu(tr("设置"));
+    QMenu *mSetup = new QMenu(tr("设置"), mb);
     QAction *aSettings = mSetup->addAction(tr("首选项..."));
     connect(aSettings, &QAction::triggered, this, &MainWindow::onSettings);
     QAction *aLang = mSetup->addAction(tr("语言"));
@@ -547,7 +692,7 @@ void MainWindow::buildActions()
 
     // 增效工具 (PS 标准 11 菜单的第 9 个) — 空壳, 插件管理未实装
     //   TODO(P8.9): the plugins menu is an empty shell, so the plugin entry point does nothing -- see docs/DEBT.md#A-PLUGINMENU
-    QMenu *mPlugins = mb->addMenu(tr("增效工具"));
+    QMenu *mPlugins = new QMenu(tr("增效工具"), mb);
     QAction *aPluginsMgr = mPlugins->addAction(tr("增效工具管理器..."));
     aPluginsMgr->setEnabled(false);   // P7.11 实装
     m_pluginsMenu = mPlugins;          // 留 menu 句柄供后续动态加载入口
@@ -556,7 +701,7 @@ void MainWindow::buildActions()
     //   - 文档列表: 列所有打开 ImageWindow, click 切到 (切到 m_tabWidget->setCurrentIndex)
     //   - 工作区 submenu: Basic/Photo/Paint/Web (4 个 QActionGroup 互斥), 从视图搬过来
     //   - 平铺 / 堆叠 / 关闭所有 / 全部最小化 (Qt QMainWindow::tile + cascade + closeAllSubWindows)
-    QMenu *mWindow = mb->addMenu(tr("窗口"));
+    QMenu *mWindow = new QMenu(tr("窗口"), mb);
     QMenu *mDocs = mWindow->addMenu(tr("文档"));
     m_docsMenu = mDocs;                  // 暴露以便监听 ImageWindow 增删时刷新
     rebuildDocsMenu(mDocs);
@@ -600,7 +745,7 @@ void MainWindow::buildActions()
     addWsAction(mediators::WorkspaceId::Web,   tr("Web"));
     m_windowMenu = mWindow;
 
-    QMenu *mHelp = mb->addMenu(tr("帮助"));
+    QMenu *mHelp = new QMenu(tr("帮助"), mb);
     QAction *aAbout = mHelp->addAction(tr("关于 Vistella"));
     connect(aAbout, &QAction::triggered, this, [this](){
         QMessageBox::about(this, tr("关于 Vistella"),
@@ -618,7 +763,7 @@ void MainWindow::buildActions()
     //   也不会有 (C++ lambda 不强制 unused warning), 但 dead code 留着浪费阅读时间.
 
     // ---- 图像 (Image) ----
-    QMenu *mImage = mb->addMenu(tr("图像"));
+    QMenu *mImage = new QMenu(tr("图像"), mb);
     QAction *aImgResize = mImage->addAction(tr("调整大小..."));
     aImgResize->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+I")));
     // active ImageWindow + QInputDialog 双弹窗宽度/高度
@@ -709,6 +854,31 @@ void MainWindow::buildActions()
             iw->setDocumentImage(dst);
         });
 
+        // ---- Adjustments ----
+        //   PS: Image > Adjustments > [Curves / Levels / HSL / B&W / Channel Mixer / ...]
+        //   All five dialogs are non destructive: the parameters go into an adjustment layer, the base pixels are never rewritten.
+        QMenu* mAdjust = mImage->addMenu(tr("调整"));
+        QAction* aAdjustCurves = mAdjust->addAction(tr("曲线..."));
+        connect(aAdjustCurves, &QAction::triggered, this, [this]{
+            onAdjustDialogTriggered("Curves");
+        });
+        QAction* aAdjustLevels = mAdjust->addAction(tr("色阶..."));
+        connect(aAdjustLevels, &QAction::triggered, this, [this]{
+            onAdjustDialogTriggered("Levels");
+        });
+        QAction* aAdjustHsl = mAdjust->addAction(tr("色相/饱和度..."));
+        connect(aAdjustHsl, &QAction::triggered, this, [this]{
+            onAdjustDialogTriggered("HSL");
+        });
+        QAction* aAdjustBnW = mAdjust->addAction(tr("黑白..."));
+        connect(aAdjustBnW, &QAction::triggered, this, [this]{
+            onAdjustDialogTriggered("B&W");
+        });
+        QAction* aAdjustChannelMixer = mAdjust->addAction(tr("通道混合器..."));
+        connect(aAdjustChannelMixer, &QAction::triggered, this, [this]{
+            onAdjustDialogTriggered("ChannelMixer");
+        });
+
         // ---- Canvas Size (调整画布大小, 不缩放) ----
         QAction* aImgCanvas = mImage->addAction(tr("画布大小..."));
         aImgCanvas->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+C")));
@@ -773,7 +943,7 @@ void MainWindow::buildActions()
     }
 
     // ---- 图层 (Layer) ----
-    QMenu *mLayer = mb->addMenu(tr("图层"));
+    QMenu *mLayer = new QMenu(tr("图层"), mb);
     QAction *aLayerNew = mLayer->addAction(tr("新建图层"));
     aLayerNew->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
     // routed to active ImageWindow -> applyLayerOp(NewBitmap)
@@ -928,7 +1098,7 @@ void MainWindow::buildActions()
 //   Earlier (P0) these were notImpl placeholders. P2.3 wires them through
 //   ImageWindow::textOverlay() so font / size / color / bold / italic change
 //   the active text item via TextOverlayController + applyStyleToCurrent().
-    QMenu *mText = mb->addMenu(tr("文字"));
+    QMenu *mText = new QMenu(tr("文字"), mb);
     QAction *aTextFont = mText->addAction(tr("字体..."));
     connect(aTextFont, &QAction::triggered, this, [this]() {
         auto* iw = qobject_cast<ImageWindow*>(widgetAt(ui->tabWidget->currentIndex()));
@@ -988,7 +1158,7 @@ void MainWindow::buildActions()
     });
 
     // ---- 选择 (Select) ----
-    QMenu *mSelect = mb->addMenu(tr("选择"));
+    QMenu *mSelect = new QMenu(tr("选择"), mb);
     QAction *aSelAll = mSelect->addAction(tr("全部"));
     aSelAll->setShortcut(QKeySequence(QStringLiteral("Ctrl+A")));
     connect(aSelAll, &QAction::triggered, this, &MainWindow::onImageSelectAll);
@@ -1055,7 +1225,7 @@ void MainWindow::buildActions()
     //   8 submenu: 风格化/扭曲/锐化/像素化/渲染/杂点/颜色/其它
     //   末尾 4 adjustment dialog: 曲线/色阶/黑白/通道混合器
     //   注: 大部分新 filter placeholder, P7.3 注册 enum + 标签 + 简化映射, 真做后续.
-    QMenu *mFilter = mb->addMenu(tr("滤镜"));
+    QMenu *mFilter = new QMenu(tr("滤镜"), mb);
 
     // P7.3: 通用 lambda: addFilterAction — 接到 onFilterMenuTriggered.
     //   改 P3.1.2 lambda: 返 QAction* 这样可以 setEnabled(false) 标记 placeholder.
@@ -1180,25 +1350,25 @@ void MainWindow::buildActions()
     addFilterAction(mFilterOther, tr("高反差保留..."),     filter::FilterKind::HighPass);
     addFilterAction(mFilterOther, tr("曝光过度..."),       filter::FilterKind::Solarize);
 
-    mFilter->addSeparator();
+    // ----- the adjustment dialogs live in the "Image > Adjustments" submenu -----
+    //   PS puts the adjustments under "Image", not under "Filter".
+    //   HSL had no menu entry at all, it is added along with the others.
 
-    // ----- 末尾 4 调整型 dialog (standalone) -----
-    QAction *aAdjustCurves = mFilter->addAction(tr("曲线 (Curves)..."));
-    connect(aAdjustCurves, &QAction::triggered, this, [this]{
-        onAdjustDialogTriggered("Curves");
-    });
-    QAction *aAdjustLevels = mFilter->addAction(tr("色阶 (Levels)..."));
-    connect(aAdjustLevels, &QAction::triggered, this, [this]{
-        onAdjustDialogTriggered("Levels");
-    });
-    QAction *aAdjustBnW = mFilter->addAction(tr("黑白 (B&W)..."));
-    connect(aAdjustBnW, &QAction::triggered, this, [this]{
-        onAdjustDialogTriggered("B&W");
-    });
-    QAction *aAdjustChannelMixer = mFilter->addAction(tr("通道混合器 (Channel Mixer)..."));
-    connect(aAdjustChannelMixer, &QAction::triggered, this, [this]{
-        onAdjustDialogTriggered("ChannelMixer");
-    });
+    // ----- the top level menus follow the PS order -----
+    //   The menus are built separately above, but are not added to the menu bar right away --
+    //   otherwise the order would follow the build order (Help stuck in the middle, Image..Filter at the end).
+    mb->addMenu(mFile);
+    mb->addMenu(mEdit);
+    mb->addMenu(mImage);
+    mb->addMenu(mLayer);
+    mb->addMenu(mText);
+    mb->addMenu(mSelect);
+    mb->addMenu(mFilter);
+    mb->addMenu(mView);
+    mb->addMenu(mSetup);
+    mb->addMenu(mPlugins);
+    mb->addMenu(mWindow);
+    mb->addMenu(mHelp);
 }
 
 // =============================================================
@@ -1810,6 +1980,9 @@ void MainWindow::onTabChanged(int index)
 {
     Q_UNUSED(index);
     updateWindowTitle();
+    // The document actions depend on what the active tab is (image or
+    // text), so they have to be refreshed on every tab switch.
+    updateActionStates();
     // 切换时也刷新一下 tooltip (主题色变化时)
     for (int i = 0; i < ui->tabWidget->count(); ++i) refreshTabTitle(i);
     // 4 左侧 dock (LeftToolBar + ImageOptionBar + ModeSelectorBar
@@ -2135,9 +2308,243 @@ void MainWindow::onRedo()
         statusBar()->showMessage(tr("当前页面没有可重做的操作"), 2000);
     }
 }
-void MainWindow::onCut()     { if (auto *d = qobject_cast<DocWindow *>(widgetAt(ui->tabWidget->currentIndex()))) d->editor()->cut(); }
-void MainWindow::onCopy()    { if (auto *d = qobject_cast<DocWindow *>(widgetAt(ui->tabWidget->currentIndex()))) d->editor()->copy(); }
-void MainWindow::onPaste()   { if (auto *d = qobject_cast<DocWindow *>(widgetAt(ui->tabWidget->currentIndex()))) d->editor()->paste(); }
+// =============================================================
+//  Clipboard + action state (M2-3)
+// =============================================================
+//
+//  The clipboard is the system clipboard (QClipboard), so copy/paste works
+//  between Vistella and other applications. Two payloads are used:
+//    - a plain image (PNG) for the pixels
+//    - a custom mime type carrying the original selection mask, so a
+//      paste inside Vistella restores the soft edge of the selection
+//
+//  Cut for an image is copy + clear the selection area on the active
+//  layer, which is what Photoshop does.
+
+namespace {
+
+// Mime type carrying the selection mask that goes with the copied pixels.
+const char *kVistellaSelectionMime = "application/x-vistella-selection";
+
+} // namespace
+
+void MainWindow::copyToClipboard()
+{
+    QWidget *w = widgetAt(ui->tabWidget->currentIndex());
+
+    if (auto *doc = qobject_cast<DocWindow *>(w)) {
+        doc->editor()->copy();
+        return;
+    }
+
+    auto *img = qobject_cast<ImageWindow *>(w);
+    if (!img) return;
+
+    const cv::Mat &src = img->currentImage();
+    if (src.empty()) {
+        statusBar()->showMessage(tr("没有可复制的图像"), 2000);
+        return;
+    }
+
+    // The selection decides what gets copied. With no selection the whole
+    // composite is copied.
+    auto *sel = img->selectionModel();
+    const bool hasSelection = sel && !sel->isEmpty();
+
+    cv::Mat bgra;
+    if (src.channels() == 4) {
+        bgra = src;
+    } else if (src.channels() == 3) {
+        cv::cvtColor(src, bgra, cv::COLOR_BGR2BGRA);
+    } else {
+        cv::cvtColor(src, bgra, cv::COLOR_GRAY2BGRA);
+    }
+
+    // QImage::Format_ARGB32 is RGBA byte order, OpenCV is BGRA, so the
+    // planes have to be swapped. cv::split / cv::merge work on planes,
+    // not on interleaved bytes.
+    //
+    //   OpenCV plane order: 0 = B, 1 = G, 2 = R, 3 = A
+    //   QImage byte order:  0 = R, 1 = G, 2 = B, 3 = A
+    std::vector<cv::Mat> planes;
+    cv::split(bgra, planes);            // planes[0]=B, [1]=G, [2]=R, [3]=A
+    if (planes.size() == 4) {
+        std::swap(planes[0], planes[2]); // B <-> R
+    }
+    cv::Mat rgba;
+    cv::merge(planes, rgba);
+
+    // .copy() detaches the QImage from the cv::Mat buffer, so the Mat can
+    // go out of scope while the QImage stays valid.
+    const QImage out = QImage(rgba.data, rgba.cols, rgba.rows,
+                              static_cast<int>(rgba.step),
+                              QImage::Format_ARGB32).copy();
+
+    QMimeData *mime = new QMimeData;
+    mime->setImageData(out);
+    if (hasSelection) {
+        // Keep the mask so an in-app paste keeps the soft edge.
+        mime->setData(QLatin1String(kVistellaSelectionMime),
+                      QByteArray(reinterpret_cast<const char*>(sel->mask().constBits()),
+                                 static_cast<int>(sel->mask().sizeInBytes())));
+    }
+    QApplication::clipboard()->setMimeData(mime);
+
+    statusBar()->showMessage(hasSelection
+        ? tr("已复制选区到剪贴板")
+        : tr("已复制图像到剪贴板"), 2000);
+}
+
+void MainWindow::cutToClipboard()
+{
+    QWidget *w = widgetAt(ui->tabWidget->currentIndex());
+
+    if (auto *doc = qobject_cast<DocWindow *>(w)) {
+        doc->editor()->cut();
+        return;
+    }
+
+    auto *img = qobject_cast<ImageWindow *>(w);
+    if (!img) return;
+
+    copyToClipboard();
+
+    // Clear the copied area on the active layer.
+    auto *sel = img->selectionModel();
+    if (!sel || sel->isEmpty()) {
+        statusBar()->showMessage(tr("没有可剪切的选区"), 2000);
+        return;
+    }
+    cv::Mat *active = img->activeLayerImage();
+    if (!active) {
+        statusBar()->showMessage(tr("当前没有可编辑的图层"), 2000);
+        return;
+    }
+    const cv::Mat before = active->clone();
+    const QImage mask = sel->mask();
+    for (int y = 0; y < active->rows; ++y) {
+        const uchar *mrow = mask.constScanLine(y);
+        uchar *drow = active->ptr<uchar>(y);
+        for (int x = 0; x < active->cols; ++x) {
+            const uchar a = mrow[x];
+            if (a == 0) continue;
+            const int alpha = drow[x * active->channels() + 3];
+            const int inv = 255 - a;
+            for (int c = 0; c < 3; ++c) {
+                drow[x * active->channels() + c] =
+                    static_cast<uchar>((drow[x * active->channels() + c] * inv) / 255);
+            }
+            drow[x * active->channels() + 3] = static_cast<uchar>((alpha * inv) / 255);
+        }
+    }
+    img->pushLayerImageEdit(img->activeLayerIndex(), before, *active, tr("剪切"));
+    statusBar()->showMessage(tr("已剪切选区"), 2000);
+}
+
+void MainWindow::pasteFromClipboard()
+{
+    QWidget *w = widgetAt(ui->tabWidget->currentIndex());
+
+    if (auto *doc = qobject_cast<DocWindow *>(w)) {
+        doc->editor()->paste();
+        return;
+    }
+
+    auto *img = qobject_cast<ImageWindow *>(w);
+    if (!img) return;
+
+    QClipboard *clip = QApplication::clipboard();
+    const QImage src = clip->image(QClipboard::Clipboard);
+    if (src.isNull()) {
+        statusBar()->showMessage(tr("剪贴板中没有图像"), 2000);
+        return;
+    }
+
+    // QImage -> BGRA cv::Mat
+    QImage rgba = src.convertToFormat(QImage::Format_ARGB32);
+    cv::Mat bgra(rgba.height(), rgba.width(), CV_8UC4, rgba.bits(), rgba.bytesPerLine());
+    cv::Mat converted;
+    cv::cvtColor(bgra, converted, cv::COLOR_RGBA2BGRA);
+
+    // Paste as a new layer above the active one.
+    auto *stack = img->layerStack();
+    if (!stack) {
+        statusBar()->showMessage(tr("没有可用的图层栈"), 2000);
+        return;
+    }
+    const int at = qMax(0, img->activeLayerIndex());
+    const int idx = stack->addLayer(tr("粘贴的图层"), converted);
+    if (idx < 0) {
+        statusBar()->showMessage(tr("无法创建粘贴的图层"), 2000);
+        return;
+    }
+    (void)at;
+
+    // Restore the selection mask that came with the copy, if any.
+    if (clip->mimeData()->hasFormat(QLatin1String(kVistellaSelectionMime))) {
+        const QByteArray raw = clip->mimeData()->data(QLatin1String(kVistellaSelectionMime));
+        auto *sel = img->selectionModel();
+        if (sel && !raw.isEmpty()) {
+            QImage m(src.width(), src.height(), QImage::Format_Alpha8);
+            if (m.sizeInBytes() == raw.size()) {
+                memcpy(m.bits(), raw.constData(), static_cast<size_t>(raw.size()));
+                sel->setMask(m, selection::SelectionModel::Mode::Replace);
+            }
+        }
+    }
+
+    img->refreshCanvasNow();
+    statusBar()->showMessage(tr("已粘贴为新图层"), 2000);
+}
+
+void MainWindow::updateActionStates()
+{
+    QWidget *w = widgetAt(ui->tabWidget->currentIndex());
+    const bool isText  = qobject_cast<DocWindow *>(w) != nullptr;
+    const bool isImage = qobject_cast<ImageWindow *>(w) != nullptr;
+
+    // --- document level ---
+    m_actSave->setEnabled(isText || isImage);
+    m_actSaveAs->setEnabled(isText || isImage);
+    m_actExport->setEnabled(isImage);
+    m_actCloseCur->setEnabled(w != nullptr);
+    m_actCloseOthers->setEnabled(w != nullptr);
+    m_actCloseSameType->setEnabled(w != nullptr);
+    m_actCloseAll->setEnabled(ui->tabWidget->count() > 0);
+
+    // --- edit level ---
+    m_actUndo->setEnabled(isText || isImage);
+    m_actRedo->setEnabled(isText || isImage);
+    m_actCut->setEnabled(isText || isImage);
+    m_actCopy->setEnabled(isText || isImage);
+    m_actPaste->setEnabled(isText || isImage);
+    m_actSelAll->setEnabled(isText || isImage);
+    m_actFind->setEnabled(isText || isImage);
+    m_actReplace->setEnabled(isText || isImage);
+
+    // --- image only ---
+    m_actFreeTransform->setEnabled(isImage);
+    m_actImageFlipH->setEnabled(isImage);
+    m_actImageFlipV->setEnabled(isImage);
+    m_actImageRotate90CW->setEnabled(isImage);
+    m_actImageRotate90CCW->setEnabled(isImage);
+    m_actImageRotate180->setEnabled(isImage);
+
+    // Undo / redo reflect the active document's own stack.
+    if (auto *img = qobject_cast<ImageWindow *>(w)) {
+        if (auto *stack = img->undoStack()) {
+            m_actUndo->setEnabled(stack->canUndo());
+            m_actRedo->setEnabled(stack->canRedo());
+        }
+    } else if (auto *doc = qobject_cast<DocWindow *>(w)) {
+        m_actUndo->setEnabled(doc->editor()->document()->isUndoAvailable());
+        m_actRedo->setEnabled(doc->editor()->document()->isRedoAvailable());
+    }
+}
+
+void MainWindow::onCut()     { cutToClipboard(); }
+void MainWindow::onCopy()    { copyToClipboard(); }
+void MainWindow::onPaste()   { pasteFromClipboard(); }
 void MainWindow::onSelectAll(){ if (auto *d = qobject_cast<DocWindow *>(widgetAt(ui->tabWidget->currentIndex()))) d->editor()->selectAll(); }
 
 // 选择菜单 3 action 实装
@@ -3164,6 +3571,94 @@ void MainWindow::onHomeOpenFolderRequested()
     statusBar()->showMessage(tr("已加载目录: %1 (在信息树里双击/回车打开文件)").arg(dir), 5000);
 }
 
+// =============================================================
+//  Open a document through MediaDispatcher (M2-7a)
+// =============================================================
+//
+//  Routing by extension lives in one place now: MediaDispatcher asks the
+//  registered modules which one owns the file. Previously MainWindow
+//  guessed ("try ImageWindow.loadFile, fall back to DocWindow"), which
+//  sent a .mp4 into cv::imread (fails) and then into DocWindow, where the
+//  whole binary was read as text and shown as garbage.
+//
+//  The dispatcher hands back an IWorkspace. For images that is an
+//  ImageWorkspace wrapping an ImageWindow; the tab layer keys off
+//  qobject_cast<ImageWindow*>, so the window is extracted from the
+//  wrapper before it becomes a tab.
+int MainWindow::openDocument(const QString &path, QString *err)
+{
+    QString localErr;
+    auto &disp = MediaDispatcher::instance();
+
+    // The dispatcher reports its own failures through openFailed; capture
+    // the reason so the caller can show it.
+    QString dispatchReason;
+    auto conn = QMetaObject::Connection();
+    conn = QObject::connect(&disp, &MediaDispatcher::openFailed,
+                            this, [&dispatchReason](const QString &, const QString &reason) {
+        dispatchReason = reason;
+    });
+
+    IWorkspace *ws = disp.openFile(path, nullptr);
+    QObject::disconnect(conn);
+
+    if (ws) {
+        if (auto *imgWs = qobject_cast<ImageWorkspace*>(ws)) {
+            ImageWindow *img = imgWs->releaseImageWindow();
+            delete imgWs;          // no longer owns the window
+            if (!img) {
+                if (err) *err = QString("图像模块未返回窗口");
+                return -1;
+            }
+            img->attachWorkspaceMed(m_workspaceMed.get());
+            const int idx = addImageTab(img);
+            if (idx < 0) {
+                delete img;
+                if (err) *err = QString("无法创建标签页");
+                return -1;
+            }
+            return idx;
+        }
+        // A module that is not the image worker owns this file. Add the
+        // workspace as a plain tab.
+        const int idx = addDocTab(ws);
+        if (idx < 0) {
+            delete ws;
+            if (err) *err = QString("无法创建标签页");
+            return -1;
+        }
+        return idx;
+    }
+
+    // The dispatcher refused the file. Two cases:
+    //   - a module owns it but is not registered (audio/video) -> report
+    //     that clearly instead of opening it as text;
+    //   - no module claims the extension -> fall back to the text editor.
+    if (dispatchReason.isEmpty()) {
+        dispatchReason = QString("没有模块支持该文件类型");
+    }
+    if (!FileExtensionRegistry::isSupportedExtension(path)) {
+        // Unknown to every module: the plain-text editor is the sensible
+        // fallback, and it is what the user expects for .txt / .md / .log.
+        auto *doc = new DocWindow;
+        if (!doc->loadFile(path, &localErr)) {
+            delete doc;
+            if (err) *err = localErr.isEmpty() ? dispatchReason : localErr;
+            return -1;
+        }
+        const int idx = addDocTab(doc);
+        if (idx < 0) {
+            delete doc;
+            if (err) *err = QString("无法创建标签页");
+            return -1;
+        }
+        return idx;
+    }
+
+    if (err) *err = dispatchReason;
+    return -1;
+}
+
 void MainWindow::onHomeOpenPathRequested(const QString &path)
 {
     LOG_INFO("[Home] onHomeOpenPathRequested path='{}'",
@@ -3189,37 +3684,19 @@ void MainWindow::onHomeOpenPathRequested(const QString &path)
         }
     }
     QString err;
-    // 3D 模块移除后, 不再分流: 全部按扩展名识别 (图片/文本/...)
-    //   简单做法: 优先尝试 ImageWindow.loadFile, 失败回退 DocWindow
-    auto *img = new ImageWindow;
-    // 注入 WorkspaceMediator
-    img->attachWorkspaceMed(m_workspaceMed.get());
-    if (img->loadFile(path, &err)) {
-        int idx = addImageTab(img);
-        if (idx >= 0) {
-            ui->tabWidget->setCurrentIndex(idx);
-            // PS/WPS/VS 风格 打开文件后切到工作空间 (page 1)
-            switchToWorkspace();
-        }
-        RecentManager::instance().touchOpen(path, RecentModeMultimedia);
-        LOG_INFO("[Home] opened '{}' in tab {}", path.toLocal8Bit().constData(), idx);
-        return;
-    }
-    LOG_WARN("[Home] loadFile failed for '{}': {}", path.toLocal8Bit().constData(), err.toLocal8Bit().constData());
-    delete img;
-    auto *doc = new DocWindow;
-    if (!doc->loadFile(path, &err)) {
+        // Routing goes through MediaDispatcher (M2-7a) -- see openDocument().
+    const int idx = openDocument(path, &err);
+    if (idx < 0) {
+        LOG_WARN("[Home] open failed for '{}': {}",
+                 path.toLocal8Bit().constData(), err.toLocal8Bit().constData());
         QMessageBox::warning(this, tr("打开失败"), err);
-        delete doc;
         return;
     }
-    int idx = addDocTab(doc);
-    if (idx >= 0) {
-        ui->tabWidget->setCurrentIndex(idx);
-        // PS/WPS/VS 风格 打开文件后切到工作空间 (page 1)
-        switchToWorkspace();
-    }
+    ui->tabWidget->setCurrentIndex(idx);
+    // PS/WPS/VS 风格 打开文件后切到工作空间 (page 1)
+    switchToWorkspace();
     RecentManager::instance().touchOpen(path, RecentModeMultimedia);
+    LOG_INFO("[Home] opened '{}' in tab {}", path.toLocal8Bit().constData(), idx);
 }
 
 // ----------------- Session -----------------
@@ -3259,23 +3736,11 @@ void MainWindow::restoreSessionFiles(const QStringList &files, const QString &ac
     for (const QString &p : files) {
         if (!QFileInfo::exists(p)) continue;
         QString err;
-        // (3D 模块已移除, 模式分支删除, 全部按扩展名识别)
-        //   优先尝试 ImageWindow, 失败回退 DocWindow
-        ImageWindow *img = new ImageWindow;
-        // 注入 WorkspaceMediator
-        img->attachWorkspaceMed(m_workspaceMed.get());
-        if (img->loadFile(p, &err)) {
-            int idx = addImageTab(img);
-            if (idx >= 0) {
-                installTabPinButton(idx);
-                if (p == activeFile) targetIdx = idx;
-            }
-            continue;
-        }
-        delete img;
-        DocWindow *doc = new DocWindow;
-        if (!doc->loadFile(p, &err)) { delete doc; continue; }
-        int idx = addDocTab(doc);
+// Routing goes through MediaDispatcher (M2-7a): the extension
+//   decides which module owns the file. A module that is not
+//   registered (audio, video) reports "not supported" instead
+//   of being read as text.
+        const int idx = openDocument(p, &err);
         if (idx >= 0) {
             installTabPinButton(idx);
             if (p == activeFile) targetIdx = idx;
@@ -3387,6 +3852,21 @@ void MainWindow::retranslateUiTexts()
     if (m_infoDock) m_infoDock->setWindowTitle(tr("信息树"));
 
     for (int i = 0; i < ui->tabWidget->count(); ++i) refreshTabTitle(i);
+
+    // Rebuild the menu bar so every menu title and action label picks up
+    // the new translator. The menus were created with tr() at build time;
+    // a new QTranslator does not retroactively change text that is already
+    // set, so without this the whole menu bar stays in the old language.
+    buildActions();
+
+    // The document list inside the Window menu is rebuilt from the tab
+    // titles, which were just refreshed above.
+    if (m_docsMenu) rebuildDocsMenu(m_docsMenu);
+
+    // The global tool actions live outside the menu bar, so they are
+    // not recreated by buildActions(); their labels need refreshing by
+    // hand.
+    refreshGlobalToolActionLabels();
 }
 
 // 把 4 左侧 dock 重新绑定到指定 active image

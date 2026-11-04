@@ -155,6 +155,94 @@ bool SelectionModel::contains(const QPoint& p) const
     return data[p.y() * stride + p.x()] != 0;
 }
 
+// The mask alpha at a pixel (0..255). 0 when the pixel is outside the
+//   mask or outside the image. The paint clip uses this instead of
+//   contains() so a feathered selection clips proportionally instead of
+//   acting as a hard on/off switch.
+int SelectionModel::alphaAt(const QPoint& p) const
+{
+    if (m_mask.isNull()) return 0;
+    if (p.x() < 0 || p.y() < 0) return 0;
+    if (p.x() >= m_maskSize.width() || p.y() >= m_maskSize.height()) return 0;
+    const uchar* data = m_mask.constBits();
+    const int stride = m_mask.bytesPerLine();
+    return data[p.y() * stride + p.x()];
+}
+
+// The outline of the selection, as straight segments in mask pixel
+//   coordinates.
+//
+//   The shape is found by scanning every row of the mask for runs of
+//   selected pixels. For each run the four boundary edges are emitted
+//   where the neighbouring pixel is NOT selected:
+//
+//        (x0,y) ---- top edge (when row y-1 is empty here)
+//          |        |
+//        left      right      (when the pixel beside the run is empty)
+//          |        |
+//        (x0,y+1) - bottom edge (when row y+1 is empty here)
+//
+//   The result traces the real contour: a round selection gives a round
+//   outline, not the bounding box.
+QList<SelectionModel::Segment> SelectionModel::contourSegments() const
+{
+    QList<Segment> segments;
+    if (m_mask.isNull() || m_maskSize.isEmpty()) return segments;
+
+    const int W = m_maskSize.width();
+    const int H = m_maskSize.height();
+    const uchar* data = m_mask.constBits();
+    const int stride = m_mask.bytesPerLine();
+
+    // selected(x, y) -- outside the mask counts as "not selected".
+    auto selected = [data, stride, W, H](int x, int y) -> bool {
+        if (x < 0 || y < 0 || x >= W || y >= H) return false;
+        return data[y * stride + x] != 0;
+    };
+
+    for (int y = 0; y < H; ++y) {
+        int x = 0;
+        while (x < W) {
+            // Skip the empty part of the row.
+            while (x < W && !selected(x, y)) ++x;
+            if (x >= W) break;
+            const int runStart = x;
+            // Find the end of the run.
+            while (x < W && selected(x, y)) ++x;
+            const int runEnd = x;   // exclusive
+
+            // Top edge: the row above does not cover this run.
+            if (!selected(runStart, y - 1)) {
+                segments.append(Segment{ QPointF(runStart, y), QPointF(runEnd, y) });
+            }
+            // Bottom edge: the row below does not cover this run.
+            if (!selected(runStart, y + 1)) {
+                segments.append(Segment{ QPointF(runStart, y + 1), QPointF(runEnd, y + 1) });
+            }
+            // Left edge: the pixel beside the run start is empty.
+            if (!selected(runStart - 1, y)) {
+                segments.append(Segment{ QPointF(runStart, y), QPointF(runStart, y + 1) });
+            }
+            // Right edge: the pixel beside the run end is empty.
+            if (!selected(runEnd, y)) {
+                segments.append(Segment{ QPointF(runEnd, y), QPointF(runEnd, y + 1) });
+            }
+        }
+    }
+    return segments;
+}
+
+// The persistent selection mode. One owner per document (see the header
+//   comment): the mode survives a tool switch because the tool instance
+//   does not.
+void SelectionModel::setSelectionMode(Mode m)
+{
+    if (m_selectionMode == m) return;
+    m_selectionMode = m;
+    LOG_INFO("[SelectionModel] selectionMode -> {}", static_cast<int>(m));
+    emit selectionModeChanged(m_selectionMode);
+}
+
 int SelectionModel::pixelCount() const
 {
     if (m_mask.isNull()) return 0;
@@ -218,28 +306,30 @@ void SelectionModel::recomputeBbox()
 // ===== PS select > Modify 5 项 + Transform =====
 //   所有方法生成新 mask 应用,触发 changed + bbox recompute.
 
-// feather: 高斯模糊 + 阈值化 (阈值 128 保持 mask 边缘)
-//   radiusPx: 模糊半径 (PS: 0..250 像素)
+// feather: separable box blur of the alpha mask, keeping the grayscale ramp.
+//   radiusPx: blur radius (PS: 0..250 pixels)
+//   The blurred alpha is written back verbatim (0..255). Thresholding it
+//   would throw the soft edge away and turn the feather back into a hard
+//   edge -- that is what this function used to do.
 void SelectionModel::feather(int radiusPx)
 {
     ensureMaskAllocated();
     if (m_mask.isNull() || radiusPx <= 0) return;
-    // QImage 没有 native gaussianBlur, 用 QPainter::transformed + QImage::smoothScale
-    //   转 QImage (Format_ARGB32) 用 OpenCV 等价 — 实际更简单:
-    //   直接对 alpha8 mask 做 box blur (平均) 多遍达到近似 Gaussian.
-    //   优化: 用 std::vector<float> 中间 buffer 做水平+垂直 separable blur.
+    // QImage has no native gaussianBlur. A separable box blur over the
+    //   alpha8 mask approximates a Gaussian well enough and needs no
+    //   OpenCV. The float buffer holds the horizontal pass; the vertical
+    //   pass writes the final 0..255 alpha straight into the mask.
     if (radiusPx < 1) radiusPx = 1;
     const int W = m_maskSize.width();
     const int H = m_maskSize.height();
     if (W == 0 || H == 0) return;
 
-    // 简单 box blur (3 passes 近似 Gaussian, 比 cv::GaussianBlur 简单不用 OpenCV)
+    // Horizontal pass into a float buffer.
     std::vector<float> tmp(static_cast<size_t>(W) * H);
     const uchar* src = m_mask.constBits();
     const int stride = m_mask.bytesPerLine();
     auto idx = [W](int x, int y) { return static_cast<size_t>(y) * W + x; };
 
-    // horizontal pass
     for (int y = 0; y < H; ++y) {
         for (int x = 0; x < W; ++x) {
             int sum = 0, count = 0;
@@ -253,7 +343,9 @@ void SelectionModel::feather(int radiusPx)
             tmp[idx(x, y)] = static_cast<float>(sum) / count;
         }
     }
-    // vertical pass -> m_mask (threshold 128 保持 alpha mask 二值化)
+    // Vertical pass -> m_mask. The blurred alpha is kept as grayscale so
+    //   the selection edge stays soft (a feathered edge is a ramp of
+    //   intermediate alpha values, not a hard 0/255 step).
     uchar* dst = m_mask.bits();
     for (int y = 0; y < H; ++y) {
         for (int x = 0; x < W; ++x) {
@@ -267,7 +359,8 @@ void SelectionModel::feather(int radiusPx)
                 }
             }
             const float v = sum / count;
-            dst[y * stride + x] = (v >= 128.0f) ? 255 : 0;
+            const int a = static_cast<int>(v + 0.5f);
+            dst[y * stride + x] = static_cast<uchar>(a < 0 ? 0 : (a > 255 ? 255 : a));
         }
     }
     recomputeBbox();

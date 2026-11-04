@@ -250,6 +250,30 @@ LayerCommand* LayerCommand::makeSetAdjustmentLut(LayerStack *stack, int index, c
     return cmd;
 }
 
+//  SetAdjustmentState: the WHOLE adjustment state (M2-6b)
+//
+//  An adjustment layer carries three parts: the 1D LUT (curves /
+//  levels), the per-pixel payload (HSL / black & white / channel
+//  mixer) and the per-channel LUTs (curves with a channel selector).
+//  Undo has to restore all three: restoring only the LUT would leave
+//  the per-pixel payload on the layer, so undoing an HSL edit would
+//  not bring the picture back.
+LayerCommand* LayerCommand::makeSetAdjustmentState(LayerStack *stack, int index,
+                                                    const cv::Mat &oldLut,
+                                                    const AdjustmentParams &oldParams,
+                                                    const QVector<cv::Mat> &oldChannelLuts)
+{
+    auto *cmd = new LayerCommand(stack, SetAdjustmentState, index);
+    cmd->m_oldMat = oldLut.empty() ? cv::Mat() : oldLut.clone();
+    cmd->m_oldParams = oldParams;
+    cmd->m_oldChannelLuts.clear();
+    for (const cv::Mat& m : oldChannelLuts) {
+        cmd->m_oldChannelLuts.push_back(m.empty() ? cv::Mat() : m.clone());
+    }
+    cmd->setText(QStringLiteral("Edit Adjustment"));
+    return cmd;
+}
+
 //  智能对象 link↔embed 切换 factory
 LayerCommand* LayerCommand::makeToggleSmartObjectEmbed(LayerStack *stack, int index, bool oldEmbedded)
 {
@@ -560,6 +584,15 @@ void LayerCommand::captureAfter()
         // 新值 = 调整图层当前的 LUT (调用方先写新值, 再 push command)
         m_newMat = l->adjustmentLut.clone();
         break;
+    case SetAdjustmentState:
+        // The new state = the whole adjustment state of the layer (the caller applies the new value first, then pushes the command)
+        m_newMat = l->adjustmentLut.clone();
+        m_newParams = l->adjustmentParams;
+        m_newChannelLuts.clear();
+        for (const cv::Mat& m : l->adjustmentChannelLuts) {
+            m_newChannelLuts.push_back(m.empty() ? cv::Mat() : m.clone());
+        }
+        break;
     case ToggleSmartObjectEmbed: m_boolNew = l->sourceEmbedded; break;
     case ConvertToSmartObject:
     case RasterizeSmartObject:
@@ -736,6 +769,24 @@ void LayerCommand::applyState(bool after)
         if (l) {
             const cv::Mat &lut = after ? m_newMat : m_oldMat;
             l->adjustmentLut = lut.empty() ? cv::Mat() : lut.clone();
+            m_stack->notifyLayerChanged(m_index);
+        }
+        break;
+    }
+    case SetAdjustmentState: {
+        // M2-6b: restore all three parts at once
+        //   (LUT + per-pixel payload + per-channel LUTs)
+        auto l = m_stack->at(m_index);
+        if (l) {
+            const cv::Mat &lut = after ? m_newMat : m_oldMat;
+            l->adjustmentLut = lut.empty() ? cv::Mat() : lut.clone();
+            l->adjustmentParams = after ? m_newParams : m_oldParams;
+            l->adjustmentChannelLuts.clear();
+            const QVector<cv::Mat>& channelLuts =
+                after ? m_newChannelLuts : m_oldChannelLuts;
+            for (const cv::Mat& m : channelLuts) {
+                l->adjustmentChannelLuts.push_back(m.empty() ? cv::Mat() : m.clone());
+            }
             m_stack->notifyLayerChanged(m_index);
         }
         break;

@@ -276,6 +276,11 @@ add_library(vistella_media STATIC
     # 像素契约 (LYR-01 / LYR-35 / CP-07): 通道归一化 + Porter-Duff over 合成原语
     imageworker/layers/PixelFormat.h
     imageworker/layers/PixelFormat.cpp
+    # M2-6b: per-pixel adjustment payloads (HSL / B&W / ChannelMixer).
+    #   A 1D LUT can only express a per-channel function, so these three
+    #   adjustments need their own per-pixel transform.
+    imageworker/layers/AdjustmentTransform.h
+    imageworker/layers/AdjustmentTransform.cpp
     # P1.3.1 (2026-09-16): LayerMask 数据结构 (pixel + vector + density + feather + invert)
     imageworker/layers/LayerMask.h
     imageworker/layers/LayerMaskRenderer.h

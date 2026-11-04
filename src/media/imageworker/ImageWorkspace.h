@@ -50,6 +50,19 @@ public:
     // 公开接口: 取底层 ImageWindow (主窗口专有功能: undo/redo/selectAll 等)
     ImageWindow *imageWindow() const { return m_imageWindow; }
 
+    // Detach the inner ImageWindow from this workspace and hand ownership
+    // to the caller.
+    //
+    // Why: the tab layer identifies image documents with
+    // qobject_cast<ImageWindow*>, and an ImageWorkspace is a different
+    // QObject type. MediaDispatcher returns an IWorkspace, so the image
+    // window has to be pulled out of the wrapper before it can become a tab.
+    //
+    // After this call the workspace no longer owns the window: the window
+    // is reparented to nullptr and removed from the layout, so destroying
+    // the workspace does not destroy the window.
+    ImageWindow *releaseImageWindow();
+
 private:
     ImageWindow *m_imageWindow = nullptr;
 };

@@ -5,6 +5,7 @@
 
 #include "LayerStack.h"
 
+#include "AdjustmentTransform.h"
 #include "LayerMaskRenderer.h"
 #include "PixelFormat.h"
 #include "BlendMode.h"
@@ -337,7 +338,8 @@ int LayerStack::addSmartObjectLayer(const QString &name, const QString &sourceFi
 }
 
 int LayerStack::addAdjustmentLayer(const QString &name, const QString &adjustmentType,
-                                   const cv::Mat &lut)
+                                   const cv::Mat &lut,
+                                   const AdjustmentParams &params)
 {
     Layer l;
     l.kind = Layer::Adjustment;
@@ -346,6 +348,7 @@ int LayerStack::addAdjustmentLayer(const QString &name, const QString &adjustmen
         : name;
     l.adjustmentType = adjustmentType;
     l.adjustmentLut = lut.empty() ? cv::Mat() : lut.clone();
+    l.adjustmentParams = params;
     // 默认 linear LUT (identity 256x1)
     if (l.adjustmentLut.empty()) {
         l.adjustmentLut = cv::Mat(256, 1, CV_8U);
@@ -764,6 +767,31 @@ bool LayerStack::setAdjustmentLut(int index, const cv::Mat &lut)
         if (l->kind != Layer::Adjustment) return false;
         if (lut.empty()) return false;
         l->adjustmentLut = lut.clone();
+        emit layerChanged(index);
+        return true;
+    }
+    return false;
+}
+
+bool LayerStack::setAdjustmentParams(int index, const AdjustmentParams &params)
+{
+    if (auto l = at(index)) {
+        if (l->kind != Layer::Adjustment) return false;
+        l->adjustmentParams = params;
+        emit layerChanged(index);
+        return true;
+    }
+    return false;
+}
+
+bool LayerStack::setAdjustmentChannelLuts(int index, const QVector<cv::Mat> &luts)
+{
+    if (auto l = at(index)) {
+        if (l->kind != Layer::Adjustment) return false;
+        l->adjustmentChannelLuts.clear();
+        for (const cv::Mat& m : luts) {
+            l->adjustmentChannelLuts.push_back(m.empty() ? cv::Mat() : m.clone());
+        }
         emit layerChanged(index);
         return true;
     }
@@ -1735,11 +1763,35 @@ cv::Mat LayerStack::renderLegacy() const
         //   The adjustment's opacity scales the COVERAGE (Porter-Duff
         //   over), the same as every other layer.
         if (l->kind == Layer::Adjustment) {
-            if (!l->adjustmentLut.empty() && l->adjustmentLut.rows == 256
-                && l->adjustmentLut.cols == 1 && l->adjustmentLut.type() == CV_8U) {
-                cv::Mat bgr, alpha, adjustedBgr, adjusted;
-                splitBgra(canvas, bgr, alpha);
-                cv::LUT(bgr, l->adjustmentLut, adjustedBgr);
+            // An adjustment rewrites the COLOUR channels of the canvas.
+            //
+            //   Two mutually exclusive mechanisms:
+            //     - the per-pixel transform (kind != Lut): HSL, B&W,
+            //       ChannelMixer. These depend on all three channels
+            //       of a pixel, so they cannot be a 1D LUT.
+            //     - the 1D LUT (Curves / Levels), optionally per
+            //       channel (adjustmentChannelLuts).
+            //
+            //   The alpha channel NEVER goes through either one --
+            //   running it through a colour transform would scramble
+            //   the canvas transparency. The adjustment's opacity scales
+            //   the COVERAGE (Porter-Duff over), the same as every
+            //   other layer.
+            //
+            //   Both mechanisms are pure per-pixel functions, so the
+            //   compositor can run them per tile unchanged.
+            cv::Mat bgr, alpha, adjustedBgr, adjusted;
+            splitBgra(canvas, bgr, alpha);
+            bool changed = false;
+            if (l->adjustmentParams.kind != AdjustKind::Lut) {
+                changed = applyAdjustmentTransform(bgr, l->adjustmentParams,
+                                                 adjustedBgr);
+            } else {
+                changed = applyChannelLuts(bgr, l->adjustmentLut,
+                                           l->adjustmentChannelLuts,
+                                           adjustedBgr);
+            }
+            if (changed) {
                 std::vector<cv::Mat> ch;
                 cv::split(adjustedBgr, ch);
                 ch.push_back(alpha);
@@ -1777,12 +1829,31 @@ cv::Mat LayerStack::renderOne(int index) const
     auto l = at(index);
     if (!l) return cv::Mat();
     if (l->kind == Layer::Adjustment) {
-        // Adjustment 单层预览 = 调色后的 canvas (需要全栈, 简化: 对 base 调色)
+        // Single-layer preview = the adjusted canvas (it needs the whole
+        // stack, so this simplifies to adjusting the base image).
+        //
+        //   Same two mechanisms as renderLegacy(): the per-pixel
+        //   transform, or the 1D LUT (per channel when the layer carries
+        //   a channel LUT set).
         if (auto base = baseLayer()) {
             if (base->image.empty()) return cv::Mat();
-            if (l->adjustmentLut.empty()) return base->image.clone();
+            cv::Mat bgr, alpha, adjustedBgr;
+            splitBgra(base->image, bgr, alpha);
+            bool changed = false;
+            if (l->adjustmentParams.kind != AdjustKind::Lut) {
+                changed = applyAdjustmentTransform(bgr, l->adjustmentParams,
+                                                 adjustedBgr);
+            } else {
+                changed = applyChannelLuts(bgr, l->adjustmentLut,
+                                           l->adjustmentChannelLuts,
+                                           adjustedBgr);
+            }
+            if (!changed) return base->image.clone();
+            std::vector<cv::Mat> ch;
+            cv::split(adjustedBgr, ch);
+            ch.push_back(alpha);
             cv::Mat out;
-            cv::LUT(base->image, l->adjustmentLut, out);
+            cv::merge(ch, out);
             return out;
         }
         return cv::Mat();

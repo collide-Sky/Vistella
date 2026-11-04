@@ -215,6 +215,15 @@ private slots:
 
 private:
     void buildActions();
+    // Remove the menu bar contents and delete the actions buildActions()
+    // created, so buildActions() can run again (used on a language switch).
+    void destroyActions();
+    // The 15 global tool shortcut actions. Created once, outside the menu
+    // bar, so a menu rebuild does not duplicate them.
+    void buildGlobalToolActions();
+    // Re-apply tr() to the global tool action labels after a language
+    // switch.
+    void refreshGlobalToolActionLabels();
     //void buildMenuCorner();      // (旧)菜单栏右上角圆角框放 建模/多媒体 — 已合并到 buildRightArea
     void buildTitleBar();         // 自绘标题栏 L2 方案: 替代 buildMenuCorner
     void buildLeftArea();         // logo + app name + version
@@ -240,6 +249,36 @@ private:
     // Tab 管理
     int  addDocTab(QWidget *doc);
     int  addImageTab(ImageWindow *img);
+
+    // Enable / disable the document actions according to the active tab.
+    //
+    // Called whenever the current tab changes and whenever a document is
+    // opened or closed. Image-only actions (layer ops, adjustments,
+    // selection) are disabled while a text document is active, and the
+    // text-only actions (find, replace) are disabled while an image is
+    // active. Undo / redo follow the active document's own stacks.
+    void updateActionStates();
+
+    // Copy / cut / paste for the active document.
+    //
+    // Text documents delegate to the editor. Image documents put the
+    // selection (or the whole composite when nothing is selected) on the
+    // clipboard as an image, and paste creates a new layer from it.
+    void copyToClipboard();
+    void cutToClipboard();
+    void pasteFromClipboard();
+
+    // Open a document and add it as a tab.
+    //
+    // Routing goes through MediaDispatcher, which maps the file extension
+    // to a registered module. Image files are served by the imageWorker
+    // module; extensions whose module is not registered yet (audio, video)
+    // produce a clear error instead of being read as text.
+    // Files no module claims fall back to the plain-text DocWindow.
+    //
+    // Returns the new tab index, or -1 when the file could not be opened
+    // (err receives a user-facing message).
+    int  openDocument(const QString &path, QString *err = nullptr);
     QWidget *widgetAt(int index) const;
     int  indexOfWidget(QWidget *w) const;
     void focusOrCreateWidget(QWidget *doc);

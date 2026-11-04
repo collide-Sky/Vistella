@@ -75,6 +75,10 @@ public:
         SetSmartObject,     // 智能对象源 (m_strVal=old path, m_boolVal=old embed)
         SetAdjustmentType,  // 调整类型 (m_strVal=old type)
         SetAdjustmentLut,   // 调整 LUT (m_oldMat=old lut)
+        // M2-6b: the WHOLE adjustment state of a layer (LUT + per-pixel
+        //   payload + per-channel LUTs). An adjustment layer is no longer
+        //   just a 1D LUT, so undoing one has to restore all of it.
+        SetAdjustmentState,
         //  智能对象扩展 Op
         ToggleSmartObjectEmbed,  // link↔embed (m_boolVal=old embedded)
         // 智能对象 Convert / Rasterize / Transform
@@ -147,6 +151,14 @@ public:
                                              const QString &oldPath, bool oldEmbed);
     static LayerCommand* makeSetAdjustmentType(LayerStack *stack, int index, const QString &oldType);
     static LayerCommand* makeSetAdjustmentLut(LayerStack *stack, int index, const cv::Mat &oldLut);
+    // M2-6b: restore the whole adjustment state of a layer.
+    //   The caller applies the new state FIRST and then pushes this
+    //   command (the usual LayerCommand convention), so the "after"
+    //   state is captured from the layer by captureAfter().
+    static LayerCommand* makeSetAdjustmentState(LayerStack *stack, int index,
+                                                const cv::Mat &oldLut,
+                                                const AdjustmentParams &oldParams,
+                                                const QVector<cv::Mat> &oldChannelLuts);
     //  智能对象扩展 factory
     static LayerCommand* makeToggleSmartObjectEmbed(LayerStack *stack, int index, bool oldEmbedded);
     // Convert / Rasterize / Transform factories
@@ -318,6 +330,14 @@ private:
     QTransform  m_newTransform;      // SetSmartObjectTransform: after
     bool        m_oldHasTransform = false;  // SetSmartObjectTransform: before has flag
     bool        m_newHasTransform = false;  // SetSmartObjectTransform: after has flag
+    // M2-6b: the per-pixel adjustment payload of an adjustment layer.
+    //   SetAdjustmentState keeps the before AND the after state of all
+    //   three parts of an adjustment (LUT, per-pixel payload, per-channel
+    //   LUTs), because an adjustment layer is no longer just a 1D LUT.
+    AdjustmentParams m_oldParams;
+    AdjustmentParams m_newParams;
+    QVector<cv::Mat> m_oldChannelLuts;
+    QVector<cv::Mat> m_newChannelLuts;
     // SmartFilter undo state
     //   AppendSmartFilter / RemoveSmartFilter reuse m_layer (full clone).
     //   MoveSmartFilter stores old/new slot in m_intVal (current) / m_index2 (old).

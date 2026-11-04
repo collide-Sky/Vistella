@@ -12,6 +12,7 @@
 //   via DialogFactory::create("HSL") (which returns AdjustDialogBase*).
 //
 #include <QTest>
+#include <QApplication>
 #include <QSignalSpy>
 #include <QSlider>
 #include <QPushButton>
@@ -68,6 +69,11 @@ void tst_F_K_AdjustDialog::hsl_sliderValueChangesArgs()
     AdjustDialogBase* dlg = DialogFactory::create("HSL", QVariantMap());
     QVERIFY(dlg != nullptr);
     QSignalSpy previewSpy(dlg, &AdjustDialogBase::preview);
+    // The preview is armed on the first show: before that, the
+    // constructor's setInitialArgs() would fire a preview that the host
+    // could not roll back (M2-6a).
+    dlg->show();
+    QApplication::processEvents();
     QList<QSlider*> sliders = dlg->findChildren<QSlider*>();
     // 8 hue + 8 sat + 1 lightness = 17 sliders.
     QCOMPARE(sliders.size(), 17);   // 8 hue + 8 sat + 1 light

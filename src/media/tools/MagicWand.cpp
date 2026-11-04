@@ -33,15 +33,35 @@ MagicWand::~MagicWand() = default;
 
 void MagicWand::onEnter(ImageWindow* host)
 {
-    Q_UNUSED(host);
-    LOG_DEBUG("[MagicWand] onEnter");
+    // Bind the document's selection model: it owns the persistent
+    //   selection mode, so the mode survives a tool switch.
+    m_selectionModel = host ? host->selectionModel() : nullptr;
+    LOG_DEBUG("[MagicWand] onEnter: selectionModel={}",
+              m_selectionModel ? "bound" : "none");
 }
 
 void MagicWand::onExit(ImageWindow* host)
 {
     Q_UNUSED(host);
     if (m_strategy) m_strategy->cancel();
+    m_selectionModel = nullptr;
     LOG_DEBUG("[MagicWand] onExit");
+}
+
+void MagicWand::setSelectionMode(selection::SelectionModel::Mode m)
+{
+    if (m_selectionModel) {
+        // The document model is the owner -- write straight into it.
+        m_selectionModel->setSelectionMode(m);
+        return;
+    }
+    m_detachedMode = m;
+}
+
+selection::SelectionModel::Mode MagicWand::selectionMode() const
+{
+    if (m_selectionModel) return m_selectionModel->selectionMode();
+    return m_detachedMode;
 }
 
 void MagicWand::onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)
@@ -67,9 +87,10 @@ void MagicWand::onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF&
     if (!sel) return;
     auto mode = selection::SelectionModel::modifierKeyToMode(e->modifiers());
     if (mode == selection::SelectionModel::Mode::Replace) {
-        // Q4.2.3: no modifier held -> use explicit selection mode (ModeSelectorBar
-        //   button state). Modifier keys (Shift/Alt) still override when held.
-        mode = m_selectionMode;
+        // Q4.2.3 / M2-5: no modifier held -> use the mode picked in the mode
+        //   bar. It lives in the document's SelectionModel, so it survives a
+        //   tool switch. Modifier keys (Shift/Alt) still override when held.
+        mode = selectionMode();
     }
     // M1-7: the gesture is undoable.
     //   Capture the mask BEFORE the change, apply the change, then push

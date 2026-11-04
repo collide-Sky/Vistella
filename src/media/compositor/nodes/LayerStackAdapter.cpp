@@ -341,6 +341,11 @@ static CompositorNode::NodeId buildRange(layers::LayerStack& stack,
             auto adj = std::make_unique<LayerAdjustmentNode>(
                 prev, layer->adjustmentLut, layer->opacity,
                 layer.get(), QString::fromLatin1("Adjust:%1").arg(layer->name));
+            // M2-6b: hand the per-pixel payload and the per-channel LUTs
+            //   to the node, so the compositor applies exactly what the
+            //   legacy path applies.
+            adj->setAdjustmentParams(layer->adjustmentParams);
+            adj->setChannelLuts(layer->adjustmentChannelLuts);
             const CompositorNode::NodeId adjId = adj->id();
             r.graph.addNode(adj.get());
             r.graph.addEdge(prev, adjId);

@@ -271,6 +271,15 @@ public:
     void     pushLayerImageEdit(int index, const cv::Mat &before,
                                  const cv::Mat &after, const QString &text);
 
+    // M2-5: clip a pixel edit to the active selection.
+    //   `before` is the pre-edit pixels, `after` the edited ones. The
+    //   result keeps the edited value inside the selection, restores the
+    //   pre-edit value outside it, and blends the two on a feathered
+    //   edge. Returns false (and leaves `out` untouched) when there is
+    //   no selection -- then nothing is clipped.
+    bool     clipEditToSelection(const cv::Mat &before, const cv::Mat &after,
+                                  cv::Mat &out) const;
+
     // AdjustmentPanel 公开访问 (供 MainWindow 等)
     class AdjustmentPanel* adjustmentPanel() { return m_adjustmentPanel; }
     // Per-window DialogMediator access
