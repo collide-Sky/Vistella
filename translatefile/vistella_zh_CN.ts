@@ -1181,7 +1181,7 @@
     <name>InfoTreeDock</name>
     <message>
         <location filename="../src/ui/infotreedock.ui" line="14"/>
-        <location filename="../src/ui/infotreedock.cpp" line="18"/>
+        <location filename="../src/ui/infotreedock.cpp" line="19"/>
         <source>信息树</source>
         <translation type="unfinished"></translation>
     </message>

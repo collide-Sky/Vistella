@@ -2,30 +2,39 @@
 #define INFOTREEDOCK_H
 
 #include <QDockWidget>
+#include <QModelIndex>
 #include <QString>
 #include <QStringList>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class InfoTreeDock; }
 class QTreeView;
-class QModelIndex;
-class FileTreeModel;
+class QFileSystemModel;
+class FileTreeProxyModel;
 QT_END_NAMESPACE
 
 // =============================================================
-// InfoTreeDock — 信息树 / 通用项目浏览器 (2026-09-02 决策 5 重构: Model/View)
+// InfoTreeDock -- the information tree / generic project browser
 //
-// 职责:
-//   1. setRootPath(path)  加载指定目录的文件树
-//   2. 文件树展示 (QTreeView + FileTreeModel + FileTreeItem + FileTreeNodeData)
-//   3. 双击文件 / 选中按回车 → emit openFileRequested(path)
-//      MainWindow 接收后调 MediaDispatcher 路由
+//  Responsibilities:
+//    1. setRootPath(path)  load the file tree of the given directory
+//    2. the tree itself (QTreeView + QFileSystemModel + FileTreeProxyModel)
+//    3. double click a file / select + press enter
+//       -> emit openFileRequested(path)
+//       MainWindow connects to it and routes through the MediaDispatcher
 //
-// 决策 5 改动 (跟旧 QTreeWidget 版本相比):
-//   - 旧: QTreeWidget (item-based, 数据和视图耦合)
-//   - 新: QTreeView + FileTreeModel (Model/View, 数据/视图/树结构三层分离)
-//   - 节点数据单独抽到 FileTreeNodeData (POD), 树结构在 FileTreeItem
-//   - 扩展名过滤: 不在 FileExtensionRegistry 里的文件不显示
+// M2-7b: QFileSystemModel + QSortFilterProxyModel
+//   The old hand written FileTreeModel read every directory on the UI
+//   thread (two full scans plus a stat() per file), and it answered
+//   "yes" to hasChildren() for EVERY directory, so an empty directory
+//   kept its expand arrow forever.
+//   Now the directories are read in a worker thread by the
+//   QFileSystemModel; the FileTreeProxyModel filters the extensions and
+//   owns the expand arrow.
+//
+//   The tree is navigated by PATH, never by a stored proxy index -- a
+//   proxy index does not survive a change of the source model. See the
+//   rule in FileTreeProxyModel.h.
 // =============================================================
 
 class InfoTreeDock : public QDockWidget
@@ -35,27 +44,46 @@ public:
     explicit InfoTreeDock(QWidget *parent = nullptr);
     ~InfoTreeDock() override;
 
-    // 切换到指定目录作为根, 清空旧内容, 重新扫描
+    // Switch to the given directory as the root; an empty path clears
+    // the content and rescans.
     void setRootPath(const QString &path);
     QString rootPath() const;
 
 protected:
-    // 拦截 tree 上的回车键 → onReturnPressed
+    // intercept the tree's key event -- onReturnPressed
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
-    // 用户在树里双击文件 / 选中后按回车 → 发出文件绝对路径
+    // The user double clicked a file in the tree / selected it and
+    // pressed enter -> the absolute file path
     void openFileRequested(const QString &path);
 
 private slots:
-    // QTreeView 信号
+    // QTreeView signals
     void onActivated(const QModelIndex &index);
-    void onExpanded(const QModelIndex &index);
     void onReturnPressed();
+    // After a directory has been read, refresh the expand arrow (an
+    // empty directory must not have one).
+    void onDirectoryRead(const QString &path);
 
 private:
+    // Take the root index of the view FRESH from the path.
+    void updateRootIndex();
+    // Expand / collapse a directory row.
+    void toggleDirectory(const QModelIndex &index);
+
     Ui::InfoTreeDock *ui;
-    FileTreeModel   *m_model = nullptr;
+    QFileSystemModel *m_fsModel = nullptr;
+    FileTreeProxyModel *m_proxy = nullptr;
+    QString m_rootPath;
+    // A cached proxy index. It is NOT used by the production code -- it
+    // exists so that the break self-check
+    // (tools/break_check_m2_7_filetree.py) can inject the defect
+    // "the tree is navigated by a cached proxy index" and prove that the
+    // regression tests catch it. A proxy index does not survive a change
+    // of the source model, and the read of a directory is exactly such a
+    // change -- a cached index then points at freed memory.
+    QModelIndex m_cachedRoot;
 };
 
 #endif // INFOTREEDOCK_H

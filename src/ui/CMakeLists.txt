@@ -1,15 +1,10 @@
 # ui: 窗口类 (含 .ui)
 # 集中所有 QWidget 子类, 不放业务逻辑
 add_library(vistella_ui STATIC
-    # 决策 5 重构 (2026-09-02): 文件树 Model/View
-    #   FileTreeNodeData 纯 header POD
-    #   FileTreeItem      树节点 + 父子关系 + lazy load
-    #   FileTreeModel     QAbstractItemModel + 扩展名过滤
-    FileTreeNodeData.h
-    FileTreeItem.h
-    FileTreeItem.cpp
-    FileTreeModel.h
-    FileTreeModel.cpp
+    # M2-7b: 文件树换成 QFileSystemModel + QSortFilterProxyModel
+    #   FileTreeProxyModel  扩展名过滤 + 空目录的展开箭头
+    FileTreeProxyModel.h
+    FileTreeProxyModel.cpp
 
     infotreedock.h
     infotreedock.cpp

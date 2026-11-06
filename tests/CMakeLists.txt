@@ -59,7 +59,11 @@ endfunction()
 
 # ---- 16 个测试目标 (W4.4 Phase 5 2026-09-04 加 tst_SmartObject) ----
 add_vistella_test(tst_FileExtensionRegistry)
-add_vistella_test(tst_FileTreeModel)
+# M2-7b (2026-11-03): the file tree on QFileSystemModel.
+#   The extension filter has to work in every level of the tree, a
+#   directory always passes it, and an empty directory must not keep an
+#   expand arrow (UI-07).
+add_vistella_test(tst_M2_7_FileTree)
 add_vistella_test(tst_MediaDispatcher)
 add_vistella_test(tst_QQuickWidgetDemo)
 add_vistella_test(tst_Async)

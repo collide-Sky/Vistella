@@ -38,25 +38,30 @@ EXE = os.path.join(BUILD, "tst_M2_6_AdjustPreview.exe")
 
 
 # ---------------------------------------------------------------------------
-# Bug 1: the preview path pushes an undo command.
+# Bug 1: the preview pushes an undo command.
 #
-# applyTabLutInPreviewMode is the single place where the preview writes
-# the LUT.  Making it arm the 200ms debounce timer (exactly like
-# applyCurrentTab does) means a preview drag ends up pushing undo
-# commands -- which is the bug the whole feature exists to avoid.
+# The preview writes the adjustment through applyTabLutInPreviewMode, which
+# deliberately does NOT start the debounce timer and does NOT mark the tab
+# as "pending" -- the preview pushes no undo command.
+#
+# The injection makes the preview mark the tab as pending, which is what
+# the debounce commit looks at: 200ms later commitUndoDebounced() finds a
+# pending tab and pushes a LayerCommand.  A slider drag would then fill
+# the undo stack with one entry per drag -- exactly the bug the whole
+# preview feature exists to avoid.
 # ---------------------------------------------------------------------------
-BUG1_OLD = """    // 画布立刻变 (预览就是给人看的)
+BUG1_OLD = """    // The canvas changes at once (that is what a preview is for)
     m_host->refreshCanvasNow();
 
-    // 注意: 这里**故意不**启动 m_commitTimer -- 预览不推撤销命令.
+    // Note: the commit timer is deliberately NOT started here -- the preview pushes no undo command.
 }"""
 
-BUG1_NEW = """    // 画布立刻变 (预览就是给人看的)
+BUG1_NEW = """    // The canvas changes at once (that is what a preview is for)
     m_host->refreshCanvasNow();
 
-    // BREAK SELF-CHECK: the preview arms the debounce commit timer, so a
-    // slider drag pushes undo commands.  That is exactly the bug the
-    // preview path is supposed to avoid.
+    // BREAK SELF-CHECK: the preview marks the tab as pending, so the
+    // debounce commit pushes an undo command for every slider drag.
+    m_pendingValid[tab] = true;
     if (m_commitTimer) m_commitTimer->start();
 }"""
 
@@ -64,13 +69,13 @@ BUG1_NEW = """    // 画布立刻变 (预览就是给人看的)
 # ---------------------------------------------------------------------------
 # Bug 2: Cancel does not roll back.
 #
-# AdjustDialogBase::reject() is the single close entry point (the Esc key,
-# the window close button and any programmatic caller go through it).
-# Dropping the endPreviewSession call there means the canvas keeps the
-# previewed adjustment after Cancel.
+# The host listens to AdjustDialogBase::previewSessionEnded and calls
+# AdjustmentPanel::cancelPreviewSession() when the dialog is rejected.
+# Dropping that call means the canvas keeps the previewed adjustment
+# after Cancel.
 # ---------------------------------------------------------------------------
-BUG2_OLD = """    // Cancel: 先让宿主把画布还原成 dialog 打开前的样子 (并且不留撤销条目),
-    // 然后才关 dialog.
+BUG2_OLD = """    // Cancel: first let the host restore the canvas to the state before the dialog opened (without leaving an undo entry),
+    // and only then close the dialog.
     endPreviewSession(/*committed=*/false);
     QDialog::reject();"""
 

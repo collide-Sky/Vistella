@@ -420,7 +420,20 @@ private slots:
             panel()->previewStandaloneParams(QString("Curves"), args);
             QCOMPARE(undoCount(), undoBefore);
         }
+
+        // Wait past the 200ms debounce window. A preview that arms the
+        // commit timer would push its undo command only after that
+        // delay, so checking the stack right away would not see it.
+        QTest::qWait(400);
+
+        // Still nothing in the undo stack: the preview pushed no command.
+        QCOMPARE(undoCount(), undoBefore);
+
         panel()->cancelPreviewSession(QString("Curves"));
+        QCOMPARE(undoCount(), undoBefore);
+
+        // And nothing shows up after the cancel either.
+        QTest::qWait(400);
         QCOMPARE(undoCount(), undoBefore);
     }
 

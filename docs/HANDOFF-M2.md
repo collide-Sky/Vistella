@@ -92,6 +92,41 @@ M2-1 / M2-2 / M2-4 / M2-7b / M2-5c **尚未开工**。
   `QTabBar::tab:selected` `#ffffff`→`transparent`（原本盖住了前面的 transparent 规则，暗色下
   出现刺眼白块）；`QToolButton#btnGpuStatus` `#555`→`{{TEXT_SUBTLE}}`。
 
+### M2-7b　文件树换 `QFileSystemModel`（`src/ui/FileTreeProxyModel.*`、`src/ui/infotreedock.*`）
+
+- 自研的 `FileTreeModel` / `FileTreeItem` / `FileTreeNodeData` / `tests/tst_FileTreeModel.cpp`
+  **已删**（进回收站）。现在树是 `QFileSystemModel`（工作线程读目录）+ `FileTreeProxyModel`
+  （`QSortFilterProxyModel` 子类）。
+- 过滤规则：目录**永远放行**（用户要能走进去），文件按
+  `FileExtensionRegistry::isSupportedExtension()` 过滤。
+- 展开箭头：目录**已读且为空** → 没有箭头；**未读** → 箭头乐观显示（读是在后台线程做的，
+  用户必须能在加载时打开目录）。已读集合来自 `QFileSystemModel::directoryLoaded` 信号。
+- `InfoTreeDock` 的公开 API **不变**：`setRootPath()` / `rootPath()` / `openFileRequested(path)`。
+
+**⚠ 本轮踩到的最重要的一条：proxy 的 `QModelIndex` 跨源模型变更即失效。**
+
+`QSortFilterProxyModel` 把行映射放在堆对象里，并把它们的**裸指针**存进每个 proxy index 的
+`internalPointer`。源模型一变（`QFileSystemModel` 每读一个目录就是一次 `rowsInserted`），
+proxy 就把这些对象全部丢弃重建 —— 变更前拿到的 index 于是指向**已释放内存**，下一次用它就崩：
+
+```
+ASSERT: "it != source_index_mapping.constEnd()"   qsortfilterproxymodel.cpp:272
+```
+
+所以整棵树**以路径为唯一稳定身份**：`FileTreeProxyModel::indexForPath(path)` 现取现用，
+`InfoTreeDock` 与测试都不缓存跨变更的 proxy index。
+
+**已证伪的假设（别再走一遍）**：`QAbstractProxyModel::canFetchMore()/fetchMore()`
+**自己会 `mapToSource()` 再转发**，所以 `QSortFilterProxyModel` 的默认实现是对的，
+**不需要**覆写它们。（第一版覆写了，白写。）
+
+**Qt 6.11 的事实**：`QFileSystemModel` 头文件在 `include/QtGui/qfilesystemmodel.h`（不是 QtCore）；
+`FilePathRole = Qt::UserRole + 1`；**没有** `isDirLoaded()`（Qt 5 私有 API）；
+子目录必须 `fetchMore()` 才读；`directoryLoaded` 只在异步读完后发；
+`setRootPath()` 之后**顶层（无效 index）下是机器的盘符**（`系统 (C:)`），
+而 `fs.index(rootPath)` 是顶层 index 的 row 0 —— 两者会撞车，
+所以 `mapFromSource(fs.index(rootPath))` 在某些层级会拿到**无效 index**，导航要按路径走。
+
 ---
 
 ## 3. 尚未开工的部分
@@ -101,7 +136,6 @@ M2-1 / M2-2 / M2-4 / M2-7b / M2-5c **尚未开工**。
 | **M2-2** 面板系统换原生 `QDockWidget` + `saveState` | 未开工（用户已拍板） | `src/ui/dock/` 12 文件 1487 行；唯一自研拖拽实现是 `VDraggableTabWidget`（.h 174 + .cpp 609）。硬伤 UI-01~05：`new QDockWidget(this)` + flags=0 导致浮动失效；`e->pos()` 当全局坐标；`m_pages` 与 `QTabBar` 双索引；`movePageTo` 无 rebind + 9 个裸指针；`maybeStartDrag` 嵌套事件循环后继续访问 `m_activeDrag`。`RightPanelDock`（406 行）= 1 个 `QSplitter` 装 3 个 `VDraggableTabWidget`。`VPages.h` + `VTabPageBase.h/.cpp` 是 370 行适配层，要适配或删除。`mainwindow.cpp` 的 `onResetLayout` 读 `workspace_default.ini` 但全项目无 `saveState()` 写它（APP-19）。 |
 | **M2-4** 工具补齐 | 未开工 | 渐变 / 油漆桶 / 橡皮擦 / 加深减淡 / 模糊锐化涂抹 / 抓手缩放旋转；修裁剪 / Shape / Pen / 画笔选项。相关债务：`A-MOVE`、`A-LAYERDRAG`、`A-TOOLCONFIG`、`A-SWATCH`、`A-TOOLICON`。 |
 | **M2-1** 自定义 `.vst` 工程格式 + 自动保存 + 崩溃恢复 | 未开工（用户已拍板 `.vst` 优先，PSD 只读推迟） | 债务 `A-PROJECTFORMAT`（保存写 `currentImage()`，图层/蒙版/智能对象/文字全丢）、`A-AUTOSAVE`（崩溃后未保存内容全丢）。 |
-| **M2-7b** 文件树换 `QFileSystemModel` | 未开工 | 债务 `A-FILETREEMODEL`（本次新登记）。`src/ui/FileTreeModel.*` / `FileTreeItem.*` / `FileTreeNodeData.h` 是自研 model：`scanChildren()` 在 UI 线程同步 `entryInfoList` + 每文件 `stat()`；`hasChildren()` 对所有目录恒 true（空目录永远有展开箭头）。改造要点：换 `QFileSystemModel` + `QSortFilterProxyModel`（目录永远放行，文件按 `FileExtensionRegistry::isSupportedExtension` 过滤）；`InfoTreeDock` 的公开 API（`setRootPath` / `rootPath` / `openFileRequested`）必须不变；需删 5 个旧文件 + `tests/tst_FileTreeModel.cpp`（用 `mavis-trash`）。 |
 | **M2-5c** 椭圆 / 多边形选区工具 | 未开工 | 在 `src/media/tools/` 下加两个工具，接到 `ModeSelectorBar` 的模式栏。 |
 
 ---
@@ -152,10 +186,12 @@ cmd /c "set PATH=D:\QT6\6.11.1\msvc2022_64\bin;%PATH% && cd /d D:\Collide\MyCode
 & $py tools\break_check_m1_7_evict.py
 & $py tools\break_check_m2_6_preview.py
 & $py tools\break_check_m2_6_transform.py
+& $py tools\break_check_m2_7_filetree.py
 ```
 
-**本轮基线**：build OK · ctest **87/87** · `check_contracts` **ERROR=0 WARN=24**
-（R1 19 / R3 2 / R4 3）· 两个 M2-6 破坏自检 4 个注入点全部变红且文件逐字节还原。
+**本轮基线**（M2-7b 之后）：build OK · ctest **87/87** · `check_contracts` **ERROR=0 WARN=23**
+（R1 19 / R3 1 / R4 3）· 三个破坏自检（M2-6 preview / M2-6 transform / M2-7 filetree）
+全部注入点变红且文件逐字节还原。
 
 ---
 
@@ -180,16 +216,32 @@ cmd /c "set PATH=D:\QT6\6.11.1\msvc2022_64\bin;%PATH% && cd /d D:\Collide\MyCode
 12. 新测试必须做**破坏自检**（故意改坏 → 确认变红 → 还原，且文件逐字节还原）。
 13. `git push` 目前被网络阻塞（代理 `127.0.0.1:7897` 未运行，直连 github.com:443 也不通）——
     commit 要先做，push 等网络恢复。
+14. **`QSortFilterProxyModel` 的 `QModelIndex` 跨源模型变更即失效**（内部 mapping 被丢弃重建，
+    旧 index 指向已释放内存 → `ASSERT: "it != source_index_mapping.constEnd()"`）。
+    用 `QSortFilterProxyModel` 时**以路径为稳定身份**，index 现取现用，不要缓存
+    （M2-7b 踩过，源码注释里也写了一份）。
+15. **破坏自检的锚点必须是 ASCII**。中文注释一旦被翻译成英文，锚点就失效，
+    脚本会报 "anchor not found" 而**不是**真的检出 bug —— 而且这个失败会被误当成
+    "脚本坏了"。M2-6a 的预览自检就踩了这个（M2-6b 把注释改成英文后锚点失配）。
+16. **断言要等到效果真的发生**。M2-6a 的 `repeatedPreview_neverTouchesTheUndoStack()`
+    原来在 preview 之后**立刻**查撤销栈，而注入的 bug 是"启动 200ms debounce 定时器"
+    —— 命令 200ms 后才入栈，所以断言看不到，测试一直是绿的。
+    现在改成 `QTest::qWait(400)` 之后再查（并再等一次确认 cancel 之后也不冒出来）。
+17. **破坏自检必须注入"真的会被检出"的缺陷**。M2-6a 的预览自检原先注入的是
+    "preview 启动 debounce 定时器" —— 但那**根本不是 bug**：定时器只是触发器，
+    真正决定要不要推撤销命令的是 `m_pendingValid[tab]`，而 preview 路径一直把它置 false。
+    所以注入后测试仍然是绿的。已改成注入 `m_pendingValid[tab] = true`（真的会让
+    200ms 后推出撤销命令）。**注入点要对着"效果的成因"，不是对着"看起来像成因的东西"。**
 
 ---
 
 ## 7. 已登记的开放债务（`docs/DEBT.md`）
 
-M2 关闭的：`A-ADJUSTPREVIEW`（M2-6a）、`A-HUESATLUT`（M2-6b）、`A-MEDIADISPATCH`（M2-7a）。
+M2 关闭的：`A-ADJUSTPREVIEW`（M2-6a）、`A-HUESATLUT`（M2-6b）、`A-MEDIADISPATCH`（M2-7a）、
+`A-FILETREEMODEL`（M2-7b）。
 
 M2 相关、仍然开放：
 
-- `A-FILETREEMODEL`（本次新登记，M2-7b）
 - `A-VTABAPI` / `A-DRAGTHRESHOLD` / `A-STACKWIDGET`（M2-2）
 - `A-PROJECTFORMAT` / `A-AUTOSAVE`（M2-1）
 - `A-MOVE` / `A-LAYERDRAG` / `A-TOOLCONFIG` / `A-SWATCH` / `A-TOOLICON`（M2-4）
