@@ -15,7 +15,7 @@ M2-1 / M2-2 / M2-4 / M2-7b / M2-5c **尚未开工**。
 2. PS 对照表的主要项从「缺失 / 有但错」变成「部分 / 无」。
 
 **当前状态：未达成** —— 调整（S2-6）已经真的生效，但保存/重开仍是扁平图（M2-1 未做），
-面板系统仍是自研拖拽层（M2-2 未做），工具仍有缺口（M2-4 未做）。
+工具仍有缺口（M2-4 未做）。面板系统（M2-2）本轮已换成原生 `QDockWidget` + `saveState`。
 
 ---
 
@@ -129,11 +129,87 @@ ASSERT: "it != source_index_mapping.constEnd()"   qsortfilterproxymodel.cpp:272
 
 ---
 
+### M2-2　面板系统换原生 `QDockWidget` + `saveState`
+
+**用户拍板的两点**：① 彻底删掉 `V*Page` 适配层，`RightPanelDock` 直接持有原始面板；
+② 布局持久化做**保存 + 恢复 + 重置三件套**。
+
+#### 删掉了什么
+
+`src/ui/dock/` **整个目录**（12 文件 1487 行）已进回收站：
+`VDraggableTabWidget` / `VDragManager` / `VDropIndicator` / `VTabPageBase` / `VPages` /
+`VRenderPath` / `VCompositeStrategy` + `tests/tst_VDraggableTabWidget.cpp` +
+`tests/tst_VTabPageBase.cpp`。
+
+**为什么该删**：那套自研拖拽层**0% 可用**（审计 UI-01~05）——
+`new QDockWidget(this)` + flags=0 导致浮动永远浮不起来；`e->pos()`（局部坐标）当全局坐标
+传给 `mapFromGlobal` → drop 恒 `insertIdx=-1`；`m_pages` 与 `QTabBar` 两套索引当一套用；
+`movePageTo` 不 rebind host → 跨窗口移动后裸指针 UAF。
+
+**顺带消除的循环依赖**：`vistella_media` ↔ `vistella_ui_dock`（审计 §7.8 / INV-DEP-1/2）。
+
+#### 现在的样子
+
+```
+RightPanelDock (QWidget)
+└── QSplitter (Vertical)
+    ├── QTabWidget 颜色组   → ColorTab / SwatchTab / GradientTab / PatternTab
+    ├── QTabWidget 属性组   → PropertiesDock / AdjustmentPanel
+    └── QTabWidget 图层组   → LayersDock / ChannelPathPanel / HistoryDock
+```
+
+`RightPanelDock` 直接持有 9 个真实面板，accessor 改名为
+`colorTab()` / `swatchTab()` / `gradientTab()` / `patternTab()` /
+`propertiesDock()` / `adjustmentPanel()` / `layerDock()` / `channelPathPanel()` / `historyDock()`，
+外加 3 个 group accessor（`colorGroup()` / `propertyGroup()` / `layerGroup()`）。
+
+**4 个 deprecated 空壳 accessor 已删**（原来返回 nullptr + log 警告）：
+`propertiesDock()` / `layersDock()` / `channelPathPanel()` / `historyDock()`
+→ 前三个变成真实实现，`layersDock()` 改名 `layerDock()`（"layerDock" 更准，它是图层面板不是 dock）。
+
+#### ⚠ 本轮踩到的两条：原生 `QTabWidget` 不等于旧的自研 widget
+
+**1. `QTabWidget::sizeHint()` 返回的是「所有页里最大的那个」，不是「当前页」。**
+
+旧的自研 `VDraggableTabWidget::sizeHint()` 是「tab bar + **当前页**的 hint」。
+换成原生 `QTabWidget` 之后，属性组同时装着 PropertiesDock（矮）和 AdjustmentPanel（高），
+聚合 hint 取高的那个 → 属性组即使显示矮页面也占掉大半面板。
+解法：子类 `CurrentPageTabWidget` 覆写 `sizeHint()` / `minimumSizeHint()`，跟当前页走。
+
+**2. `sizePolicy` 的 `Maximum` 会把 widget 卡在 sizeHint 上，stretch factor 救不了。**
+
+`QSplitter::setStretchFactor(layerGroup, 1)` 只是"优先分给它"，
+但 `QSizePolicy::Maximum` 的**硬上限就是 sizeHint** → 图层组永远只有 48px。
+解法：内容尺寸的两组用 `Maximum`，**图层组必须用 `Expanding`**。
+
+实测（dock 900px 高）：颜色 90 / 属性 150 / 图层 648 —— 图层组吃剩余。
+
+#### 布局持久化三件套（`src/app/DockLayoutManager.*`）
+
+| 文件 | 作用 | 谁写 |
+|---|---|---|
+| `<AppDataLocation>/layout_current.ini` | **当前**排布（活布局） | 退出时 `closeEvent` |
+| `<AppDataLocation>/layout_default.ini` | **用户声明的默认**排布 | 菜单「视图 → 保存当前布局为默认」 |
+
+- `save()` —— 退出时落盘（`QSaveFile`，原子写）。
+- `restore()` —— 启动时恢复（`MainWindow` 构造末尾，**必须在所有 dock 建好之后**，
+  `restoreState()` 按 objectName 找回 dock，dock 还没建时调用会静默失败）。
+- `reset()` —— 回到用户声明的默认（菜单「视图 → 重置布局」）。
+- `saveAsDefault()` —— 把当前排布声明为默认。
+
+**关键区分**：`reset()` 回的是**默认**，不是**活布局**。
+「我挪了个面板」（活布局，退出时存）和「我要回到原来的排布」（默认）是两件事，
+所以必须是两个文件。测试 `reset_doesNotGoBackToTheLiveLayout()` 专门盯这条。
+
+**修掉了 APP-19**：老 `onResetLayout()` 读 `workspace_default.ini`，
+**全项目没有任何地方 `saveState()` 写它** → 重置布局功能实际是坏的，永远只弹一句报错。
+
+---
+
 ## 3. 尚未开工的部分
 
 | 子项 | 状态 | 关键事实 / 入口 |
 |---|---|---|
-| **M2-2** 面板系统换原生 `QDockWidget` + `saveState` | 未开工（用户已拍板） | `src/ui/dock/` 12 文件 1487 行；唯一自研拖拽实现是 `VDraggableTabWidget`（.h 174 + .cpp 609）。硬伤 UI-01~05：`new QDockWidget(this)` + flags=0 导致浮动失效；`e->pos()` 当全局坐标；`m_pages` 与 `QTabBar` 双索引；`movePageTo` 无 rebind + 9 个裸指针；`maybeStartDrag` 嵌套事件循环后继续访问 `m_activeDrag`。`RightPanelDock`（406 行）= 1 个 `QSplitter` 装 3 个 `VDraggableTabWidget`。`VPages.h` + `VTabPageBase.h/.cpp` 是 370 行适配层，要适配或删除。`mainwindow.cpp` 的 `onResetLayout` 读 `workspace_default.ini` 但全项目无 `saveState()` 写它（APP-19）。 |
 | **M2-4** 工具补齐 | 未开工 | 渐变 / 油漆桶 / 橡皮擦 / 加深减淡 / 模糊锐化涂抹 / 抓手缩放旋转；修裁剪 / Shape / Pen / 画笔选项。相关债务：`A-MOVE`、`A-LAYERDRAG`、`A-TOOLCONFIG`、`A-SWATCH`、`A-TOOLICON`。 |
 | **M2-1** 自定义 `.vst` 工程格式 + 自动保存 + 崩溃恢复 | 未开工（用户已拍板 `.vst` 优先，PSD 只读推迟） | 债务 `A-PROJECTFORMAT`（保存写 `currentImage()`，图层/蒙版/智能对象/文字全丢）、`A-AUTOSAVE`（崩溃后未保存内容全丢）。 |
 | **M2-5c** 椭圆 / 多边形选区工具 | 未开工 | 在 `src/media/tools/` 下加两个工具，接到 `ModeSelectorBar` 的模式栏。 |
@@ -165,6 +241,15 @@ ASSERT: "it != source_index_mapping.constEnd()"   qsortfilterproxymodel.cpp:272
   对话框回填滑块会触发 `valueChanged` → `applyCurrentTab()`，
   所以 **必须先 `setCurrentIndex()` 再回填滑块**，否则会建出错 tab 的调整图层
   （M2-6b 修过一次这个 bug，`tst_M2_6_AdjustWiring` 里有断言守着）。
+- **原生 `QTabWidget` 的两个坑**（M2-2 踩的）：
+  ① `sizeHint()` 返回**所有页里最大的**那个，不是当前页 → 要跟当前页走必须自己覆写；
+  ② `QSizePolicy::Maximum` 的硬上限就是 `sizeHint()` → 想让某个 widget 吃剩余空间，
+     它的 policy 必须是 `Expanding`，光给 `QSplitter::setStretchFactor` **不够**。
+- `QMainWindow::restoreState()` 按 dock 的 **objectName** 找回每个 dock →
+  调用时 dock 必须已经建好，否则静默失败（不报错，只是布局没变）。
+  `restoreState()` 在 dock 集合与保存时不一致时返回 `false`。
+- `DockLayoutManager` 的**活布局**与**默认布局**是两个文件：
+  `reset()` 回的是**默认**，不是活布局。「我挪了个面板」和「我要回到原来的排布」是两件事。
 
 ---
 
@@ -177,7 +262,7 @@ Set-Location 'D:\Collide\MyCode\QT6Projects\MultiDoc'
 # configure + build
 cmd /c 'D:\Collide\MyCode\QT6Projects\MultiDoc\tools\build.bat'
 
-# 全量 ctest（当前 87 条）
+# 全量 ctest（当前 86 条）
 cmd /c "set PATH=D:\QT6\6.11.1\msvc2022_64\bin;%PATH% && cd /d D:\Collide\MyCode\QT6Projects\MultiDoc\build\Desktop_Qt_6_11_1_MSVC2022_64bit_Debug && ctest -j 4 2>&1"
 
 # 契约门禁（不可与 ctest 并行：破坏自检会临时改源文件）
@@ -187,11 +272,15 @@ cmd /c "set PATH=D:\QT6\6.11.1\msvc2022_64\bin;%PATH% && cd /d D:\Collide\MyCode
 & $py tools\break_check_m2_6_preview.py
 & $py tools\break_check_m2_6_transform.py
 & $py tools\break_check_m2_7_filetree.py
+& $py tools\break_check_m2_2_docklayout.py
 ```
 
-**本轮基线**（M2-7b 之后）：build OK · ctest **87/87** · `check_contracts` **ERROR=0 WARN=23**
-（R1 19 / R3 1 / R4 3）· 三个破坏自检（M2-6 preview / M2-6 transform / M2-7 filetree）
-全部注入点变红且文件逐字节还原。
+**本轮基线**（M2-2 之后）：build OK · ctest **86/86** · `check_contracts` **ERROR=0 WARN=22**
+（R1 18 / R3 1 / R4 3）· 六个破坏自检（contracts / M1-7 evict / M2-6 preview /
+M2-6 transform / M2-7 filetree / **M2-2 docklayout**）全部注入点变红且文件逐字节还原。
+
+> ctest 条数从 87 变成 86：删了 `tst_VDraggableTabWidget` + `tst_VTabPageBase`（-2），
+> 加了 `tst_M2_2_DockLayout`（+1），并新增 `contract_check` 这个 label 汇总项。
 
 ---
 
@@ -232,17 +321,26 @@ cmd /c "set PATH=D:\QT6\6.11.1\msvc2022_64\bin;%PATH% && cd /d D:\Collide\MyCode
     真正决定要不要推撤销命令的是 `m_pendingValid[tab]`，而 preview 路径一直把它置 false。
     所以注入后测试仍然是绿的。已改成注入 `m_pendingValid[tab] = true`（真的会让
     200ms 后推出撤销命令）。**注入点要对着"效果的成因"，不是对着"看起来像成因的东西"。**
+18. **换原生控件 ≠ 行为等价**。M2-2 把自研 `VDraggableTabWidget` 换成原生 `QTabWidget`，
+    看着是"换个类"，实际丢了两个行为：`sizeHint()` 跟当前页（原生返回所有页里最大的）、
+    widget 能突破 sizeHint 长大（`Maximum` policy 卡死上限）。
+    **换控件后必须逐条比对新旧的行为差异，不能只看"能编译"。**
+19. **布局类测试必须给每个用例独立目录**。布局文件落盘，多个用例共用一个临时目录时，
+    前一个用例写的文件会让后一个"期望没有文件"的用例失败 —— 于是测试结果取决于用例顺序。
+    M2-2 的 `tst_M2_2_DockLayout` 给每个用例一个 `freshDir()`。
+20. **删掉文件后，引用它的门禁脚本也要一起改**。M2-2 删了 `src/ui/dock/VDragManager.h`，
+    `tools/break_test_contracts.py` 的 R1 注入点正是它 —— 不改的话破坏自检会直接
+    "anchor not found"，看起来像脚本坏了而不是"目标被删了"。
 
 ---
 
 ## 7. 已登记的开放债务（`docs/DEBT.md`）
 
 M2 关闭的：`A-ADJUSTPREVIEW`（M2-6a）、`A-HUESATLUT`（M2-6b）、`A-MEDIADISPATCH`（M2-7a）、
-`A-FILETREEMODEL`（M2-7b）。
+`A-FILETREEMODEL`（M2-7b）、`A-VTABAPI` / `A-DRAGTHRESHOLD` / `A-STACKWIDGET`（M2-2）。
 
 M2 相关、仍然开放：
 
-- `A-VTABAPI` / `A-DRAGTHRESHOLD` / `A-STACKWIDGET`（M2-2）
 - `A-PROJECTFORMAT` / `A-AUTOSAVE`（M2-1）
 - `A-MOVE` / `A-LAYERDRAG` / `A-TOOLCONFIG` / `A-SWATCH` / `A-TOOLICON`（M2-4）
 - `A-THEME`（M2-8 只修了暗色 QSS 硬编码，主题画廊的「应用」按钮仍是空实现）

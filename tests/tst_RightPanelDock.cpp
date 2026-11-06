@@ -1,50 +1,45 @@
 // tst_RightPanelDock.cpp
 //
-// Unit test for the P7.6.x v3 commit 4 right-panel structure: 3 sub-docks,
-// each a VDraggableTabWidget, hosting 9 V*Page adapters.
+// Unit test for the right-panel structure.
+//
+// M2-2 (2026-11-06): the self written drag layer (VDraggableTabWidget +
+// 9 V*Page adapters) was replaced by native QTabWidget groups that hold
+// the real panels directly. This test covers the new structure.
 //
 // Coverage:
-//   - 3 sub-dock containers exist (subDockColor/subDockProperty/subDockLayer).
-//   - Each sub-dock has the expected number of pages (4 / 2 / 3).
-//   - Each V*Page adapter has the correct pageTag (smoke check 9 adapters).
-//   - Composite strategy defaults to Sequential on all 3 sub-docks.
-//   - Sub-dock 1 (color-group) is hidden when WorkspaceMediator says so;
-//     sub-dock 3 (layer-group) is always visible (core editing area).
-//   - Deprecated shims return nullptr (layersDock/...).
-//   - setAdjustmentPanel is a no-op (does not add a tab).
-//   - setUndoStack propagates to VHistoryPage (pageTitleChanged smoke).
-//   - setLayerPanel wires the panel into VLayerPage->inner()->setContentWidget(0).
-//   - setChannelPathQuickMask forwards to VChannelPathPage->inner()->setQuickMask.
+//   - 3 native tab groups exist (color / property / layer).
+//   - Each group has the expected number of tabs (4 / 2 / 3).
+//   - Each group holds the REAL panel widget (no adapter layer).
+//   - The deprecated accessor shims are gone: every accessor returns a
+//     live widget.
+//   - setUndoStack propagates to the history panel.
+//   - setLayerPanel wires the panel into the layer panel content slot.
+//   - setChannelPathQuickMask forwards to the channel/path panel.
+//   - The tab bar follows the CURRENT page (the property the old
+//     VDraggableTabWidget had to reimplement by hand).
+//   - The content sized split gives the leftover height to the layer
+//     group.
 
 #include <QTest>
 #include <QApplication>
 #include <QSignalSpy>
 #include <QTabBar>
+#include <QTabWidget>
 #include <QWidget>
 #include <QUndoStack>
 #include <QUndoCommand>
 #include <QSplitter>
 
 #include "../src/media/docks/RightPanelDock.h"
-#include "../src/ui/dock/VPages.h"
-#include "../src/ui/dock/VDraggableTabWidget.h"
-#include "../src/ui/dock/VCompositeStrategy.h"
 #include "../src/media/docks/PropertiesDock.h"
 #include "../src/media/docks/LayersDock.h"
 #include "../src/media/docks/ChannelPathPanel.h"
 #include "../src/media/docks/HistoryDock.h"
-
-using vistella::ui::VDraggableTabWidget;
-using vistella::ui::CompositeStrategy;
-using vistella::ui::VColorPage;
-using vistella::ui::VSwatchPage;
-using vistella::ui::VGradientPage;
-using vistella::ui::VPatternPage;
-using vistella::ui::VPropertyPage;
-using vistella::ui::VAdjustmentPage;
-using vistella::ui::VLayerPage;
-using vistella::ui::VChannelPathPage;
-using vistella::ui::VHistoryPage;
+#include "../src/media/docks/ColorTab.h"
+#include "../src/media/docks/SwatchTab.h"
+#include "../src/media/docks/GradientTab.h"
+#include "../src/media/docks/PatternTab.h"
+#include "../src/media/imagewindow/AdjustmentPanel.h"
 
 class tst_RightPanelDock : public QObject {
     Q_OBJECT
@@ -53,40 +48,21 @@ private slots:
     void cleanupTestCase();
 
     // Structure.
-    void threeSubDocksExist();
-    void subDockColor_hostsFourPages();
-    void subDockProperty_hostsTwoPages();
-    void subDockLayer_hostsThreePages();
+    void threeGroupsExist();
+    void colorGroup_hostsFourPanels();
+    void propertyGroup_hostsTwoPanels();
+    void layerGroup_hostsThreePanels();
 
-    // Composite strategy.
-    void allSubDocks_defaultSequential();
-    void subDockCompositeStrategy_settable();
-
-    // Deprecated shims.
-    void deprecatedShims_returnNullptr();
-
-    // setAdjustmentPanel is a no-op (still has 0 tabs in m_rightDock if
-    // we count adapter pages, not the old "5th tab" path).
-    void setAdjustmentPanel_isNoop();
+    // Accessors return the real widget.
+    void accessors_returnLivePanels();
 
     // Forwarding.
-    void setUndoStack_propagatesToHistoryPage();
-    void setLayerPanel_wiresIntoLayerPage();
-    void setChannelPathQuickMask_propagatesToChannelPathPage();
-    void setPropertyImageInfo_propagatesToPropertyPage();
+    void setUndoStack_propagatesToHistoryPanel();
+    void setLayerPanel_wiresIntoLayerPanel();
+    void setChannelPathQuickMask_propagatesToChannelPathPanel();
+    void setPropertyImageInfo_propagatesToPropertiesPanel();
 
-    // Page identity.
-    void colorPage_pageTag();
-    void swatchPage_pageTag();
-    void gradientPage_pageTag();
-    void patternPage_pageTag();
-    void propertyPage_pageTag();
-    void adjustmentPage_pageTag();
-    void layerPage_pageTag();
-    void channelPathPage_pageTag();
-    void historyPage_pageTag();
-
-    // P8.3.2 (2026-10-26): panel group layout.
+    // Panel group layout.
     void tabTitles_arePublished();
     void layerGroup_hidesInnerTabBar();
     void stretchGivesRemainderToLayerGroup();
@@ -110,106 +86,80 @@ void tst_RightPanelDock::cleanupTestCase()
 // ---------------------------------------------------------------------------
 // Structure
 // ---------------------------------------------------------------------------
-void tst_RightPanelDock::threeSubDocksExist()
+void tst_RightPanelDock::threeGroupsExist()
 {
     QVERIFY(m_dock);
-    QVERIFY(m_dock->subDockColor()    != nullptr);
-    QVERIFY(m_dock->subDockProperty() != nullptr);
-    QVERIFY(m_dock->subDockLayer()    != nullptr);
+    QVERIFY(m_dock->colorGroup()    != nullptr);
+    QVERIFY(m_dock->propertyGroup() != nullptr);
+    QVERIFY(m_dock->layerGroup()    != nullptr);
 }
 
-void tst_RightPanelDock::subDockColor_hostsFourPages()
+void tst_RightPanelDock::colorGroup_hostsFourPanels()
 {
-    auto* sd = m_dock->subDockColor();
-    QCOMPARE(sd->pageCount(), 4);
-    QCOMPARE(m_dock->colorPage(),    sd->pageAt(0));
-    QCOMPARE(m_dock->swatchPage(),   sd->pageAt(1));
-    QCOMPARE(m_dock->gradientPage(), sd->pageAt(2));
-    QCOMPARE(m_dock->patternPage(),  sd->pageAt(3));
+    auto* group = m_dock->colorGroup();
+    QCOMPARE(group->count(), 4);
+    QCOMPARE(group->widget(0), m_dock->colorTab());
+    QCOMPARE(group->widget(1), m_dock->swatchTab());
+    QCOMPARE(group->widget(2), m_dock->gradientTab());
+    QCOMPARE(group->widget(3), m_dock->patternTab());
 }
 
-void tst_RightPanelDock::subDockProperty_hostsTwoPages()
+void tst_RightPanelDock::propertyGroup_hostsTwoPanels()
 {
-    auto* sd = m_dock->subDockProperty();
-    QCOMPARE(sd->pageCount(), 2);
-    QCOMPARE(m_dock->propertyPage(),   sd->pageAt(0));
-    QCOMPARE(m_dock->adjustmentPage(), sd->pageAt(1));
+    auto* group = m_dock->propertyGroup();
+    QCOMPARE(group->count(), 2);
+    QCOMPARE(group->widget(0), m_dock->propertiesDock());
+    QCOMPARE(group->widget(1), m_dock->adjustmentPanel());
 }
 
-void tst_RightPanelDock::subDockLayer_hostsThreePages()
+void tst_RightPanelDock::layerGroup_hostsThreePanels()
 {
-    auto* sd = m_dock->subDockLayer();
-    QCOMPARE(sd->pageCount(), 3);
-    QCOMPARE(m_dock->layerPage(),       sd->pageAt(0));
-    QCOMPARE(m_dock->channelPathPage(), sd->pageAt(1));
-    QCOMPARE(m_dock->historyPage(),     sd->pageAt(2));
-}
-
-// ---------------------------------------------------------------------------
-// Composite strategy
-// ---------------------------------------------------------------------------
-void tst_RightPanelDock::allSubDocks_defaultSequential()
-{
-    QCOMPARE(m_dock->subDockColor()->compositeStrategy(),
-             CompositeStrategy::Sequential);
-    QCOMPARE(m_dock->subDockProperty()->compositeStrategy(),
-             CompositeStrategy::Sequential);
-    QCOMPARE(m_dock->subDockLayer()->compositeStrategy(),
-             CompositeStrategy::Sequential);
-}
-
-void tst_RightPanelDock::subDockCompositeStrategy_settable()
-{
-    m_dock->subDockColor()->setCompositeStrategy(CompositeStrategy::Parallel);
-    QCOMPARE(m_dock->subDockColor()->compositeStrategy(),
-             CompositeStrategy::Parallel);
-    // Reset to default.
-    m_dock->subDockColor()->setCompositeStrategy(CompositeStrategy::Sequential);
-    QCOMPARE(m_dock->subDockColor()->compositeStrategy(),
-             CompositeStrategy::Sequential);
+    auto* group = m_dock->layerGroup();
+    QCOMPARE(group->count(), 3);
+    QCOMPARE(group->widget(0), m_dock->layerDock());
+    QCOMPARE(group->widget(1), m_dock->channelPathPanel());
+    QCOMPARE(group->widget(2), m_dock->historyDock());
 }
 
 // ---------------------------------------------------------------------------
-// Deprecated shims
+// Accessors
 // ---------------------------------------------------------------------------
-void tst_RightPanelDock::deprecatedShims_returnNullptr()
+void tst_RightPanelDock::accessors_returnLivePanels()
 {
-    QCOMPARE(m_dock->propertiesDock(),   nullptr);
-    QCOMPARE(m_dock->layersDock(),       nullptr);
-    QCOMPARE(m_dock->channelPathPanel(), nullptr);
-    QCOMPARE(m_dock->historyDock(),      nullptr);
-}
-
-void tst_RightPanelDock::setAdjustmentPanel_isNoop()
-{
-    // Create a dummy QWidget* and call setAdjustmentPanel with it.
-    // Since the method is a no-op shim, nothing should change.
-    int before = m_dock->subDockProperty()->pageCount();
-    QWidget dummy;
-    m_dock->setAdjustmentPanel(reinterpret_cast<class AdjustmentPanel*>(&dummy));
-    QCOMPARE(m_dock->subDockProperty()->pageCount(), before);
+    // The deprecated shims used to return nullptr here (and log a warning).
+    // M2-2 turned them into real accessors: the dock OWNS the panels and
+    // hands out the widget itself.
+    QVERIFY(m_dock->colorTab()       != nullptr);
+    QVERIFY(m_dock->swatchTab()      != nullptr);
+    QVERIFY(m_dock->gradientTab()    != nullptr);
+    QVERIFY(m_dock->patternTab()     != nullptr);
+    QVERIFY(m_dock->propertiesDock() != nullptr);
+    QVERIFY(m_dock->adjustmentPanel() != nullptr);
+    QVERIFY(m_dock->layerDock()      != nullptr);
+    QVERIFY(m_dock->channelPathPanel() != nullptr);
+    QVERIFY(m_dock->historyDock()    != nullptr);
 }
 
 // ---------------------------------------------------------------------------
 // Forwarding
 // ---------------------------------------------------------------------------
-void tst_RightPanelDock::setUndoStack_propagatesToHistoryPage()
+void tst_RightPanelDock::setUndoStack_propagatesToHistoryPanel()
 {
     QUndoStack stack;
     m_dock->setUndoStack(&stack);
-    auto* hist = m_dock->historyPage()->inner();
+    auto* hist = m_dock->historyDock();
     QVERIFY(hist != nullptr);
     QCOMPARE(hist->undoStack(), &stack);
 }
 
-void tst_RightPanelDock::setLayerPanel_wiresIntoLayerPage()
+void tst_RightPanelDock::setLayerPanel_wiresIntoLayerPanel()
 {
-    // The VLayerPage's inner is a LayersDock. setLayerPanel should
-    // call inner->setContentWidget(0, panel) which reparents the panel.
+    // setLayerPanel should call LayersDock::setContentWidget(0, panel),
+    // which reparents the panel.
     QWidget* panel = new QWidget();
     panel->setObjectName("fakeLayerPanel");
     m_dock->setLayerPanel(panel);
-    auto* layers = m_dock->layerPage()->inner();
+    auto* layers = m_dock->layerDock();
     QVERIFY(layers != nullptr);
     // After setContentWidget(0, panel), the panel's parent is layers
     // (or one of its children) -- ancestor check is enough.
@@ -217,9 +167,9 @@ void tst_RightPanelDock::setLayerPanel_wiresIntoLayerPage()
     delete panel;   // safe -- it's now a child of layers (which is a child of m_dock)
 }
 
-void tst_RightPanelDock::setChannelPathQuickMask_propagatesToChannelPathPage()
+void tst_RightPanelDock::setChannelPathQuickMask_propagatesToChannelPathPanel()
 {
-    auto* chan = m_dock->channelPathPage()->inner();
+    auto* chan = m_dock->channelPathPanel();
     QVERIFY(chan != nullptr);
     m_dock->setChannelPathQuickMask(true);
     // ChannelPathPanel::setQuickMask doesn't expose a getter in this
@@ -230,7 +180,7 @@ void tst_RightPanelDock::setChannelPathQuickMask_propagatesToChannelPathPage()
     m_dock->setChannelPathQuickMask(false);
 }
 
-void tst_RightPanelDock::setPropertyImageInfo_propagatesToPropertyPage()
+void tst_RightPanelDock::setPropertyImageInfo_propagatesToPropertiesPanel()
 {
     docks::PropertiesDock::ImageInfo info;
     info.filePath = QStringLiteral("D:/test.png");
@@ -243,76 +193,34 @@ void tst_RightPanelDock::setPropertyImageInfo_propagatesToPropertyPage()
     // accessor. Exact display format is a property of PropertiesDock
     // (covered by tst_F_O_Throttle), so we just verify the call
     // propagates and the accessor is reachable (no crash, no nullptr).
-    auto* props = m_dock->propertyPage()->inner();
+    auto* props = m_dock->propertiesDock();
     QVERIFY(props != nullptr);
     QString captured = props->pathLabelText();
     Q_UNUSED(captured);   // format may include a directory prefix
 }
 
 // ---------------------------------------------------------------------------
-// Page identity (smoke check 9 adapters)
+// Panel group layout
 // ---------------------------------------------------------------------------
-void tst_RightPanelDock::colorPage_pageTag()
-{
-    QCOMPARE(m_dock->colorPage()->pageTag(), QStringLiteral("color"));
-}
-void tst_RightPanelDock::swatchPage_pageTag()
-{
-    QCOMPARE(m_dock->swatchPage()->pageTag(), QStringLiteral("swatch"));
-}
-void tst_RightPanelDock::gradientPage_pageTag()
-{
-    QCOMPARE(m_dock->gradientPage()->pageTag(), QStringLiteral("gradient"));
-}
-void tst_RightPanelDock::patternPage_pageTag()
-{
-    QCOMPARE(m_dock->patternPage()->pageTag(), QStringLiteral("pattern"));
-}
-void tst_RightPanelDock::propertyPage_pageTag()
-{
-    QCOMPARE(m_dock->propertyPage()->pageTag(), QStringLiteral("property"));
-}
-void tst_RightPanelDock::adjustmentPage_pageTag()
-{
-    QCOMPARE(m_dock->adjustmentPage()->pageTag(), QStringLiteral("adjustment"));
-}
-void tst_RightPanelDock::layerPage_pageTag()
-{
-    QCOMPARE(m_dock->layerPage()->pageTag(), QStringLiteral("layer"));
-}
-void tst_RightPanelDock::channelPathPage_pageTag()
-{
-    QCOMPARE(m_dock->channelPathPage()->pageTag(), QStringLiteral("channelpath"));
-}
-void tst_RightPanelDock::historyPage_pageTag()
-{
-    QCOMPARE(m_dock->historyPage()->pageTag(), QStringLiteral("history"));
-}
-
-// ---------------------------------------------------------------------------
-// P8.3.2 (2026-10-26): panel group layout
-// ---------------------------------------------------------------------------
-
 void tst_RightPanelDock::tabTitles_arePublished()
 {
-    // VDraggableTabWidget::addPage() takes the tab label from
-    // QWidget::windowTitle(). A page that never publishes its title shows
-    // up as an empty tab, and the user cannot tell the three panel groups
-    // apart.
-    VDraggableTabWidget* groups[] = {
-        m_dock->subDockColor(),
-        m_dock->subDockProperty(),
-        m_dock->subDockLayer(),
+    // A group whose tab label is empty is unreadable -- the user cannot
+    // tell the three panel groups apart. The label comes from the panel's
+    // own windowTitle().
+    QTabWidget* groups[] = {
+        m_dock->colorGroup(),
+        m_dock->propertyGroup(),
+        m_dock->layerGroup(),
     };
-    for (VDraggableTabWidget* group : groups) {
+    for (QTabWidget* group : groups) {
         QVERIFY(group != nullptr);
         QTabBar* bar = group->tabBar();
         QVERIFY(bar != nullptr);
-        QCOMPARE(bar->count(), group->pageCount());
+        QCOMPARE(bar->count(), group->count());
         for (int i = 0; i < bar->count(); ++i) {
             const QString text = bar->tabText(i);
             QVERIFY2(!text.isEmpty(), "panel group tab has no title");
-            QWidget* page = group->pageAt(i);
+            QWidget* page = group->widget(i);
             QVERIFY(page != nullptr);
             QCOMPARE(text, page->windowTitle());
         }
@@ -321,7 +229,7 @@ void tst_RightPanelDock::tabTitles_arePublished()
 
 void tst_RightPanelDock::layerGroup_hidesInnerTabBar()
 {
-    auto* inner = m_dock->layerPage()->inner();
+    auto* inner = m_dock->layerDock();
     QVERIFY(inner != nullptr);
     QVERIFY(inner->isEmbeddedInPanelGroup());
 
@@ -337,9 +245,9 @@ void tst_RightPanelDock::stretchGivesRemainderToLayerGroup()
     // Without a stretch factor Qt treats every splitter child as
     // expansive and splits the height evenly - that is what left the
     // colour group with a huge empty area.
-    QCOMPARE(m_dock->subDockColor()->sizePolicy().verticalStretch(), 0);
-    QCOMPARE(m_dock->subDockProperty()->sizePolicy().verticalStretch(), 0);
-    QCOMPARE(m_dock->subDockLayer()->sizePolicy().verticalStretch(), 1);
+    QCOMPARE(m_dock->colorGroup()->sizePolicy().verticalStretch(), 0);
+    QCOMPARE(m_dock->propertyGroup()->sizePolicy().verticalStretch(), 0);
+    QCOMPARE(m_dock->layerGroup()->sizePolicy().verticalStretch(), 1);
 }
 
 void tst_RightPanelDock::contentSizedSplit_layerGroupGetsTheRest()
@@ -350,9 +258,9 @@ void tst_RightPanelDock::contentSizedSplit_layerGroupGetsTheRest()
     m_dock->applyContentSizedSplit();
     QTest::qWait(0);
 
-    const int hColor    = m_dock->subDockColor()->height();
-    const int hProperty = m_dock->subDockProperty()->height();
-    const int hLayer    = m_dock->subDockLayer()->height();
+    const int hColor    = m_dock->colorGroup()->height();
+    const int hProperty = m_dock->propertyGroup()->height();
+    const int hLayer    = m_dock->layerGroup()->height();
 
     QVERIFY2(hLayer > hColor,
              "the layer group must take the leftover height, not the colour group");

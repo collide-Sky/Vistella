@@ -1,30 +1,25 @@
 // tst_P7_10.cpp
 //
-// Unit test for P7.10 (2026-10-15):
-//   - VTabPageBase::invalidateCache() virtual default is no-op
-//   - VPropertyPage::invalidateCache() drops property cache + repaints
-//   - VChannelPathPage::invalidateCache() drops channel cache + repaints
-//   - VHistoryPage::invalidateCache() is a no-op counter (QUndoStack wires it)
-//   - RightPanelDock::invalidateAllPageCaches() fans out to all 3 sub-docks
+// Unit test for P7.10 (2026-10-15): the right-panel cache invalidation
+// fan-out.
 //
-//   P7.10 commit (2026-10-15).
+// M2-2 (2026-11-06): the fan-out used to walk the 3 sub-docks and call
+// invalidateCache() on every V*Page adapter. The adapter layer is gone,
+// so the dock now owns the panels and counts the invalidation itself.
+//
+// Coverage:
+//   - RightPanelDock::invalidateAllPageCaches() bumps the counter of
+//     every panel that participates.
+//   - Repeated calls accumulate.
+//   - The fan-out reaches all three panels, not just one.
+//
+//   P7.10 commit (2026-10-15); M2-2 rework (2026-11-06).
 
 #include <QTest>
 #include <QApplication>
 #include <QWidget>
-#include <QSignalSpy>
 
-#include "../src/ui/dock/VTabPageBase.h"
-#include "../src/ui/dock/VPages.h"
-#include "../src/ui/dock/VRenderPath.h"
 #include "../src/media/docks/RightPanelDock.h"
-
-using vistella::ui::VTabPageBase;
-using vistella::ui::VPropertyPage;
-using vistella::ui::VChannelPathPage;
-using vistella::ui::VHistoryPage;
-using vistella::ui::VDraggableTabWidget;
-using vistella::ui::RenderPath;
 
 class tst_P7_10 : public QObject {
     Q_OBJECT
@@ -32,125 +27,77 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
 
-    // Per-page override behavior.
-    void propertyPage_invalidateCache_bumpsCounterAndRepaints();
-    void channelPathPage_invalidateCache_bumpsCounterAndRepaints();
-    void historyPage_invalidateCache_bumpsCounterOnly();
-    void otherPages_invalidateCache_isNoOp();
-
     // RightPanelDock fan-out.
-    void fanOut_invokesAll3SubDocks();
-    void fanOut_invokesPerSubDockSubPages();
+    void fanOut_invokesAll3Panels();
+    void fanOut_invokesEveryTime();
 
     // Idempotence / repeated calls.
     void repeatedInvokesAccumulateCount();
+
+    // A fresh dock starts at zero.
+    void freshDock_startsAtZero();
+
+private:
+    docks::RightPanelDock* m_dock = nullptr;
 };
 
-// ---------------------------------------------------------------------------
-// Per-page override
-// ---------------------------------------------------------------------------
-void tst_P7_10::initTestCase() {}
-void tst_P7_10::cleanupTestCase() {}
-
-void tst_P7_10::propertyPage_invalidateCache_bumpsCounterAndRepaints()
+void tst_P7_10::initTestCase()
 {
-    VPropertyPage p;
-    QCOMPARE(p.testInvalidateCacheCount(), 0);
-    p.invalidateCache();
-    QCOMPARE(p.testInvalidateCacheCount(), 1);
-    p.invalidateCache();
-    QCOMPARE(p.testInvalidateCacheCount(), 2);
+    m_dock = new docks::RightPanelDock();
 }
 
-void tst_P7_10::channelPathPage_invalidateCache_bumpsCounterAndRepaints()
+void tst_P7_10::cleanupTestCase()
 {
-    VChannelPathPage p;
-    QCOMPARE(p.testInvalidateCacheCount(), 0);
-    p.invalidateCache();
-    QCOMPARE(p.testInvalidateCacheCount(), 1);
-    p.invalidateCache();
-    QCOMPARE(p.testInvalidateCacheCount(), 2);
-}
-
-void tst_P7_10::historyPage_invalidateCache_bumpsCounterOnly()
-{
-    VHistoryPage p;
-    QCOMPARE(p.testInvalidateCacheCount(), 0);
-    p.invalidateCache();
-    QCOMPARE(p.testInvalidateCacheCount(), 1);
-    // HistoryPage's invalidate is intentionally a no-op aside from
-    // the counter; QUndoStack::indexChanged drives HistoryDock
-    // internally. We just count to allow uniform fan-out.
-}
-
-void tst_P7_10::otherPages_invalidateCache_isNoOp()
-{
-    // Pages that don't override invalidateCache: VColorPage,
-    // VSwatchPage, VGradientPage, VPatternPage, VLayerPage,
-    // VAdjustmentPage. None of them define a counter, so they just
-    // use the base class default (no-op). Verify by checking that
-    // calling invalidateCache doesn't crash.
-    vistella::ui::VColorPage       c;
-    vistella::ui::VSwatchPage      s;
-    vistella::ui::VGradientPage    g;
-    vistella::ui::VPatternPage     pt;
-    vistella::ui::VLayerPage       l;
-    vistella::ui::VAdjustmentPage  a;
-    c.invalidateCache();
-    s.invalidateCache();
-    g.invalidateCache();
-    pt.invalidateCache();
-    l.invalidateCache();
-    a.invalidateCache();
-    QVERIFY(true);   // reached here = no crash
+    delete m_dock;
+    m_dock = nullptr;
 }
 
 // ---------------------------------------------------------------------------
 // RightPanelDock fan-out
 // ---------------------------------------------------------------------------
-void tst_P7_10::fanOut_invokesAll3SubDocks()
+void tst_P7_10::fanOut_invokesAll3Panels()
 {
-    docks::RightPanelDock rp;
-    // Snapshot pre-fanout counters.
-    int preProp = rp.propertyPage()->testInvalidateCacheCount();
-    int preChan = rp.channelPathPage()->testInvalidateCacheCount();
-    int preHist = rp.historyPage()->testInvalidateCacheCount();
-    rp.invalidateAllPageCaches();
-    QCOMPARE(rp.propertyPage()->testInvalidateCacheCount(),    preProp + 1);
-    QCOMPARE(rp.channelPathPage()->testInvalidateCacheCount(), preChan + 1);
-    QCOMPARE(rp.historyPage()->testInvalidateCacheCount(),      preHist + 1);
+    const int preProp = m_dock->propertyInvalidateCount();
+    const int preChan = m_dock->channelPathInvalidateCount();
+    const int preHist = m_dock->historyInvalidateCount();
+
+    m_dock->invalidateAllPageCaches();
+
+    QCOMPARE(m_dock->propertyInvalidateCount(),    preProp + 1);
+    QCOMPARE(m_dock->channelPathInvalidateCount(), preChan + 1);
+    QCOMPARE(m_dock->historyInvalidateCount(),      preHist + 1);
 }
 
-void tst_P7_10::fanOut_invokesPerSubDockSubPages()
+void tst_P7_10::fanOut_invokesEveryTime()
 {
-    // RightPanelDock layout (P7.6.x v3 commit 4):
-    //   subDockColor    -> VColorPage / VSwatchPage / VGradientPage / VPatternPage
-    //   subDockProperty -> VPropertyPage / VAdjustmentPage
-    //   subDockLayer    -> VLayerPage / VChannelPathPage / VHistoryPage
-    // Fan-out should touch every page, but the test counter only
-    // exists for PropertyPage / ChannelPathPage / HistoryPage. We
-    // verify those three bumped; the rest are checked in
-    // tst_RightPanelDock (3 sub-dock structure) where no counter is
-    // required.
-    docks::RightPanelDock rp;
-    int preProp = rp.propertyPage()->testInvalidateCacheCount();
-    int preChan = rp.channelPathPage()->testInvalidateCacheCount();
-    int preHist = rp.historyPage()->testInvalidateCacheCount();
-    rp.invalidateAllPageCaches();
-    rp.invalidateAllPageCaches();
-    rp.invalidateAllPageCaches();
-    QCOMPARE(rp.propertyPage()->testInvalidateCacheCount(),    preProp + 3);
-    QCOMPARE(rp.channelPathPage()->testInvalidateCacheCount(), preChan + 3);
-    QCOMPARE(rp.historyPage()->testInvalidateCacheCount(),      preHist + 3);
+    const int preProp = m_dock->propertyInvalidateCount();
+    const int preChan = m_dock->channelPathInvalidateCount();
+    const int preHist = m_dock->historyInvalidateCount();
+
+    m_dock->invalidateAllPageCaches();
+    m_dock->invalidateAllPageCaches();
+    m_dock->invalidateAllPageCaches();
+
+    QCOMPARE(m_dock->propertyInvalidateCount(),    preProp + 3);
+    QCOMPARE(m_dock->channelPathInvalidateCount(), preChan + 3);
+    QCOMPARE(m_dock->historyInvalidateCount(),      preHist + 3);
 }
 
 void tst_P7_10::repeatedInvokesAccumulateCount()
 {
-    VPropertyPage p;
+    const int preProp = m_dock->propertyInvalidateCount();
     for (int i = 1; i <= 5; ++i) {
-        p.invalidateCache();
-        QCOMPARE(p.testInvalidateCacheCount(), i);
+        m_dock->invalidateAllPageCaches();
+        QCOMPARE(m_dock->propertyInvalidateCount(), preProp + i);
     }
+}
+
+void tst_P7_10::freshDock_startsAtZero()
+{
+    docks::RightPanelDock fresh;
+    QCOMPARE(fresh.propertyInvalidateCount(), 0);
+    QCOMPARE(fresh.channelPathInvalidateCount(), 0);
+    QCOMPARE(fresh.historyInvalidateCount(), 0);
 }
 
 QTEST_MAIN(tst_P7_10)

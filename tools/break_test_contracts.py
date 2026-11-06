@@ -42,7 +42,7 @@ R4_MIN_OCCURRENCES = 2
 
 # (file, expected rule, anchor text, injected text)
 CASES = [
-    ("src/ui/dock/VDragManager.h",
+    ("src/media/docks/ColorTab.h",
      "R1",
      "public:",
      "public:\n    void brandNewUnusedApi(int x);"),

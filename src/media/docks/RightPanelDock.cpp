@@ -1,18 +1,29 @@
 // SPDX-License-Identifier: MIT
 //
-// RightPanelDock implementation - P7.6.x v3 commit 4 (2026-10-15)
+// RightPanelDock implementation.
 //
+// M2-2: the self written drag layer (VDraggableTabWidget +
+// V*Page adapters) was replaced by native QTabWidget groups that hold the
+// real panels directly. See RightPanelDock.h for the why.
 #include "RightPanelDock.h"
 
+#include "ColorTab.h"
+#include "SwatchTab.h"
+#include "GradientTab.h"
+#include "PatternTab.h"
 #include "PropertiesDock.h"
-#include "../../ui/dock/VTabPageBase.h"
+#include "LayersDock.h"
+#include "ChannelPathPanel.h"
+#include "HistoryDock.h"
+#include "../imagewindow/AdjustmentPanel.h"
 #include "../mediators/WorkspaceMediator.h"
 #include "logger.h"
 
 #include <QSplitter>
+#include <QTabWidget>
 #include <QUndoStack>
 #include <QSize>
-#include <QStackedWidget>
+#include <QVBoxLayout>
 
 namespace docks {
 
@@ -22,11 +33,68 @@ namespace {
 //   this the tab bar is all that is left and the group is useless.
 constexpr int kMinGroupHeight = 80;
 
-// VColorPage wraps docks::ColorTab internally. Callers that need the
-// underlying ColorTab can use VColorPage::inner() to wire signals.
-vistella::ui::VColorPage* makeColorPage(QWidget* parent)
+// A tab widget whose height follows the CURRENT page.
+//
+// QTabWidget::sizeHint() returns the max over ALL pages. For the right
+// panel that is wrong: the property group holds the PropertiesDock (a
+// short label list) AND the AdjustmentPanel (a tall form of sliders and
+// dropdowns). The aggregate hint is the tall one, so the property group
+// would claim most of the panel even while the short page is showing.
+//
+// The old self written VDraggableTabWidget did this correctly -- its
+// sizeHint() was "tab bar + current page". This class restores that
+// behaviour on top of the native widget.
+class CurrentPageTabWidget : public QTabWidget
 {
-    return new vistella::ui::VColorPage(parent);
+public:
+    using QTabWidget::QTabWidget;
+
+    QSize sizeHint() const override
+    {
+        QSize s = tabBar()->sizeHint();
+        if (QWidget* page = currentWidget())
+            s = s.expandedTo(page->sizeHint());
+        return s;
+    }
+
+    QSize minimumSizeHint() const override
+    {
+        QSize s = tabBar()->sizeHint();
+        if (QWidget* page = currentWidget())
+            s = s.expandedTo(page->minimumSizeHint());
+        // The tab bar is the only way to reach the other pages of this
+        // group, so it must never be squeezed out of existence.
+        s.setHeight(qMax(s.height(), 24));
+        s.setWidth(qMax(s.width(), 60));
+        return s;
+    }
+};
+
+// Build a group: a native tab widget whose pages are the real panels.
+//
+// The tab label is the panel's window title, so a panel keeps its own
+// identity. The old adapter layer published the title with
+// setWindowTitle() for exactly this reason -- with the adapters gone the
+// panel itself has to carry it.
+//
+// `expanding` decides who absorbs the leftover height:
+//   false -> the group sizes to its content (Maximum policy)
+//   true  -> the group grows with the panel (Expanding policy)
+//
+// The policy matters as much as the stretch factor: a Maximum policy
+// caps the widget at its sizeHint(), so a QSplitter can never hand it
+// more space than the hint -- the stretch factor alone is not enough.
+QTabWidget* makeGroup(QWidget* parent, const QString& objectName, bool expanding)
+{
+    auto* tabs = new CurrentPageTabWidget(parent);
+    tabs->setObjectName(objectName);
+    // The tabs follow the CURRENT page: the group is as tall as the page
+    // it shows, not as tall as the tallest page. That is what the old
+    // VDraggableTabWidget had to reimplement by hand.
+    tabs->setSizePolicy(QSizePolicy::Preferred,
+                        expanding ? QSizePolicy::Expanding : QSizePolicy::Maximum);
+    tabs->setDocumentMode(true);
+    return tabs;
 }
 
 } // namespace
@@ -42,9 +110,9 @@ RightPanelDock::RightPanelDock(QWidget* parent) : QWidget(parent)
     m_splitter->setHandleWidth(4);
     outer->addWidget(m_splitter);
 
-    buildSubDockColor();
-    buildSubDockProperty();
-    buildSubDockLayer();
+    buildColorGroup();
+    buildPropertyGroup();
+    buildLayerGroup();
 
     // the colour group and the property group size to
     //   their content; only the layer group absorbs the leftover height.
@@ -60,22 +128,26 @@ RightPanelDock::RightPanelDock(QWidget* parent) : QWidget(parent)
     m_splitter->setStretchFactor(2, 1);
     applyContentSizedSplit();
 
-    LOG_INFO("[RightPanelDock] v3 commit 4 created: 3 sub-docks "
-             "(color-group/property-group/layer-group)");
+    LOG_INFO("[RightPanelDock] created: 3 native tab groups "
+             "(color/property/layer)");
 }
 
 void RightPanelDock::applyContentSizedSplit()
 {
-    if (!m_splitter || !m_subDockColor || !m_subDockProperty || !m_subDockLayer)
+    if (!m_splitter || !m_colorGroup || !m_propertyGroup || !m_layerGroup)
         return;
 
     // A group is never smaller than its header plus a usable strip of
     // content, otherwise the tab bar would be the only thing left.
-    const int hColor    = qMax(kMinGroupHeight, m_subDockColor->sizeHint().height());
-    const int hProperty = qMax(kMinGroupHeight, m_subDockProperty->sizeHint().height());
+    const int hColor    = qMax(kMinGroupHeight, m_colorGroup->sizeHint().height());
+    const int hProperty = qMax(kMinGroupHeight, m_propertyGroup->sizeHint().height());
 
     // The layer group takes whatever is left: it is the one panel whose
     // content (the layer list) is meant to grow with the window.
+    //
+    // The layer group's own hint is small (the layer list is a table that
+    // scrolls), so it must NOT be part of the request -- it is the one
+    // that receives the remainder.
     m_splitter->setSizes({ hColor, hProperty, 0 });
 }
 
@@ -92,52 +164,66 @@ void RightPanelDock::showEvent(QShowEvent* e)
 
 RightPanelDock::~RightPanelDock() = default;
 
-void RightPanelDock::buildSubDockColor()
+void RightPanelDock::buildColorGroup()
 {
-    m_subDockColor = new vistella::ui::VDraggableTabWidget(this);
-    m_colorPage    = makeColorPage(m_subDockColor);
-    m_swatchPage   = new vistella::ui::VSwatchPage(m_subDockColor);
-    m_gradientPage = new vistella::ui::VGradientPage(m_subDockColor);
-    m_patternPage  = new vistella::ui::VPatternPage(m_subDockColor);
+    m_colorGroup = makeGroup(this, QStringLiteral("rightPanelColorGroup"), false);
 
-    m_subDockColor->addPage(m_colorPage);
-    m_subDockColor->addPage(m_swatchPage);
-    m_subDockColor->addPage(m_gradientPage);
-    m_subDockColor->addPage(m_patternPage);
-    m_subDockColor->setCompositeStrategy(
-        vistella::ui::CompositeStrategy::Sequential);
+    m_colorTab    = new ColorTab(m_colorGroup);
+    m_swatchTab   = new SwatchTab(m_colorGroup);
+    m_gradientTab = new GradientTab(m_colorGroup);
+    m_patternTab  = new PatternTab(m_colorGroup);
 
-    m_splitter->addWidget(m_subDockColor);
+    m_colorTab->setWindowTitle(tr("颜色"));
+    m_swatchTab->setWindowTitle(tr("色板"));
+    m_gradientTab->setWindowTitle(tr("渐变"));
+    m_patternTab->setWindowTitle(tr("图案"));
+
+    m_colorGroup->addTab(m_colorTab,    m_colorTab->windowTitle());
+    m_colorGroup->addTab(m_swatchTab,   m_swatchTab->windowTitle());
+    m_colorGroup->addTab(m_gradientTab, m_gradientTab->windowTitle());
+    m_colorGroup->addTab(m_patternTab,  m_patternTab->windowTitle());
+
+    m_splitter->addWidget(m_colorGroup);
 }
 
-void RightPanelDock::buildSubDockProperty()
+void RightPanelDock::buildPropertyGroup()
 {
-    m_subDockProperty = new vistella::ui::VDraggableTabWidget(this);
-    m_propertyPage    = new vistella::ui::VPropertyPage(m_subDockProperty);
-    m_adjustmentPage  = new vistella::ui::VAdjustmentPage(m_subDockProperty);
+    m_propertyGroup = makeGroup(this, QStringLiteral("rightPanelPropertyGroup"), false);
 
-    m_subDockProperty->addPage(m_propertyPage);
-    m_subDockProperty->addPage(m_adjustmentPage);
-    m_subDockProperty->setCompositeStrategy(
-        vistella::ui::CompositeStrategy::Sequential);
+    m_propertiesDock  = new PropertiesDock(m_propertyGroup);
+    m_adjustmentPanel = new AdjustmentPanel(m_propertyGroup);
 
-    m_splitter->addWidget(m_subDockProperty);
+    m_propertiesDock->setWindowTitle(tr("属性"));
+    m_adjustmentPanel->setWindowTitle(tr("调整"));
+
+    m_propertyGroup->addTab(m_propertiesDock,  m_propertiesDock->windowTitle());
+    m_propertyGroup->addTab(m_adjustmentPanel, m_adjustmentPanel->windowTitle());
+
+    m_splitter->addWidget(m_propertyGroup);
 }
 
-void RightPanelDock::buildSubDockLayer()
+void RightPanelDock::buildLayerGroup()
 {
-    m_subDockLayer     = new vistella::ui::VDraggableTabWidget(this);
-    m_layerPage        = new vistella::ui::VLayerPage(m_subDockLayer);
-    m_channelPathPage  = new vistella::ui::VChannelPathPage(m_subDockLayer);
-    m_historyPage      = new vistella::ui::VHistoryPage(m_subDockLayer);
+    m_layerGroup = makeGroup(this, QStringLiteral("rightPanelLayerGroup"), true);
 
-    m_subDockLayer->addPage(m_layerPage);
-    m_subDockLayer->addPage(m_channelPathPage);
-    m_subDockLayer->addPage(m_historyPage);
-    m_subDockLayer->setCompositeStrategy(
-        vistella::ui::CompositeStrategy::Sequential);
+    m_layerDock        = new LayersDock(m_layerGroup);
+    m_channelPathPanel = new ChannelPathPanel(m_layerGroup);
+    m_historyDock      = new HistoryDock(m_layerGroup);
 
-    m_splitter->addWidget(m_subDockLayer);
+    m_layerDock->setWindowTitle(tr("图层"));
+    m_channelPathPanel->setWindowTitle(tr("通道/路径"));
+    m_historyDock->setWindowTitle(tr("历史"));
+
+    // the panel group provides the page switcher, so
+    //   the inner tab bar of the LayersDock would be a duplicate row of
+    //   tabs (and its channel/path page was only ever a placeholder).
+    m_layerDock->setEmbeddedInPanelGroup(true);
+
+    m_layerGroup->addTab(m_layerDock,        m_layerDock->windowTitle());
+    m_layerGroup->addTab(m_channelPathPanel, m_channelPathPanel->windowTitle());
+    m_layerGroup->addTab(m_historyDock,      m_historyDock->windowTitle());
+
+    m_splitter->addWidget(m_layerGroup);
 }
 
 void RightPanelDock::attach(mediators::WorkspaceMediator* wsMed)
@@ -157,71 +243,66 @@ void RightPanelDock::onWorkspaceChanged(mediators::WorkspaceId id)
 {
     if (!m_wsMed) return;
     LOG_INFO("[RightPanelDock] workspaceChanged: id={}", static_cast<int>(id));
-    // P7.6.x v3: workspace visibility now controls sub-dock 1 (color-group)
-    // and sub-dock 2 (property-group). Sub-dock 3 (layer-group) is always
-    // visible (core editing area).
+    // workspace visibility now controls the colour group and the property
+    // group. The layer group is always visible (core editing area).
     bool visColor   = m_wsMed->isDockVisible(0);
     bool visProperty = m_wsMed->isDockVisible(1);
-    if (m_subDockColor)    m_subDockColor->setVisible(visColor);
-    if (m_subDockProperty) m_subDockProperty->setVisible(visProperty);
+    if (m_colorGroup)   m_colorGroup->setVisible(visColor);
+    if (m_propertyGroup) m_propertyGroup->setVisible(visProperty);
     Q_UNUSED(id);
 }
 
 void RightPanelDock::onDockVisibilityChanged(int dockIndex, bool visible)
 {
     if (!m_wsMed) return;
-    if (dockIndex == 0 && m_subDockColor)    m_subDockColor->setVisible(visible);
-    if (dockIndex == 1 && m_subDockProperty) m_subDockProperty->setVisible(visible);
+    if (dockIndex == 0 && m_colorGroup)    m_colorGroup->setVisible(visible);
+    if (dockIndex == 1 && m_propertyGroup) m_propertyGroup->setVisible(visible);
 }
 
 void RightPanelDock::setUndoStack(QUndoStack* stack)
 {
-    if (m_historyPage) m_historyPage->setUndoStack(stack);
+    if (m_historyDock) m_historyDock->setUndoStack(stack);
 }
 
 void RightPanelDock::setPropertyImageInfo(const PropertiesDock::ImageInfo& info)
 {
-    if (!m_propertyPage) return;
-    if (auto* inner = m_propertyPage->inner()) {
-        inner->setImageInfo(info);
-    }
+    if (!m_propertiesDock) return;
+    m_propertiesDock->setImageInfo(info);
 }
 
 void RightPanelDock::setLayerPanel(QWidget* panel)
 {
-    // VLayerPage currently hosts a bare LayersDock. Callers that need to
-    // install a LayerPanel into the first layer tab can do so via
-    // LayersDock::setContentWidget(0, panel). For now we look up the
-    // inner LayersDock through the VLayerPage and call setContentWidget.
-    if (!m_layerPage) return;
-    if (auto* inner = m_layerPage->inner()) {
-        inner->setContentWidget(0, panel);
-    }
+    // The LayersDock hosts the layer list as its first tab content.
+    if (!m_layerDock) return;
+    m_layerDock->setContentWidget(0, panel);
 }
 
 void RightPanelDock::setChannelPathQuickMask(bool on)
 {
-    if (!m_channelPathPage) return;
-    if (auto* inner = m_channelPathPage->inner()) {
-        inner->setQuickMask(on);
-    }
+    if (!m_channelPathPanel) return;
+    m_channelPathPanel->setQuickMask(on);
 }
 
 void RightPanelDock::invalidateAllPageCaches()
 {
-    auto fanOut = [](vistella::ui::VDraggableTabWidget* sd) {
-        if (!sd) return;
-        for (int i = 0; i < sd->pageCount(); ++i) {
-            // pageAt() returns QWidget* (VDraggableTabWidget's API);
-            // the VTabPageBase API lives on the actual subclass. qobject_cast
-            // is safe because every page was inserted via addPage(VTabPageBase*).
-            auto* pageBase = qobject_cast<vistella::ui::VTabPageBase*>(sd->pageAt(i));
-            if (pageBase) pageBase->invalidateCache();
-        }
-    };
-    fanOut(m_subDockColor);
-    fanOut(m_subDockProperty);
-    fanOut(m_subDockLayer);
+    // The properties panel has no internal cache to drop (its data is
+    // pushed in from outside via setImageInfo / setSelectionBbox / etc),
+    // so invalidating it is a repaint trigger.
+    if (m_propertiesDock) {
+        ++m_propertyInvalidateCount;
+        m_propertiesDock->update();
+    }
+    // The channel panel re-reads the active channel on the next paint.
+    if (m_channelPathPanel) {
+        ++m_channelPathInvalidateCount;
+        m_channelPathPanel->update();
+    }
+    // The history panel listens to QUndoStack::indexChanged via its own
+    // setUndoStack(); the only path that bypasses it is direct mutation
+    // of the stack, which we do not do.
+    if (m_historyDock) {
+        ++m_historyInvalidateCount;
+    }
 }
 
 QSize RightPanelDock::sizeHint() const
@@ -241,46 +322,6 @@ QSize RightPanelDock::minimumSizeHint() const
     //   正确做法是 dock 给一个"有界下限": 窗口给多少高度, 三个组就怎么分,
     //   需要更多空间的用户自己拖分隔条 (splitter 的拖动不受这个下限限制).
     return QSize(280, 240);
-}
-
-// ---------------------------------------------------------------------------
-// DEPRECATED shims. Return nullptr + log. Kept so callers that haven't
-// been migrated yet still compile (the deref will then fail).
-// ---------------------------------------------------------------------------
-
-PropertiesDock*   RightPanelDock::propertiesDock()   const
-{
-    LOG_WARN("[RightPanelDock] DEPRECATED propertiesDock() called; "
-             "use propertyPage() instead (returns VPropertyPage*).");
-    return nullptr;
-}
-
-LayersDock*       RightPanelDock::layersDock()       const
-{
-    LOG_WARN("[RightPanelDock] DEPRECATED layersDock() called; "
-             "use layerPage() instead (returns VLayerPage*).");
-    return nullptr;
-}
-
-ChannelPathPanel* RightPanelDock::channelPathPanel() const
-{
-    LOG_WARN("[RightPanelDock] DEPRECATED channelPathPanel() called; "
-             "use channelPathPage() instead (returns VChannelPathPage*).");
-    return nullptr;
-}
-
-HistoryDock*      RightPanelDock::historyDock()      const
-{
-    LOG_WARN("[RightPanelDock] DEPRECATED historyDock() called; "
-             "use historyPage() instead (returns VHistoryPage*).");
-    return nullptr;
-}
-
-void RightPanelDock::setAdjustmentPanel(AdjustmentPanel* adj)
-{
-    Q_UNUSED(adj);
-    LOG_WARN("[RightPanelDock] DEPRECATED setAdjustmentPanel() called; "
-             "adjustment page is now built-in (VAdjustmentPage).");
 }
 
 } // namespace docks

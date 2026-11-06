@@ -16,9 +16,7 @@
 #include "../media/masks/ColorRange.h"
 #include "../media/mediators/ToolMediator.h"
 #include "../media/docks/RightPanelDock.h"  // P7.6.x v3: image->colorDock()->colorDock() 完整类型
-#include "../ui/dock/VTabPageBase.h"        // status bar GPU/CPU stats
-#include "../ui/dock/VDraggableTabWidget.h" // P7.11: iterate 3 sub-dock pages
-#include "../ui/dock/VRenderPath.h"         // P7.11: RenderPath enum
+#include "DockLayoutManager.h"             // M2-2: 面板布局的保存/恢复/重置
 #include "../media/imageworker/layers/LayerMask.h"
 #include "../media/imageworker/layers/Layer.h"
 #include "../media/imageworker/layers/LayerCommand.h"
@@ -214,13 +212,25 @@ MainWindow::MainWindow(QWidget *parent)
     statusBar()->showMessage(tr("就绪"));
 
     // 状态栏底部 GPU/CPU 状态按钮
-    //   读 m_rightDock (active image 的) 3 sub-dock 内 V*Page
-    //   preferredRenderPath() 统计. 显示 "GPU: 3 / 5" (GpuPreferred 3 个,
-    //   CpuOnly 5 个). 实际切 GPU/CPU 在 P8.3 接, 现在只读.
+    //   读 BackendRegistry 的当前 mode + backend name.
+    //   (M2-2: 这里过去读的是 RightPanelDock 3 组 9 个 V*Page 的
+    //    preferredRenderPath() 统计 -- 那套自研页适配层已经删掉,
+    //    统计值本身从来没有消费方, 实际显示的是 BackendRegistry.)
     buildStatusBar();
 
     // 加载窗口模式 + normal 尺寸 (QSettings -> m_mode + m_normalSize, 然后 show)
     loadWindowState();
+
+    // 面板布局 (M2-2): 恢复上次退出时的面板排布.
+    //   必须放在所有 dock 建好之后 —— restoreState() 按 objectName 找回
+    //   每个 dock, dock 还没建的时候调用会静默失败.
+    //   失败不是致命错误: 窗口保持当前布局继续用.
+    m_dockLayout = std::make_unique<app::DockLayoutManager>();
+    m_dockLayout->setWindow(this);
+    if (!m_dockLayout->restore()) {
+        LOG_INFO("[MainWindow] no saved dock layout to restore: {}",
+                 m_dockLayout->lastError().toStdString());
+    }
 
     // 注: 不在这里自动恢复 session, 由 main.cpp splash 关闭后
     //     弹窗问用户"是否恢复", 然后调 restoreSessionFiles()
@@ -305,6 +315,16 @@ void MainWindow::closeEvent(QCloseEvent *e)
     // (异常退出: 程序崩溃 / kill -9 / 断电, closeEvent 不会触发, flag 保持 false)
     SessionManager::instance().setLastExitClean(true);
     saveSession();
+
+    // 面板布局落盘 (M2-2): 下次启动恢复.
+    //   写的是"当前布局", 不是"默认布局" —— 默认布局是用户显式声明的,
+    //   只在 onSaveLayoutAsDefault 里改.
+    if (m_dockLayout) {
+        if (!m_dockLayout->save()) {
+            LOG_WARN("[MainWindow] closeEvent: could not save the dock layout: {}",
+                     m_dockLayout->lastError().toStdString());
+        }
+    }
     // 只保存 mode (2026-09-09 user 拍板: m_normalSize 写死 1280x800, 不持久化)
     // 如果用户关闭时是 Maximized, 存 Normal. 上次关窗 Maximized
     //   会让下次启动 splash 之前 loadWindowState 读 "window/mode=1", 不恢复路径虽然显式
@@ -377,7 +397,7 @@ void MainWindow::destroyActions()
         m_actCloseCur, m_actCloseOthers, m_actCloseSameType, m_actCloseAll,
         m_actUndo, m_actRedo, m_actCut, m_actCopy, m_actPaste,
         m_actSelAll, m_actFind, m_actReplace,
-        m_actZoomIn, m_actZoomOut, m_actResetLayout, m_actToggleTheme,
+        m_actZoomIn, m_actZoomOut, m_actResetLayout, m_actSaveLayoutAsDefault, m_actToggleTheme,
         m_actFreeTransform, m_actImageFlipH, m_actImageFlipV,
         m_actImageRotate90CW, m_actImageRotate90CCW, m_actImageRotate180,
     };
@@ -405,6 +425,7 @@ void MainWindow::destroyActions()
     m_actZoomIn = nullptr;
     m_actZoomOut = nullptr;
     m_actResetLayout = nullptr;
+    m_actSaveLayoutAsDefault = nullptr;
     m_actToggleTheme = nullptr;
     m_actFreeTransform = nullptr;
     m_actImageFlipH = nullptr;
@@ -551,6 +572,9 @@ void MainWindow::buildActions()
     m_actZoomIn   = new QAction(tr("放大"), this);
     m_actZoomOut  = new QAction(tr("缩小"), this);
     m_actResetLayout = new QAction(tr("重置布局"), this);
+    // M2-2: "重置布局" needs a default to go back to. This action is
+    //   how the user declares one.
+    m_actSaveLayoutAsDefault = new QAction(tr("保存当前布局为默认"), this);
     m_actToggleTheme = new QAction(tr("切换主题"), this);
 
     // 模式 (3D 模块已移除, 模式选择删除)
@@ -606,6 +630,7 @@ void MainWindow::buildActions()
     connect(m_actZoomIn,   &QAction::triggered, this, &MainWindow::onZoomIn);
     connect(m_actZoomOut,  &QAction::triggered, this, &MainWindow::onZoomOut);
     connect(m_actResetLayout, &QAction::triggered, this, &MainWindow::onResetLayout);
+    connect(m_actSaveLayoutAsDefault, &QAction::triggered, this, &MainWindow::onSaveLayoutAsDefault);
     connect(m_actToggleTheme, &QAction::triggered, this, &MainWindow::onToggleTheme);
     // P0-6.5: 6 图像变换 action
     connect(m_actFreeTransform,    &QAction::triggered, this, &MainWindow::onFreeTransform);
@@ -663,6 +688,7 @@ void MainWindow::buildActions()
     mView->addAction(m_actZoomIn);
     mView->addAction(m_actZoomOut);
     mView->addAction(m_actResetLayout);
+    mView->addAction(m_actSaveLayoutAsDefault);
     mView->addSeparator();
     QAction *aFitScreen = mView->addAction(tr("适合屏幕"));
     aFitScreen->setShortcut(QKeySequence(QStringLiteral("Ctrl+0")));
@@ -2676,27 +2702,61 @@ void MainWindow::onZoomOut()
         statusBar()->showMessage(tr("没有打开的图像"), 2000);
     }
 }
-// onResetLayout — restore default dock/panel layout
-//   Calls QMainWindow::restoreState with the saved default state file
-//   (workspace_default.ini under QStandardPaths::AppDataLocation).
-//   Falls back to a statusBar message if the file is missing.
+// onResetLayout - go back to the user's declared default arrangement.
+//
+// M2-2: this used to read a workspace_default.ini that nothing ever
+// wrote, so the action was a no-op that only ever showed an error
+// message (audit APP-19). The layout now goes through
+// DockLayoutManager, which owns both the live layout and the default.
+//
+// When no default has been declared yet, the built-in arrangement IS
+// the default -- so the action reports "no default saved" and leaves the
+// window alone rather than pretending it failed.
 void MainWindow::onResetLayout()
 {
-    const QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-        + "/workspace_default.ini";
-    QFile f(path);
-    if (f.exists() && f.open(QIODevice::ReadOnly)) {
-        const QByteArray state = f.readAll();
-        f.close();
-        if (!state.isEmpty()) {
-            restoreState(state);
-            statusBar()->showMessage(tr("默认布局已恢复"), 2000);
-            LOG_INFO("[MainWindow] onResetLayout: restored from {}", path.toStdString());
-            return;
-        }
+    if (!m_dockLayout) {
+        statusBar()->showMessage(tr("布局管理不可用"), 2000);
+        return;
     }
-    statusBar()->showMessage(
-        tr("默认布局文件不存在 (%1) — 请先保存当前布局为默认").arg(path), 3000);
+
+    if (!m_dockLayout->hasDefault()) {
+        statusBar()->showMessage(
+            tr("尚未保存默认布局 - 请先用「保存当前布局为默认」"), 3000);
+        return;
+    }
+
+    if (m_dockLayout->reset()) {
+        statusBar()->showMessage(tr("默认布局已恢复"), 2000);
+        LOG_INFO("[MainWindow] onResetLayout: restored the default arrangement");
+    } else {
+        statusBar()->showMessage(
+            tr("默认布局恢复失败: %1").arg(m_dockLayout->lastError()), 4000);
+        LOG_WARN("[MainWindow] onResetLayout failed: {}",
+                 m_dockLayout->lastError().toStdString());
+    }
+}
+
+// onSaveLayoutAsDefault - declare the current arrangement as the default.
+//
+// "I moved a panel" (the live layout, saved on exit) and "I want the
+// original arrangement back" (this action) are two different things, so
+// they write two different files.
+void MainWindow::onSaveLayoutAsDefault()
+{
+    if (!m_dockLayout) {
+        statusBar()->showMessage(tr("布局管理不可用"), 2000);
+        return;
+    }
+
+    if (m_dockLayout->saveAsDefault()) {
+        statusBar()->showMessage(tr("当前布局已保存为默认"), 2000);
+        LOG_INFO("[MainWindow] onSaveLayoutAsDefault: default layout stored");
+    } else {
+        statusBar()->showMessage(
+            tr("保存默认布局失败: %1").arg(m_dockLayout->lastError()), 4000);
+        LOG_WARN("[MainWindow] onSaveLayoutAsDefault failed: {}",
+                 m_dockLayout->lastError().toStdString());
+    }
 }
 
 // 图像变换 6 槽 — 调当前 ImageWindow 接口
@@ -3929,8 +3989,7 @@ void MainWindow::bindLeftDockWidgets(ImageWindow* iw)
 // 接实际 GPU/CPU backend 切换
 // ---------------------------------------------------------------------------
 //
-// 读 active image 的 RightPanelDock 3 sub-dock 内 9 V*Page 的
-// preferredRenderPath() 统计 + 当前 BackendRegistry mode + BrushOptionsPanel
+// 读 BackendRegistry 的当前 mode + backend name + BrushOptionsPanel
 // currentKind + pick(.) 返 backend name. 显示 "AUTO | qt-opengl-stub" /
 // "FORCE CPU | cpu" / "FORCE GPU | qt-opengl-stub" (backend name 反映
 // kindNeedsGpu() + 当前能力).
@@ -3938,8 +3997,9 @@ void MainWindow::bindLeftDockWidgets(ImageWindow* iw)
 //   - onTabChanged (active image 切换)
 //   - 显式 refreshGpuStatusButton() (mode 改 / kind 改 后调)
 //
-// 现在 m_btnGpuStatus 永远在状态栏右边, 文本反映当前 active image 的
-// right panel 偏好分布. 没有 active image 时显示 "GPU: -" (N/A).
+// M2-2: 过去这里统计 RightPanelDock 3 组 9 个 V*Page 的 preferredRenderPath(),
+// 那套适配层已经删除; 统计值没有消费方, 实际显示的是 BackendRegistry.
+// 没有 active image 时显示 "GPU: -" (N/A).
 // ---------------------------------------------------------------------------
 
 void MainWindow::buildStatusBar()

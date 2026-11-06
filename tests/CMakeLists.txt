@@ -31,8 +31,7 @@ function(add_vistella_test NAME)
         Qt6::QuickWidgets   # B.2: tst_QQuickWidgetDemo 用
         Qt6::Concurrent    # C.1: tst_Async (QtConcurrent::run) 用
         vistella_core       # FileExtensionRegistry / MediaDispatcher / IModule / Result / Async
-        vistella_ui         # FileTreeModel / FileTreeItem 在 src/ui
-        vistella_ui_dock    # P7.6.x v3 (2026-10-14): VDraggableTabWidget + VDragManager + VRenderPath / VCompositeStrategy
+        vistella_ui         # FileTreeProxyModel 在 src/ui
         vistella_imageworker  # W1: tst_ImageWorker 用 (ImageWorker / ImageWorkspace)
         vistella_media      # W1 + W2: ImageWindow / ImageProcessor / Graphicstextitem / ImageInfoPanel
         vistella_logger
@@ -54,6 +53,34 @@ function(add_vistella_test NAME)
     # 注册到 ctest, 用 -o 输出 xml 给 CI 解析
     add_test(NAME ${NAME} COMMAND ${NAME} -o ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.xml)
     # 给测试多一点时间 (MediaDispatcher 测试可能涉及信号循环)
+    set_tests_properties(${NAME} PROPERTIES TIMEOUT 30)
+endfunction()
+
+# ---- 变体: 额外编译几个源文件进测试 target --------------------------
+#
+# M2-2 的 DockLayoutManager 在 src/app/, 而测试不 link vistella_app
+# (那会把整个 MainWindow + OpenCV 依赖链拖进来). 这个类只依赖 Qt,
+# 所以直接把它编进测试 target —— 不引静态库的链接顺序坑, 也不动
+# 其它测试的依赖.
+function(add_vistella_test_with_sources NAME)
+    qt_add_executable(${NAME} ${NAME}.cpp ${ARGN} support/PathHarness.h)
+    target_link_libraries(${NAME} PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        vistella_logger
+    )
+    target_include_directories(${NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    if(MSVC)
+        target_compile_options(${NAME} PRIVATE /utf-8)
+        target_compile_options(${NAME} PRIVATE /W3)
+    else()
+        target_compile_options(${NAME} PRIVATE -Wall -Wextra)
+    endif()
+    add_test(NAME ${NAME} COMMAND ${NAME} -o ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.xml)
     set_tests_properties(${NAME} PROPERTIES TIMEOUT 30)
 endfunction()
 
@@ -196,12 +223,16 @@ add_vistella_test(tst_P3_1_FilterDialog)
 #   FileExtensionRegistry 12 RAW 格式覆盖 + decodeRaw stub error 路径).
 #   真 libraw 链接时 stub 自动切换, 测试不需要改.
 add_vistella_test(tst_P3_5_CameraRaw)
-# P7.6.x v3 commit 2 (2026-10-14): PS-style draggable tab + GPU/CPU placeholders
-add_vistella_test(tst_VDraggableTabWidget)
-# P7.6.x v3 commit 3 (2026-10-14): VTabPageBase + 9 V*Page adapters
-add_vistella_test(tst_VTabPageBase)
 # P7.6.x v3 commit 4 (2026-10-15): RightPanelDock 3-sub-dock refactor
+#   (M2-2 2026-11-06: 3 个自研 VDraggableTabWidget 换成原生 QTabWidget)
 add_vistella_test(tst_RightPanelDock)
+
+# M2-2: the persistent dock layout (save / restore / reset).
+#   DockLayoutManager lives in src/app/ but only depends on Qt, so it is
+#   compiled straight into the test target instead of dragging
+#   vistella_app (and its whole MainWindow + OpenCV chain) in.
+add_vistella_test_with_sources(tst_M2_2_DockLayout
+    ${CMAKE_SOURCE_DIR}/src/app/DockLayoutManager.cpp)
 # P7.11 (2026-10-15): ImageCanvas dirty rect + status bar GPU/CPU + dock PS QSS
 add_vistella_test(tst_P7_11)
 # P7.10 (2026-10-15): 属性/通道/路径 tab 重写 (invalidateCache 标脏 + fan-out)

@@ -1,59 +1,67 @@
 // SPDX-License-Identifier: MIT
 //
-// RightPanelDock - rewrite
+// RightPanelDock - the PS-style right hand panel.
 //
-// 右侧 panel PS 风格 3 嵌套 sub-dock:
-//   - Sub-dock 1 (颜色组):  颜色 / 色板 / 渐变 / 图案
-//   - Sub-dock 2 (属性组):  属性 / 调整
-//   - Sub-dock 3 (图层组):  图层 / 通道/路径 / 历史
+// M2-2: the self written drag layer is gone.
 //
-// 之前版本: 1 个 QTabWidget 装 5-6 tab (颜色/属性/图层/
-// 选区/历史/调整). 全部用各自子 widget (ColorDock 4-tab, LayersDock 2-tab,
-// PropertiesDock, ChannelPathPanel, HistoryDock, AdjustmentPanel).
+//   Before: 1 QSplitter holding 3 VDraggableTabWidget, each holding a set
+//   of V*Page adapters (VPages.h) that wrapped the real panels
+//   (ColorTab, SwatchTab, ...) in a zero margin box.
 //
-// 重构原因:
-//   - 嵌套 sub-dock 是 PS 风格 (用户 10/15 spec). tab 可以拉出变 floating
-//     dock, 跨 sub-dock 合并, sub-dock 高度可拖拽.
-//   - VDraggableTabWidget (commit 2) + VTabPageBase + V*Page adapter (commit 3)
-//     已经准备好了, 这里只组合.
-//   - ColorDock / LayersDock 类还在, 但 RightPanelDock 不再用, 标
-//     deprecated. 调用方迁移到 V*Page accessor 后删.
+//   The self written layer was 0% usable: the drag code passed a LOCAL
+//   widget position to mapFromGlobal(), so a drop never moved a page;
+//   the floating wrapper was created with a parent, so it could never
+//   float; and the page list and the tab bar kept two separate indices,
+//   so switching pages could address the wrong one.
 //
-// 设计:
-//   - 1 个 QSplitter (vertical) 装 3 个 VDraggableTabWidget
-//   - 每个 VDraggableTabWidget 装一组 V*Page
-//   颜色组 / 属性组 按内容高度, 图层组吃掉剩余高度
-//     (原来是 1/3 + 1/3 + 1/3 等分, 颜色组空一大片, 属性文字浮在空白中间)
-//   - compositeStrategy 字段 (P0 placeholder, P8.4 多线程合成接)
+//   Now: 3 native QTabWidget groups inside one QSplitter, each holding
+//   the real panel widget directly. There is no adapter layer any more:
+//   RightPanelDock owns the panels itself and hands out the raw widget.
 //
-// Backward compatibility:
-//   - 旧 accessor (colorDock() 返 ColorDock* 等) 保留但返 nullptr + log 警告.
-//   - 新 accessor (colorPage() 返 VColorPage* 等) 是调用方要用的.
-//   - setAdjustmentPanel(AdjustmentPanel*) 保留为 no-op + log 警告;
-//     调整 panel 现在通过 VAdjustmentPage (内置) 接入.
-
+//   What Qt gives us for free that the old layer had to fake:
+//     - the tab bar, the page switcher and the keyboard navigation,
+//     - a page that sizes itself to the CURRENT page (QStackedWidget
+//       does this, the old custom widget had to reimplement it),
+//     - the drag to a floating window, the re-dock and the tab reordering
+//       are the ones that DID work: QTabWidget::setMovable /
+//       QTabWidget::setTabsClosable / QMainWindow::addDockWidget.
+//
+// The three groups:
+//   - colour group:   colour / swatch / gradient / pattern
+//   - property group: properties / adjustments
+//   - layer group:    layers / channels+paths / history
+//
+// The colour group and the property group size to their content; only
+// the layer group absorbs the leftover height (the layer list is the one
+// panel that is meant to grow with the window).
 #pragma once
 
 #include <QWidget>
 #include <QShowEvent>
 
-#include "../../ui/dock/VDraggableTabWidget.h"
-#include "../../ui/dock/VPages.h"
-#include "../../ui/dock/VCompositeStrategy.h"
+#include "PropertiesDock.h"   // PropertiesDock::ImageInfo is a nested type
 
-class QStackedWidget;
+class QTabWidget;
 class QSplitter;
 class QUndoStack;
 
+// AdjustmentPanel lives in the GLOBAL namespace (src/media/imagewindow/
+// AdjustmentPanel.h), not in docks:: -- so its forward declaration has to
+// stay outside the namespace block below.
 class AdjustmentPanel;
 
 #include "../mediators/WorkspaceMediator.h"
 
 namespace docks {
 
-// Forward declared. The old widget classes are kept around as deprecated
-// shims for callers that haven't migrated yet.
-class PropertiesDock;
+// The panels this dock hosts. All of them live in this namespace, so the
+// forward declarations have to be inside it too -- a forward declaration
+// in the global namespace would name a DIFFERENT type and every pointer
+// assignment would fail to compile.
+class ColorTab;
+class SwatchTab;
+class GradientTab;
+class PatternTab;
 class LayersDock;
 class ChannelPathPanel;
 class HistoryDock;
@@ -69,47 +77,46 @@ public:
     void attach(mediators::WorkspaceMediator* wsMed);
 
     // -----------------------------------------------------------------
-    // NEW: V*Page accessors (commit 4 onwards). The right way to talk
-    // to a right-panel page now.
+    // the panels themselves -- the right way to talk to a right panel
+    // page now. Each returns the real widget, not an adapter.
     // -----------------------------------------------------------------
 
-    // Sub-dock 1 (color group).
-    vistella::ui::VColorPage*    colorPage()    const { return m_colorPage; }
-    vistella::ui::VSwatchPage*   swatchPage()   const { return m_swatchPage; }
-    vistella::ui::VGradientPage* gradientPage() const { return m_gradientPage; }
-    vistella::ui::VPatternPage*  patternPage()  const { return m_patternPage; }
-    vistella::ui::VDraggableTabWidget* subDockColor() const { return m_subDockColor; }
+    // Colour group.
+    ColorTab*       colorTab()       const { return m_colorTab; }
+    SwatchTab*      swatchTab()      const { return m_swatchTab; }
+    GradientTab*    gradientTab()    const { return m_gradientTab; }
+    PatternTab*     patternTab()     const { return m_patternTab; }
+    QTabWidget*     colorGroup()     const { return m_colorGroup; }
 
-    // Sub-dock 2 (property group).
-    vistella::ui::VPropertyPage*    propertyPage()    const { return m_propertyPage; }
-    vistella::ui::VAdjustmentPage* adjustmentPage()  const { return m_adjustmentPage; }
-    vistella::ui::VDraggableTabWidget* subDockProperty() const { return m_subDockProperty; }
+    // Property group.
+    PropertiesDock*  propertiesDock()  const { return m_propertiesDock; }
+    AdjustmentPanel* adjustmentPanel() const { return m_adjustmentPanel; }
+    QTabWidget*      propertyGroup()   const { return m_propertyGroup; }
 
-    // Sub-dock 3 (layer group).
-    vistella::ui::VLayerPage*       layerPage()       const { return m_layerPage; }
-    vistella::ui::VChannelPathPage* channelPathPage() const { return m_channelPathPage; }
-    vistella::ui::VHistoryPage*     historyPage()     const { return m_historyPage; }
-    vistella::ui::VDraggableTabWidget* subDockLayer() const { return m_subDockLayer; }
+    // Layer group.
+    LayersDock*       layerDock()       const { return m_layerDock; }
+    ChannelPathPanel* channelPathPanel() const { return m_channelPathPanel; }
+    HistoryDock*      historyDock()      const { return m_historyDock; }
+    QTabWidget*       layerGroup()      const { return m_layerGroup; }
 
-    // QUndoStack binding forwarded to VHistoryPage (was on HistoryDock).
+    // QUndoStack binding forwarded to the history panel.
     void setUndoStack(QUndoStack* stack);
 
-    // properties file info setter. Uses PropertiesDock's
-    // own ImageInfo struct (defined in PropertiesDock.h) so callers can
-    // reuse the same struct that loadFile already builds.
+    // properties file info setter. Uses PropertiesDock's own ImageInfo
+    // struct (defined in PropertiesDock.h) so callers can reuse the same
+    // struct that loadFile already builds.
     void setPropertyImageInfo(const PropertiesDock::ImageInfo& info);
 
     // Layer panel (still lives in imagewindow; we reparent it into the
-    // VLayerPage's content widget to keep the existing layout logic).
-    void setLayerPanel(class QWidget* panel);
+    // LayersDock content widget to keep the existing layout logic).
+    void setLayerPanel(QWidget* panel);
 
-    // Channel/path panel convenience: forward setQuickMask to VChannelPathPage.
+    // Channel/path panel convenience: forward setQuickMask.
     void setChannelPathQuickMask(bool on);
 
     // incremental cache invalidation fan-out
-    //   Walks the 3 sub-docks and calls invalidateCache() on every page.
-    //   Pages with default no-op override ignore the call. The
-    //   expensive pages (VPropertyPage / VChannelPathPage) drop their
+    //   Walks the 3 groups and calls invalidateCache() on every page.
+    //   The expensive pages (properties / channel path) drop their
     //   derived state and schedule a repaint.
     //
     //   Callers:
@@ -118,27 +125,11 @@ public:
     //     - any future "model side changed" event
     void invalidateAllPageCaches();
 
-    // -----------------------------------------------------------------
-    // DEPRECATED: old ColorDock / PropertiesDock / LayersDock / etc
-    // accessors. Return nullptr and log a warning. Kept so callers that
-    // haven't migrated yet still compile; the nullptr will then fail
-    // loudly in the deref so we notice.
-    //
-    // Remove in a future commit once all callers have been migrated.
-    // -----------------------------------------------------------------
-    // M1-8: colorDock() is GONE. It was a deprecated accessor returning
-    //   nullptr, and the connect that used it was therefore dead -- the
-    //   toolbar foreground/background chain never connected at all.
-    //   The colour now goes through the document's ColorState
-    //   (src/media/ColorState.h); the live panel is colorPage().
-    PropertiesDock*   propertiesDock()   const;
-    LayersDock*       layersDock()       const;
-    ChannelPathPanel* channelPathPanel() const;
-    HistoryDock*      historyDock()      const;
-    void              setAdjustmentPanel(AdjustmentPanel* adj);
-
-    // setAdjustmentPanel kept for the
-    // ImageWindow::ctor signature; it now does nothing.
+    // The number of times the cache invalidation fan-out reached each
+    // page. Test hook (the pages themselves do not count).
+    int propertyInvalidateCount() const { return m_propertyInvalidateCount; }
+    int channelPathInvalidateCount() const { return m_channelPathInvalidateCount; }
+    int historyInvalidateCount() const { return m_historyInvalidateCount; }
 
     // 浮动位置 (imagewindow 右上角, 跟 m_rightPanel 同样模式)
     QSize sizeHint() const;
@@ -166,35 +157,40 @@ private slots:
     void onDockVisibilityChanged(int dockIndex, bool visible);
 
 private:
-    void buildSubDockColor();
-    void buildSubDockProperty();
-    void buildSubDockLayer();
+    void buildColorGroup();
+    void buildPropertyGroup();
+    void buildLayerGroup();
 
     QSplitter* m_splitter = nullptr;
 
-    // Sub-dock 1: 颜色 / 色板 / 渐变 / 图章.
-    vistella::ui::VDraggableTabWidget* m_subDockColor = nullptr;
-    vistella::ui::VColorPage*          m_colorPage    = nullptr;
-    vistella::ui::VSwatchPage*         m_swatchPage   = nullptr;
-    vistella::ui::VGradientPage*       m_gradientPage = nullptr;
-    vistella::ui::VPatternPage*        m_patternPage  = nullptr;
+    // Group 1: colour / swatch / gradient / pattern.
+    QTabWidget* m_colorGroup = nullptr;
+    ColorTab*   m_colorTab = nullptr;
+    SwatchTab*  m_swatchTab = nullptr;
+    GradientTab* m_gradientTab = nullptr;
+    PatternTab* m_patternTab = nullptr;
 
-    // Sub-dock 2: 属性 / 调整.
-    vistella::ui::VDraggableTabWidget* m_subDockProperty = nullptr;
-    vistella::ui::VPropertyPage*       m_propertyPage    = nullptr;
-    vistella::ui::VAdjustmentPage*     m_adjustmentPage  = nullptr;
+    // Group 2: properties / adjustments.
+    QTabWidget* m_propertyGroup = nullptr;
+    PropertiesDock* m_propertiesDock = nullptr;
+    AdjustmentPanel* m_adjustmentPanel = nullptr;
 
-    // Sub-dock 3: 图层 / 通道/路径 / 历史.
-    vistella::ui::VDraggableTabWidget* m_subDockLayer = nullptr;
-    vistella::ui::VLayerPage*          m_layerPage    = nullptr;
-    vistella::ui::VChannelPathPage*    m_channelPathPage = nullptr;
-    vistella::ui::VHistoryPage*        m_historyPage  = nullptr;
+    // Group 3: layers / channel+path / history.
+    QTabWidget* m_layerGroup = nullptr;
+    LayersDock* m_layerDock = nullptr;
+    ChannelPathPanel* m_channelPathPanel = nullptr;
+    HistoryDock* m_historyDock = nullptr;
 
     mediators::WorkspaceMediator* m_wsMed = nullptr;
 
     // P8.3.2: the content-sized split is applied once, after the dock has
     //   been shown and knows its real height.
     bool m_splitApplied = false;
+
+    // Cache invalidation counters (test hook).
+    int m_propertyInvalidateCount = 0;
+    int m_channelPathInvalidateCount = 0;
+    int m_historyInvalidateCount = 0;
 };
 
 } // namespace docks

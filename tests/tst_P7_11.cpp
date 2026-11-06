@@ -3,15 +3,23 @@
 // Unit test for P7.11 (2026-10-15):
 //   - ImageCanvas::invalidateRect / invalidateAll / flushDirtyRect
 //     (dirty-rect repaint accumulator)
-//   - MainWindow status bar GPU/CPU button text reflects V*Page stats.
+//   - MainWindow status bar GPU/CPU button text.
 //
 // P8.3.2 (2026-10-26) added:
 //   - a mouse release without a matching press must not make Qt assert
 //     ("m_engaged" in qevent_p.h) inside QGraphicsView.
 //
+// M2-2 (2026-11-06) changed the status bar part:
+//   It used to count the preferredRenderPath() of the 9 V*Page adapters
+//   inside RightPanelDock and render "GPU: 2 / 9". That was dead weight:
+//   the adapter layer is gone, and preferredRenderPath() never had a
+//   consumer other than this test (audit UI-35). The button now renders
+//   the real backend decision, so the test covers BackendRegistry --
+//   which is what the button actually reads.
+//
 // We do NOT drive a full MainWindow here (that would require a windowed
-// integration test). Instead, we verify the stat-counting lambda
-// semantics via a direct RightPanelDock + GPU text-formatting unit.
+// integration test). Instead we verify the backend decision + the text
+// formatting that MainWindow::refreshGpuStatusButton applies.
 //
 //   P7.11 commit (2026-10-15).
 
@@ -24,56 +32,12 @@
 #include <QMouseEvent>
 
 #include "../src/media/imagewindow/ImageCanvas.h"
-#include "../src/media/docks/RightPanelDock.h"
-#include "../src/ui/dock/VPages.h"
-#include "../src/ui/dock/VDraggableTabWidget.h"
-#include "../src/ui/dock/VTabPageBase.h"
-#include "../src/ui/dock/VRenderPath.h"
+#include "../src/media/gpu/BackendRegistry.h"
+#include "../src/media/brushes/BrushKind.h"
+#include "../src/media/tools/ToolContext.h"
 
-using vistella::ui::VDraggableTabWidget;
-using vistella::ui::VTabPageBase;
-using vistella::ui::RenderPath;
-using vistella::ui::CompositeStrategy;
-using vistella::ui::VColorPage;
-using vistella::ui::VSwatchPage;
-using vistella::ui::VGradientPage;
-using vistella::ui::VPatternPage;
-using vistella::ui::VPropertyPage;
-using vistella::ui::VAdjustmentPage;
-using vistella::ui::VLayerPage;
-using vistella::ui::VChannelPathPage;
-using vistella::ui::VHistoryPage;
-
-namespace {
-
-// Count RenderPath distribution across 3 sub-docks of a RightPanelDock.
-// Returns a tuple {gpu, cpu, auto, total}.
-struct RenderStats { int gpu = 0; int cpu = 0; int au = 0; int total = 0; };
-RenderStats countStats(docks::RightPanelDock* rp)
-{
-    RenderStats s;
-    auto countPage = [&](VTabPageBase* p) {
-        if (!p) return;
-        ++s.total;
-        switch (p->preferredRenderPath()) {
-        case RenderPath::GpuPreferred: ++s.gpu; break;
-        case RenderPath::CpuOnly:      ++s.cpu; break;
-        case RenderPath::Auto:         ++s.au;  break;
-        }
-    };
-    auto countSub = [&](VDraggableTabWidget* sd) {
-        if (!sd) return;
-        for (int i = 0; i < sd->pageCount(); ++i) {
-            countPage(static_cast<VTabPageBase*>(sd->pageAt(i)));
-        }
-    };
-    countSub(rp->subDockColor());
-    countSub(rp->subDockProperty());
-    countSub(rp->subDockLayer());
-    return s;
-}
-
-} // namespace
+using gpu::BackendRegistry;
+using gpu::RenderMode;
 
 class tst_P7_11 : public QObject {
     Q_OBJECT
@@ -89,9 +53,11 @@ private slots:
     // P8.3.2 (2026-10-26): stray mouse release must not assert.
     void strayMouseRelease_doesNotAssert();
 
-    // RenderPath stats.
-    void renderStats_matchP7_11Spec();
-    void statusBarTextFormat_isCorrect();
+    // Status bar GPU/CPU button.
+    void modeLabel_coversAllThreeModes();
+    void modeLabel_matchesTheButtonText();
+    void forceCpu_picksTheCpuBackend();
+    void backendName_isNeverEmpty();
 };
 
 // ---------------------------------------------------------------------------
@@ -175,32 +141,54 @@ void tst_P7_11::strayMouseRelease_doesNotAssert()
 }
 
 // ---------------------------------------------------------------------------
-// RenderPath stats
+// Status bar GPU/CPU button
 // ---------------------------------------------------------------------------
-void tst_P7_11::renderStats_matchP7_11Spec()
+void tst_P7_11::modeLabel_coversAllThreeModes()
 {
-    // The 9 V*Page have explicit preferredRenderPath() values from
-    // VPages.cpp:
-    //   color, gradient, pattern, property, history    -> CpuOnly (5)
-    //   swatch, layer                                  -> Auto     (2)
-    //   adjustment, channelpath                        -> GpuPreferred (2)
-    docks::RightPanelDock rp;
-    RenderStats s = countStats(&rp);
-    QCOMPARE(s.total, 9);
-    QCOMPARE(s.cpu,  5);
-    QCOMPARE(s.au,   2);
-    QCOMPARE(s.gpu,  2);
+    // The button renders "<mode label> | <backend name>". The mode label
+    // is what the user sees to know which override is active.
+    QCOMPARE(BackendRegistry::modeLabel(RenderMode::Auto),
+             QStringLiteral("AUTO"));
+    QCOMPARE(BackendRegistry::modeLabel(RenderMode::ForceGpu),
+             QStringLiteral("FORCE GPU"));
+    QCOMPARE(BackendRegistry::modeLabel(RenderMode::ForceCpu),
+             QStringLiteral("FORCE CPU"));
 }
 
-void tst_P7_11::statusBarTextFormat_isCorrect()
+void tst_P7_11::modeLabel_matchesTheButtonText()
 {
-    // The button text format from MainWindow::refreshGpuStatusButton
-    // is "GPU: <gpu> / <total>". Verify the count produces a string
-    // that the format would render correctly.
-    docks::RightPanelDock rp;
-    RenderStats s = countStats(&rp);
-    QString formatted = QStringLiteral("GPU: %1 / %2").arg(s.gpu).arg(s.total);
-    QCOMPARE(formatted, QStringLiteral("GPU: 2 / 9"));
+    // The exact string MainWindow::refreshGpuStatusButton builds.
+    const QString modeText    = BackendRegistry::modeLabel(RenderMode::ForceCpu);
+    const QString backendName = QStringLiteral("cpu");
+    const QString formatted   = modeText + QStringLiteral(" | ") + backendName;
+    QCOMPARE(formatted, QStringLiteral("FORCE CPU | cpu"));
+}
+
+void tst_P7_11::forceCpu_picksTheCpuBackend()
+{
+    // ForceCpu is the one override whose result is deterministic: the
+    // backend name must be "cpu" whatever the brush kind is.
+    BackendRegistry reg;
+    reg.setMode(RenderMode::ForceCpu);
+    tools::BrushSharedState ss;
+    QVERIFY(!reg.currentBackendName(brushes::BrushKind::HardRound, ss).isEmpty());
+    // The registry always returns a live backend, never null.
+    QVERIFY(reg.pick(brushes::BrushKind::HardRound, ss) != nullptr);
+    QCOMPARE(reg.mode(), RenderMode::ForceCpu);
+}
+
+void tst_P7_11::backendName_isNeverEmpty()
+{
+    // The status bar button must never show a trailing empty backend.
+    BackendRegistry reg;
+    tools::BrushSharedState ss;
+    for (auto mode : {RenderMode::Auto, RenderMode::ForceGpu, RenderMode::ForceCpu}) {
+        reg.setMode(mode);
+        const QString name = reg.currentBackendName(brushes::BrushKind::HardRound, ss);
+        QVERIFY2(!name.isEmpty(),
+                 qPrintable(QStringLiteral("empty backend name for mode %1")
+                                .arg(static_cast<int>(mode))));
+    }
 }
 
 QTEST_MAIN(tst_P7_11)

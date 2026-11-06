@@ -39,6 +39,8 @@ namespace mediators { class WorkspaceMediator; class ToolMediator; enum class To
 class QMouseEvent;
 QT_END_NAMESPACE
 
+namespace app { class DockLayoutManager; }
+
 // 简单窗口模式 (2026-09-09 重建, 9/4+ 状态机工作丢失后)
 // 1 个 mode 记录 Normal/Maximized, 1 个 size (m_normalSize) 记 normal 尺寸
 // 不加 sanity check / fullscreenish 检测 / 复杂 fallback
@@ -137,6 +139,7 @@ private slots:
     // 视图
     void onToggleTheme();
     void onResetLayout();
+    void onSaveLayoutAsDefault();
     void onZoomIn();
     void onZoomOut();
     void onSettings();
@@ -374,6 +377,7 @@ private:
     QAction *m_actZoomIn   = nullptr;
     QAction *m_actZoomOut  = nullptr;
     QAction *m_actResetLayout = nullptr;
+    QAction *m_actSaveLayoutAsDefault = nullptr;
     QAction *m_actToggleTheme = nullptr;
 
     // 6 图像变换 action
@@ -388,6 +392,17 @@ private:
     // 后续如果需要多模态切分 (图片/视频/音频), 在这里加回 QActionGroup + actions
 
     QList<TabState> m_tabStates;
+
+    // The dock layout (panel positions, sizes, floating state).
+    //
+    // M2-2: the panel system moved to the native QDockWidget pair
+    // (saveState / restoreState), so the arrangement can now actually
+    // be persisted. Before this the "reset layout" action read a file
+    // that nothing ever wrote (audit APP-19) and was a no-op.
+    //
+    // The manager owns three operations: save (on exit), restore (on
+    // startup) and reset (back to the user's declared default).
+    std::unique_ptr<app::DockLayoutManager> m_dockLayout;
 
     InfoTreeDock *m_infoDock = nullptr;
 

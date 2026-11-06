@@ -4,6 +4,12 @@ add_library(vistella_app STATIC
     mainwindow.cpp
     mainwindow.ui
     main.cpp
+
+    # M2-2: 面板布局的保存 / 恢复 / 重置.
+    #   主窗口的 dock 排布走原生 QMainWindow::saveState / restoreState,
+    #   这个类负责落盘 + 三件套 (save / restore / reset).
+    DockLayoutManager.h
+    DockLayoutManager.cpp
 )
 
 target_include_directories(vistella_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

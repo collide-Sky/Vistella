@@ -28,6 +28,12 @@
 #include "docks/ChannelPathPanel.h"
 #include "docks/PropertiesDock.h"
 #include "docks/HistoryDock.h"
+// M2-2: the V*Page adapter layer is gone, so the panels this window talks
+//   to are no longer pulled in transitively -- include them directly.
+#include "docks/ColorTab.h"
+#include "docks/SwatchTab.h"
+#include "docks/GradientTab.h"
+#include "docks/PatternTab.h"
 #include "tools/Brush.h"      // P6: dynamic_cast to setPaintColor
 // LayerPanel 实例化 + 注入 LayersDock tab 0
 //   LayerPanel 信号接通需要完整 LayerPanel.h + LayerCommand.h 定义
@@ -379,7 +385,7 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   layout, 于是它按默认几何画在画布左上角 (那条突兀的 "曲线" 标签就是它),
     //   同时右侧面板里用户真正看到的 Adjustments 页没有 host, 按了没反应.
     //   一个面板一个归属: 右侧面板的属性组.
-    m_adjustmentPanel = m_rightDock->adjustmentPage()->inner();
+    m_adjustmentPanel = m_rightDock->adjustmentPanel();
     m_adjustmentPanel->setHost(this);
 
     // Per-window DialogMediator. Hosts the
@@ -441,34 +447,30 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   with the right-side Color dock (PS 风格 one swatch, two docks).
     //   Echo loops are guarded by the `if (m_xxx == c) return;` early-out in
     //   both setters, so the chain terminates after the first round.
-    // ColorDock moved into VColorPage ->
-    //   access via colorPage()->inner() (the underlying ColorTab widget).
+    // The ColorTab (right panel) becomes a view over the state; MainWindow
+    // binds the LeftToolBar (left toolbar) to the ACTIVE document's state.
     // M1-8: the document's colour state.
     //   One state per document. The ColorTab (right panel) becomes a
     //   view over it; MainWindow binds the LeftToolBar (left toolbar) to
     //   the ACTIVE document's state.
     m_colorState = new vistella::ColorState(this);
 
-    if (auto* colorPage = m_rightDock->colorPage()) {
-        if (auto* colorTab = colorPage->inner()) {
-            // The panel renders the state; the state is the truth.
-            colorTab->setColorState(m_colorState);
-            connect(colorTab, &docks::ColorTab::foregroundColorChanged,
-                    this, &ImageWindow::onForegroundColorChanged);
-        }
+    if (auto* colorTab = m_rightDock->colorTab()) {
+        // The panel renders the state; the state is the truth.
+        colorTab->setColorState(m_colorState);
+        connect(colorTab, &docks::ColorTab::foregroundColorChanged,
+                this, &ImageWindow::onForegroundColorChanged);
         // ColorDock fg/bg → LeftToolBar 同步搬到 MainWindow
         //   (MainWindow::bindLeftDockWidgets 在 active image 切换时连). 避免 ImageWindow
         //   仍然持有 m_leftToolBar 指针.
     }
-    if (auto* chanPathPage = m_rightDock->channelPathPage()) {
-        if (auto* selPanel = chanPathPage->inner()) {
-            connect(selPanel, &docks::ChannelPathPanel::saveSelectionRequested,
-                    this, &ImageWindow::onSaveSelectionRequested);
-            connect(selPanel, &docks::ChannelPathPanel::loadSelectionRequested,
-                    this, &ImageWindow::onLoadSelectionRequested);
-            connect(selPanel, &docks::ChannelPathPanel::quickMaskToggled,
-                    this, &ImageWindow::onChannelPathQuickMaskToggled);
-        }
+    if (auto* selPanel = m_rightDock->channelPathPanel()) {
+        connect(selPanel, &docks::ChannelPathPanel::saveSelectionRequested,
+                this, &ImageWindow::onSaveSelectionRequested);
+        connect(selPanel, &docks::ChannelPathPanel::loadSelectionRequested,
+                this, &ImageWindow::onLoadSelectionRequested);
+        connect(selPanel, &docks::ChannelPathPanel::quickMaskToggled,
+                this, &ImageWindow::onChannelPathQuickMaskToggled);
     }
 
     m_rightDockContainer = new QDockWidget(this);
