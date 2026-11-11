@@ -99,6 +99,11 @@ add_library(vistella_media STATIC
     tools/ToolState.h
     tools/ToolContext.h
     tools/ToolContext.cpp
+    # M2-4: the shared coordinate helpers for the tools.
+    #   Clamping a scene position into the canvas, so that a drag that
+    #   leaves the canvas cannot make a tool write outside it.
+    tools/ToolGeometry.h
+    tools/ToolGeometry.cpp
     tools/MoveTool.h
     tools/MoveTool.cpp
     tools/EyedropperTool.h
@@ -134,6 +139,29 @@ add_library(vistella_media STATIC
     tools/RedEyeTool.cpp
     tools/PatchTool.h
     tools/PatchTool.cpp
+    # M2-4: the tools that were missing.
+    #   The audit (docs/CODE_AUDIT_2026-10-26.md 5.3) listed them by
+    #   priority: the eraser group, the gradient + paint bucket, the
+    #   dodge / burn, the blur / sharpen / smudge, and the view tools
+    #   (hand / zoom / rotate).
+    tools/EraserTool.h
+    tools/EraserTool.cpp
+    tools/GradientTool.h
+    tools/GradientTool.cpp
+    tools/PaintBucketTool.h
+    tools/PaintBucketTool.cpp
+    tools/DodgeBurnTool.h
+    tools/DodgeBurnTool.cpp
+    tools/BlurSharpenSmudgeTool.h
+    tools/BlurSharpenSmudgeTool.cpp
+    tools/ViewTools.h
+    tools/ViewTools.cpp
+    # M2-4: the shared option bar page for the new tools.
+    tools/ToolOptionsPanel.h
+    tools/ToolOptionsPanel.cpp
+    # M2-4: the tool group button (the long-press popup).
+    tools/ToolGroupButton.h
+    tools/ToolGroupButton.cpp
 
     # F-D (2026-09-09): LeftToolBar PS 风格 2 列图标 (2 工具)
     tools/LeftToolBar.h

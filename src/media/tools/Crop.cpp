@@ -2,9 +2,11 @@
 //
 // Crop implementation
 //
+// See Crop.h for the header comment.
 #include "Crop.h"
 #include "../imagewindow.h"
 #include "../imageprocessor.h"
+#include "ToolGeometry.h"
 #include "logger.h"
 
 #include <QComboBox>
@@ -17,6 +19,8 @@
 #include <QWidget>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+
+#include <cmath>
 
 namespace tools {
 
@@ -42,6 +46,45 @@ void Crop::onExit(ImageWindow* host)
     m_hasCrop = false;
     m_host = nullptr;
     LOG_DEBUG("[Crop] onExit");
+}
+
+double Crop::aspectValue() const
+{
+    switch (m_aspect) {
+    case AspectRatio::Ratio1_1:  return 1.0;
+    case AspectRatio::Ratio4_3:  return 4.0 / 3.0;
+    case AspectRatio::Ratio16_9: return 16.0 / 9.0;
+    case AspectRatio::Free:
+    default:                     return 0.0;
+    }
+}
+
+QPointF Crop::applyAspect(const QPointF& anchor, const QPointF& current) const
+{
+    const double ratio = aspectValue();
+    if (ratio <= 0.0) return current;
+
+    // The drag started at `anchor` and the pointer is at `current`. The
+    // rectangle spans anchor..current, so its size is the absolute
+    // difference in each axis.
+    const double w = std::abs(current.x() - anchor.x());
+    const double h = std::abs(current.y() - anchor.y());
+
+    // Which axis is "free" is decided by which one the user moved
+    // further: the other one is then derived from the ratio. When the
+    // user has not moved at all, the width wins (the common case of a
+    // horizontal drag).
+    QPointF out = current;
+    if (w >= h * ratio) {
+        // The width leads: the height follows from the ratio.
+        const double newH = w / ratio;
+        out.setY(anchor.y() + (current.y() >= anchor.y() ? newH : -newH));
+    } else {
+        // The height leads: the width follows from the ratio.
+        const double newW = h * ratio;
+        out.setX(anchor.x() + (current.x() >= anchor.x() ? newW : -newW));
+    }
+    return out;
 }
 
 QRect Crop::computeClampedRect(int x1, int y1, int x2, int y2) const
@@ -98,24 +141,32 @@ void Crop::applyCrop(ImageWindow* host)
 
 void Crop::onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)
 {
-    Q_UNUSED(host);
-    if (!m_host || e->button() != Qt::LeftButton) return;
-    m_cropA = scenePos;
-    m_cropB = scenePos;
+    // M2-4: the host that comes with the event is the one that counts.
+    //   The old code only looked at m_host (cached by onEnter), so a tool
+    //   instance that never went through onEnter dropped every mouse
+    //   event and the crop did nothing at all.
+    if (!host || e->button() != Qt::LeftButton) return;
+
+    const QPointF clamped = ToolGeometry::clampToCanvas(host, scenePos);
+    m_cropA = clamped;
+    m_cropB = clamped;
     m_hasCrop = true;
     m_dragging = true;
 }
 
-void Crop::onMouseMove(QMouseEvent* /*e*/, ImageWindow* /*host*/, const QPointF& scenePos)
+void Crop::onMouseMove(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& scenePos)
 {
-    if (!m_dragging) return;
-    m_cropB = scenePos;
+    if (!m_dragging || !host) return;
+
+    const QPointF clamped = ToolGeometry::clampToCanvas(host, scenePos);
+    // M2-4: the aspect lock is applied to the DRAG, not just stored.
+    m_cropB = applyAspect(m_cropA, clamped);
 }
 
 void Crop::onMouseRelease(QMouseEvent* /*e*/, ImageWindow* host, const QPointF& /*scenePos*/)
 {
     m_dragging = false;
-    if (!m_host) return;
+    if (!host) return;
     applyCrop(host);
 }
 
@@ -136,9 +187,17 @@ QWidget* Crop::optionPage(QWidget* parent)
                         static_cast<int>(AspectRatio::Ratio4_3));
     ratioCombo->addItem(QCoreApplication::translate("tools::Crop", "16:9"),
                         static_cast<int>(AspectRatio::Ratio16_9));
-    ratioCombo->setCurrentIndex(static_cast<int>(m_aspect));
+    {
+        // The current value is looked up by DATA, not by index: the
+        //   index is the position in the list, the data is the enum.
+        int idx = ratioCombo->findData(static_cast<int>(m_aspect));
+        if (idx < 0) idx = 0;
+        ratioCombo->setCurrentIndex(idx);
+    }
     QObject::connect(ratioCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), page,
-                     [this](int idx) { m_aspect = static_cast<AspectRatio>(idx); });
+                     [this, ratioCombo](int) {
+        m_aspect = static_cast<AspectRatio>(ratioCombo->currentData().toInt());
+    });
     layout->addRow(QCoreApplication::translate("tools::Crop", "Aspect:"), ratioCombo);
 
     auto* hint = new QLabel(QCoreApplication::translate("tools::Crop",

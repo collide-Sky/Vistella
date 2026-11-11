@@ -93,6 +93,11 @@ void ToolContext::onMousePress(QMouseEvent* e, const QPointF& scenePos)
     if (m_current) m_current->onMousePress(e, m_host.data(), scenePos);
 }
 
+bool ToolContext::currentToolWantsExclusiveMouse() const
+{
+    return m_current && m_current->wantsExclusiveMouse();
+}
+
 void ToolContext::onMouseMove(QMouseEvent* e, const QPointF& scenePos)
 {
     if (m_current) m_current->onMouseMove(e, m_host.data(), scenePos);
@@ -103,7 +108,14 @@ void ToolContext::onMouseRelease(QMouseEvent* e, const QPointF& scenePos)
     if (m_current) m_current->onMouseRelease(e, m_host.data(), scenePos);
 }
 
-// TODO(P8.5): the tool keyboard handlers have no caller, so polygon closure, pen commit and Esc cancel do not work -- see docs/DEBT.md#A-KEYBOARD
+void ToolContext::onMouseDoubleClick(QMouseEvent* e, const QPointF& scenePos)
+{
+    if (m_current) m_current->onMouseDoubleClick(e, m_host.data(), scenePos);
+}
+
+// M2-4: the keyboard chain is wired. The canvas forwards the key events
+//   here (ImageCanvas::keyPressEvent -> setToolContext), so the polygon
+//   closure, the pen commit and the Esc cancel all work now.
 void ToolContext::onKeyPress(QKeyEvent* e)
 {
     if (m_current) m_current->onKeyPress(e, m_host.data());

@@ -24,10 +24,13 @@
 #include <QWidget>
 #include <QHash>
 #include <QPointer>
+#include <QVector>
+#include <QPair>
 #include "../mediators/ToolMediator.h"
 #include "ToolContext.h"
 
 class QToolButton;
+namespace tools { class ToolGroupButton; }
 
 namespace Ui { class LeftToolBar; }
 
@@ -114,11 +117,47 @@ private:
     static ToolState* createRedEyeTool();
     // MaskBrush factory (像素蒙版画笔)
     static ToolState* createMaskBrushTool();
+    // M2-4: the factories for the tools that were missing.
+    static ToolState* createEraserTool();
+    static ToolState* createGradientTool();
+    static ToolState* createPaintBucketTool();
+    static ToolState* createDodgeBurnTool();
+    static ToolState* createBlurSharpenSmudgeTool();
+    static ToolState* createHandTool();
+    static ToolState* createZoomTool();
+    static ToolState* createRotateViewTool();
 
     // P7.1: paint fg/bg swatch widget.
     void paintColorSwatch(QWidget* w, const QColor& c);
 
     QHash<mediators::ToolId, QToolButton*> m_buttons;
+
+    // M2-4: the tool groups.
+    //
+    //   Photoshop groups the tools: one button per group, the sibling
+    //   tools come out of a long press. The audit
+    //   (docs/CODE_AUDIT_2026-10-26.md 5.3 item 10) found that this
+    //   interaction was missing entirely.
+    //
+    //   The group buttons are created in code (not in the .ui) because
+    //   a group button has to know its siblings, and that changes
+    //   whenever a tool is added.
+    QVector<tools::ToolGroupButton*> m_groupButtons;
+    // The group a ToolId belongs to (nullptr = the tool is not in a
+    // group).
+    QHash<int, tools::ToolGroupButton*> m_groupOfTool;
+
+    void buildToolGroups();
+
+public:
+    // The group definition: the tools of each group, in the order the
+    // popup shows them.
+    //
+    //   Public so that a test can check that every tool of a group is
+    //   reachable through a group button.
+    static QVector<QPair<QList<int>, QStringList>> toolGroupDefinitions();
+
+private:
 
     // 文档级 weak ref: 换文档时 attach() 会重新绑定, 文档销毁后自动置 null,
     // 不会再拿着已析构 ImageWindow 的指针.

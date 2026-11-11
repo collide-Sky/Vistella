@@ -64,27 +64,37 @@ BUG1_NEW = """    // BREAK SELF-CHECK: the extension filter is dropped, so the f
 
 
 # ---------------------------------------------------------------------------
-# Bug 2: the dock caches a CHILD proxy index and uses it after the read.
+# Bug 2: the dock caches a proxy index and uses it after the read.
+#
+#   The injection has to make the CACHED index survive a change of the
+#   source model, because that is the whole defect: the directory read
+#   changes the source model, the proxy throws its internal mapping away
+#   and rebuilds it, and the old index then points at freed memory.
+#
+#   The first call to updateRootIndex() caches the index, every later
+#   call reuses the cached one. The directory read calls
+#   updateRootIndex() again -- so the second call is the one that uses
+#   the stale index.
 # ---------------------------------------------------------------------------
 BUG2_OLD = """    const QModelIndex rootIdx = m_proxy->indexForPath(m_rootPath);
-    ui->tree->setRootIndex(rootIdx);"""
+    ui->tree->setRootIndex(rootIdx);
+}"""
 
-BUG2_NEW = """    // BREAK SELF-CHECK: the proxy index of the FIRST CHILD is cached and
-    // used again after the model has changed. A proxy index does not
-    // survive a change of the source model, and the read of a directory
-    // is exactly such a change -- the cached index then points at freed
-    // memory and the next use of it crashes with
+BUG2_NEW = """    // BREAK SELF-CHECK: the proxy index is cached and reused. A proxy
+    // index does not survive a change of the source model, and the read
+    // of a directory is exactly such a change -- the cached index then
+    // points at freed memory and the next use of it crashes with
     //     ASSERT: "it != source_index_mapping.constEnd()"
     if (m_cachedRoot.isValid()) {
         ui->tree->setRootIndex(m_cachedRoot);
-        // The cached CHILD index is read here -- that is the crash.
+        // The stale index is read here -- that is the crash.
         const QVariant name = m_cachedRoot.data(Qt::DisplayRole);
         if (!name.isValid()) return;
-        ui->tree->setRootIndex(m_proxy->indexForPath(m_rootPath));
         return;
     }
     m_cachedRoot = m_proxy->indexForPath(m_rootPath);
-    ui->tree->setRootIndex(m_cachedRoot);"""
+    ui->tree->setRootIndex(m_cachedRoot);
+}"""
 
 
 # ---------------------------------------------------------------------------
@@ -176,13 +186,26 @@ def run_test(exe):
     return (r.stdout or "") + (r.stderr or ""), r.returncode
 
 
-def expect_red(label, out):
-    red = ("FAIL!" in out) or ("Totals:" in out and " 0 failed" not in out)
+def expect_red(label, out, returncode):
+    # A crash counts as RED.
+    #
+    #   The cached-index defect does not make an assertion fail -- it
+    #   makes Qt abort with
+    #       ASSERT: "it != source_index_mapping.constEnd()"
+    #   which kills the test binary. The exit code is then non-zero and
+    #   there is no "FAIL!" line in the output, so a check that only
+    #   looks at the output would call this "green" -- which is exactly
+    #   the kind of false green the gate must not have.
+    crashed = (returncode != 0) and ("Totals:" not in out)
+    red = ("FAIL!" in out) or ("Totals:" in out and " 0 failed" not in out) or crashed
     print("[break] %s -- test output:" % label)
     for line in out.splitlines():
         if ("FAIL!" in line or "Totals:" in line or "Actual" in line
                 or "Expected" in line or "ASSERT" in line):
             print("   " + line.strip())
+    if crashed:
+        print("   [the test binary CRASHED (exit=%d) -- the defect aborted "
+              "the process]" % returncode)
     if not red:
         print("[break] FAIL: the tests stayed GREEN with the injected bug -- "
               "they do not detect it")
@@ -215,8 +238,8 @@ def main():
             if not build():
                 ok = False
             else:
-                out, _ = run_test(TREE_EXE)
-                if not expect_red(label, out):
+                out, code = run_test(TREE_EXE)
+                if not expect_red(label, out, code):
                     ok = False
             # restore before the next injection
             shutil.copyfile(backups[path], path)

@@ -77,8 +77,23 @@ public:
     void onMousePress(QMouseEvent* e, const QPointF& scenePos);
     void onMouseMove(QMouseEvent* e, const QPointF& scenePos);
     void onMouseRelease(QMouseEvent* e, const QPointF& scenePos);
+    // M2-4: the double click (the shape / pen tools close a path with it).
+    void onMouseDoubleClick(QMouseEvent* e, const QPointF& scenePos);
+    // M2-4: the keyboard. The canvas forwards the key events here.
     void onKeyPress(QKeyEvent* e);
     void onKeyRelease(QKeyEvent* e);
+
+    // M2-4: does the current tool need the mouse for itself?
+    //
+    //   The canvas has ScrollHandDrag permanently on, so a left drag
+    //   pans the view. A tool that drags something (the move tool) has
+    //   to consume the press BEFORE the view sees it, otherwise the
+    //   canvas scrolls instead of the content moving.
+    //
+    //   The event filter asks this and consumes the press when it is
+    //   true. Default (no tool / a passive tool) is false, so the pan
+    //   keeps working for every other tool.
+    bool currentToolWantsExclusiveMouse() const;
 
     // shared brush state accessor (BrushOptionsPanel via
     //   ImageOptionBar reads/writes). P7.6.x UI.

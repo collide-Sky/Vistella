@@ -16,6 +16,13 @@
 #include "PatchTool.h"
 #include "RedEyeTool.h"
 #include "MaskBrushTool.h"
+// M2-4: the tools that were missing (the audit 04 / 5.3).
+#include "EraserTool.h"
+#include "GradientTool.h"
+#include "PaintBucketTool.h"
+#include "DodgeBurnTool.h"
+#include "BlurSharpenSmudgeTool.h"
+#include "ViewTools.h"
 
 namespace tools {
 
@@ -37,6 +44,15 @@ ToolState* createToolState(mediators::ToolId id)
     case mediators::ToolId::Patch:      return new PatchTool();
     case mediators::ToolId::RedEye:     return new RedEyeTool();
     case mediators::ToolId::MaskBrush:  return new MaskBrushTool();
+    // M2-4: the tools that were missing.
+    case mediators::ToolId::Eraser:     return new EraserTool();
+    case mediators::ToolId::Gradient:   return new GradientTool();
+    case mediators::ToolId::PaintBucket:return new PaintBucketTool();
+    case mediators::ToolId::DodgeBurn:  return new DodgeBurnTool();
+    case mediators::ToolId::BlurSharpenSmudge: return new BlurSharpenSmudgeTool();
+    case mediators::ToolId::Hand:       return new HandTool();
+    case mediators::ToolId::Zoom:       return new ZoomTool();
+    case mediators::ToolId::Rotate:     return new RotateViewTool();
     case mediators::ToolId::None:
     case mediators::ToolId::Transform:
     default:                            return nullptr;

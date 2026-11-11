@@ -156,11 +156,16 @@ void tst_ToolState::test_context_event_forward_to_current()
     ctx.onMousePress(&ev, QPointF(10, 20));
     QCOMPARE(pressCount, 1);
 
-    // 切到 MoveTool, MoveTool.onMousePress 是 no-op
+    // 切到 MoveTool, MoveTool 有自己的 onMousePress 实现
+    //   (M2-4: 它真的拖图层/文字/选区), 但那是 MoveTool 自己的处理,
+    //   不会调到上面那个 Probe -- Probe 的计数器不会再动.
+    //
+    //   注意: 这条断言只验证"事件转发给当前 tool", 不验证 MoveTool
+    //   拖了东西 (那需要真实的 ImageWindow, 见 tst_M2_4_Tools).
     ctx.setState(std::make_unique<MoveTool>());
     QMouseEvent ev2(QEvent::MouseButtonPress, QPointF(0, 0), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     ctx.onMousePress(&ev2, QPointF(10, 20));
-    // pressCount 仍 1 (MoveTool 没接事件)
+    // pressCount 仍 1 (事件转发给了 MoveTool, 不是 Probe)
     QCOMPARE(pressCount, 1);
 }
 

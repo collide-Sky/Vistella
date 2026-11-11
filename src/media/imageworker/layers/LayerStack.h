@@ -72,6 +72,22 @@ public:
     int  addTextLayer(const QString &name, const QString &text,
                       int fontSize = 24, const QColor &color = QColor(Qt::white),
                       const QString &fontFamily = QStringLiteral("Arial"));
+    // Add a vector layer.
+    //
+    //   COORDINATE CONTRACT: the paths are in IMAGE PIXEL coordinates --
+    //   the same space as the scene the tools draw in, with the origin at
+    //   the top-left of the canvas. A rectangle from (100,100) to
+    //   (200,200) on an 800x600 canvas covers those pixels.
+    //
+    //   It used to be the other way round: rasterize() scaled the paths
+    //   by canvasSize/100 on the assumption that they lived in a
+    //   normalised 0..100 space, while the tools wrote pixel
+    //   coordinates. Every shape therefore rendered tens of times too
+    //   far away and the user saw nothing at all.
+    //
+    //   (LayerMask::vectorPaths is a DIFFERENT field with its own
+    //   renderer -- that one already treated the paths as pixel
+    //   coordinates.)
     int  addVectorLayer(const QString &name,
                         const QVector<QPainterPath> &paths = {},
                         const QVector<QColor> &fills = {});

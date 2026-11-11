@@ -1084,11 +1084,16 @@ cv::Mat identityLut() {
     return lut;
 }
 
-// A rectangle covering roughly the middle third of the 0..100 space that
-// LayerStack::rasterize() scales vector paths into.
+// A rectangle covering roughly the middle third of the 128x128 canvas.
+//
+// The paths are in IMAGE PIXEL coordinates -- the contract the tools
+// (ShapeTool / PenTool) actually produce. This used to be
+// addRect(20, 20, 60, 60) on the assumption that rasterize() scaled
+// the paths out of a normalised 0..100 space; it does not, and with
+// that assumption the shape landed off the canvas.
 QPainterPath midRectPath() {
     QPainterPath p;
-    p.addRect(20, 20, 60, 60);
+    p.addRect(26, 26, 60, 60);
     return p;
 }
 

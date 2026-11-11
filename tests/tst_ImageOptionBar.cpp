@@ -77,10 +77,17 @@ void tst_ImageOptionBar::ctor_have9Pages()
     ImageOptionBar bar;
     QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
     QVERIFY(stack != nullptr);
-    // 17 pages: None(0) + 16 tools (None/Move/.../Eyedropper/Transform/Shape/Pen/Clone/Heal/Patch/RedEye)
+    // 25 pages: None(0) + 24 tools.
     //   P0-9 (2026-09-15): +7 pages for Shape/Pen/Clone/Heal/Patch/RedEye (was 9)
     //   Q4.2.1 (2026-09-23): +1 page (MaskBrush P1.3.4 像素蒙版画笔, page16) = 17
-    QCOMPARE(stack->count(), 17);
+    //   M2-4: +8 pages for the tools that were missing (Eraser / Gradient /
+    //     PaintBucket / DodgeBurn / BlurSharpenSmudge / Hand / Zoom / Rotate)
+    //     = 25.
+    //
+    //   The ToolId VALUE is the page index, so the page count has to
+    //   grow with every new tool -- otherwise insertWidget() would push
+    //   the pages behind it out of the way.
+    QCOMPARE(stack->count(), 25);
 }
 
 void tst_ImageOptionBar::ctor_defaultPageIsNone()
@@ -136,25 +143,30 @@ void tst_ImageOptionBar::setCurrentIndex_outOfRangeIgnored()
 
 void tst_ImageOptionBar::ctor_have17Pages()
 {
-    // Q4.2.1 (2026-09-23) + Q4.2.4: 17 page (None + 16 tools, MaskBrush + Transform 动态加).
+    // 25 pages (None + 24 tools; MaskBrush + Transform 走动态 addPage 路径).
     //   MaskBrush (idx=16) + Transform (idx=9) 走动态 addPage 路径.
+    //   M2-4: +8 个新增工具的占位页.
     ImageOptionBar bar;
     QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
     QVERIFY(stack != nullptr);
-    QCOMPARE(stack->count(), 17);
+    QCOMPARE(stack->count(), 25);
 }
 
 void tst_ImageOptionBar::attach_listenAll17ToolIds()
 {
-    // attach 后, 完整 17 个 ToolId 都能切 page.
+    // attach 后, 完整的 25 个 ToolId 都能切 page.
     ImageOptionBar bar;
     ToolContext ctx;
     QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
     QVERIFY(stack != nullptr);
     bar.attach(&ctx);
 
-    // 0..16 全切一遍, 不 crash + currentIndex 跟着切
-    for (int i = 0; i <= 16; ++i) {
+    // 0..24 全切一遍, 不 crash + currentIndex 跟着切
+    //
+    //   M2-4: 上限从 16 提到 24 -- 新增的 8 个工具 (Eraser / Gradient /
+    //   PaintBucket / DodgeBurn / BlurSharpenSmudge / Hand / Zoom /
+    //   Rotate) 也必须有自己的一页, 否则 insertWidget 会把后面的页挤走.
+    for (int i = 0; i <= 24; ++i) {
         emit ctx.toolChanged(static_cast<ToolId>(i));
         QCOMPARE(stack->currentIndex(), i);
     }
@@ -189,8 +201,14 @@ void tst_ImageOptionBar::attach_maskBrush_dynamicAddPage()
 
 void tst_ImageOptionBar::attach_brushTool_routesToMosaicPage()
 {
-    // P5.1: 接 mosaic + textCtrl 后, 切到 Brush tool 应该跳 Mosaic page.
-    //   没 mosaic 时, Brush tool 还是落到 idx=7 (Brush default).
+    // M2-4: the brush routes to the mosaic page ONLY when the mosaic
+    //   mode is actually ON.
+    //
+    //   Before, the condition was just "the brush tool is selected and
+    //   the mosaic tool exists" -- and the mosaic tool always exists.
+    //   So the brush ALWAYS showed the mosaic page, the branch that
+    //   shows the real brush options was unreachable, and the user saw
+    //   no brush options at all (docs/DEBT.md#A-BRUSHOPTIONS).
     ImageOptionBar bar;
     ToolContext ctx;
     MosaicTool mosaic;
@@ -198,6 +216,12 @@ void tst_ImageOptionBar::attach_brushTool_routesToMosaicPage()
     QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
     QVERIFY(stack != nullptr);
 
+    // The mosaic mode is off -> the brush shows its OWN page (idx 7).
+    emit ctx.toolChanged(ToolId::Brush);
+    QCOMPARE(stack->currentIndex(), static_cast<int>(ToolId::Brush));
+
+    // The mosaic mode is on -> the brush shows the mosaic page.
+    mosaic.setEnabled(true);
     emit ctx.toolChanged(ToolId::Brush);
     QVERIFY(bar.mosaicPageIdx() >= 0);
     QCOMPARE(stack->currentIndex(), bar.mosaicPageIdx());
@@ -226,9 +250,11 @@ void tst_ImageOptionBar::attach_textTool_routesToTextPage()
 
 void tst_ImageOptionBar::attach_mosaicModeToggle_switchesBetweenBrushAndMosaic()
 {
-    // P5.1: MosaicOptionPanel 自 listen MosaicTool::modeChanged, 所以切换
-    //   mosaic on/off 时 page index 不变 (始终在 m_mosaicPageIdx). 这里
-    //   验证 panel 保持显示 + modeChanged 不会崩 + getEnabled 状态正确.
+    // M2-4: the mosaic page is shown only while the mosaic mode is ON.
+    //
+    //   The toggle is what decides which of the two pages the brush
+    //   shows: the mosaic options while the mosaic is on, the brush
+    //   options while it is off.
     ImageOptionBar bar;
     ToolContext ctx;
     MosaicTool mosaic;
@@ -236,22 +262,24 @@ void tst_ImageOptionBar::attach_mosaicModeToggle_switchesBetweenBrushAndMosaic()
     QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
     QVERIFY(stack != nullptr);
 
+    // The mosaic is off -> the brush page.
+    emit ctx.toolChanged(ToolId::Brush);
+    QCOMPARE(stack->currentIndex(), static_cast<int>(ToolId::Brush));
+
+    // Toggle mosaic on -> the mosaic page.
+    QSignalSpy spy(&mosaic, &MosaicTool::modeChanged);
+    mosaic.setEnabled(true);
+    QCOMPARE(spy.count(), 1);
     emit ctx.toolChanged(ToolId::Brush);
     const int mosaicIdx = bar.mosaicPageIdx();
     QVERIFY(mosaicIdx >= 0);
     QCOMPARE(stack->currentIndex(), mosaicIdx);
 
-    // Toggle mosaic on - modeChanged signal fires (panel reflects new state),
-    //   page index stays stable.
-    QSignalSpy spy(&mosaic, &MosaicTool::modeChanged);
-    mosaic.setEnabled(true);
-    QCOMPARE(spy.count(), 1);
-    QCOMPARE(stack->currentIndex(), mosaicIdx);
-
-    // Toggle mosaic off - same story.
+    // Toggle mosaic off -> the brush page again.
     mosaic.setEnabled(false);
     QCOMPARE(spy.count(), 2);
-    QCOMPARE(stack->currentIndex(), mosaicIdx);
+    emit ctx.toolChanged(ToolId::Brush);
+    QCOMPARE(stack->currentIndex(), static_cast<int>(ToolId::Brush));
 
     bar.detach();
 }

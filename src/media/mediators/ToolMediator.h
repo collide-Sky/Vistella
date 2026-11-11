@@ -55,6 +55,23 @@ enum class ToolId {
     RedEye      = 15,
     // Mask edit brush (图层蒙版画笔)
     MaskBrush   = 16,
+    // ===== M2-4: the tools that were missing =====
+    //   The audit (docs/CODE_AUDIT_2026-10-26.md 5.3) listed the
+    //   missing tools by priority. They are appended here so that the
+    //   existing ToolId values (which are the ImageOptionBar page
+    //   indices) keep their meaning.
+    //
+    //   The value of a ToolId IS the option-bar page index -- that is
+    //   why the enum may only grow at the end and why the .ui file
+    //   has to grow a placeholder page for every new tool.
+    Eraser      = 17,   // 橡皮擦 (E)
+    Gradient    = 18,   // 渐变 (G)
+    PaintBucket = 19,   // 油漆桶 (K)
+    DodgeBurn   = 20,   // 加深/减淡 (O)
+    BlurSharpenSmudge = 21,  // 模糊/锐化/涂抹 (R)
+    Hand        = 22,   // 抓手 (H) -- pans the canvas
+    Zoom        = 23,   // 缩放 (Z) -- zooms the canvas
+    Rotate      = 24,   // 旋转视图 (R with the hand group)
 };
 
 class ToolMediator : public QObject

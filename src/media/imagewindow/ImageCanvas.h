@@ -29,6 +29,7 @@ class QPainter;
 class ImageWindow;
 
 namespace selection { class SelectionModel; class MarchingAnts; }
+namespace tools { class ToolContext; }
 
 class ImageCanvas : public QGraphicsView {
     Q_OBJECT
@@ -98,6 +99,19 @@ public:
     // always outlives it.
     void setHost(ImageWindow* w) { m_host = w; }
 
+    // M2-4: the ToolContext the key events are forwarded to.
+    //
+    //   The mouse events reach the tools through ImageWindow::eventFilter,
+    //   which owns the ToolContext. The keyboard had no such path --
+    //   ToolContext::onKeyPress() had no caller at all, so no tool ever
+    //   saw a key (the pen could not commit with Enter, the shape tool
+    //   could not close a polygon).
+    //
+    //   The canvas holds the pointer itself instead of reaching through
+    //   the host: imagewindow.h includes ImageCanvas.h, so including it
+    //   back here would be circular.
+    void setToolContext(tools::ToolContext* ctx) { m_toolCtx = ctx; }
+
 public slots:
     void onZoomIn();
     void onZoomOut();
@@ -151,6 +165,8 @@ private:
     void applyTransform();
 
     ImageWindow*               m_host = nullptr;
+    // M2-4: the keyboard path to the tools. Owned by ImageWindow.
+    tools::ToolContext*        m_toolCtx = nullptr;
     QGraphicsScene*            m_scene   = nullptr;
     QGraphicsPixmapItem*       m_item    = nullptr;
     QGraphicsEllipseItem*      m_brushCursor = nullptr;

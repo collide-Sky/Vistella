@@ -58,6 +58,22 @@
      <!-- Q4.2.1 (2026-09-23): MaskBrush page (P1.3.4 像素蒙版画笔, idx=16)
           跟 Transform 一样走动态 addPage 路径, MaskOptionsPanel 替换 -->
      <widget class="QWidget" name="page16"/>
+     <!-- M2-4: the placeholder pages for the tools that were
+          missing. The ToolId VALUE is the page index, so every new tool
+          needs a page here. Otherwise insertWidget() would push the
+          pages behind it out of the way.
+
+          page17 Eraser / page18 Gradient / page19 PaintBucket /
+          page20 DodgeBurn / page21 BlurSharpenSmudge /
+          page22 Hand / page23 Zoom / page24 Rotate -->
+     <widget class="QWidget" name="page17"/>
+     <widget class="QWidget" name="page18"/>
+     <widget class="QWidget" name="page19"/>
+     <widget class="QWidget" name="page20"/>
+     <widget class="QWidget" name="page21"/>
+     <widget class="QWidget" name="page22"/>
+     <widget class="QWidget" name="page23"/>
+     <widget class="QWidget" name="page24"/>
     </widget>
    </item>
   </layout>

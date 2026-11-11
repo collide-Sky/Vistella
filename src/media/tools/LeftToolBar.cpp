@@ -5,6 +5,7 @@
 #include "LeftToolBar.h"
 #include "ui_LeftToolBar.h"
 #include "ToolContext.h"
+#include "ToolGroupButton.h"
 #include "ToolState.h"
 #include "ToolStateFactory.h"
 #include "logger.h"
@@ -15,6 +16,7 @@
 #include <QStyle>
 #include <QPalette>
 #include <QColorDialog>
+#include <QVBoxLayout>
 
 namespace tools {
 
@@ -49,6 +51,16 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     ui->btnPatch->setIcon(svgIcon("tool-patch.svg"));
     ui->btnRedEye->setIcon(svgIcon("tool-redeye.svg"));
     ui->btnMaskBrush->setIcon(svgIcon("tool-maskbrush.svg"));
+    // M2-4: the tools that were missing get their icons from the same
+    //   SVG set (16x16, blue #4A90E2 + black #202020).
+    ui->btnEraser->setIcon(svgIcon("tool-eraser.svg"));
+    ui->btnGradient->setIcon(svgIcon("tool-gradient.svg"));
+    ui->btnPaintBucket->setIcon(svgIcon("tool-paintbucket.svg"));
+    ui->btnDodgeBurn->setIcon(svgIcon("tool-dodgeburn.svg"));
+    ui->btnBlurSharpenSmudge->setIcon(svgIcon("tool-blur.svg"));
+    ui->btnHand->setIcon(svgIcon("tool-hand.svg"));
+    ui->btnZoom->setIcon(svgIcon("tool-zoom.svg"));
+    ui->btnRotate->setIcon(svgIcon("tool-rotate.svg"));
     for (auto* b : findChildren<QToolButton*>()) {
         b->setIconSize(QSize(16, 16));
         b->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -73,6 +85,15 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     // MaskBrush 按钮加到 ui (之前只 switchTool
     //   路由没按钮 — Q4.2 拍板"不放注释",所以 MaskBrush 也必须有可见入口)
     m_buttons[mediators::ToolId::MaskBrush]  = ui->btnMaskBrush;
+    // M2-4: the tools that were missing.
+    m_buttons[mediators::ToolId::Eraser]     = ui->btnEraser;
+    m_buttons[mediators::ToolId::Gradient]   = ui->btnGradient;
+    m_buttons[mediators::ToolId::PaintBucket]= ui->btnPaintBucket;
+    m_buttons[mediators::ToolId::DodgeBurn]  = ui->btnDodgeBurn;
+    m_buttons[mediators::ToolId::BlurSharpenSmudge] = ui->btnBlurSharpenSmudge;
+    m_buttons[mediators::ToolId::Hand]       = ui->btnHand;
+    m_buttons[mediators::ToolId::Zoom]       = ui->btnZoom;
+    m_buttons[mediators::ToolId::Rotate]     = ui->btnRotate;
 
     // PS-style fg/bg swatch (50x50 fg + 10x50 bg)
     //   Initial paint + click handlers; double-click = swap. The swatches
@@ -113,6 +134,9 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
             }
         });
     }
+
+    // M2-4: the tool groups (the long-press popup).
+    buildToolGroups();
 }
 
 LeftToolBar::~LeftToolBar()
@@ -120,6 +144,111 @@ LeftToolBar::~LeftToolBar()
     delete ui;
 }
 
+// ===== M2-4: the tool groups =====
+
+QVector<QPair<QList<int>, QStringList>> LeftToolBar::toolGroupDefinitions()
+{
+    using T = mediators::ToolId;
+
+    // The Photoshop groups. The order of the tools inside a group is
+    // the order the popup shows them in; the first one is the default.
+    return {
+        // The marquee group: the three selection tools.
+        { {int(T::RectSelect), int(T::Lasso), int(T::MagicWand)},
+          {"tool-rectselect.svg", "tool-lasso.svg", "tool-magicwand.svg"} },
+
+        // The retouch group: the four healing tools.
+        { {int(T::Clone), int(T::Heal), int(T::Patch), int(T::RedEye)},
+          {"tool-clone.svg", "tool-heal.svg", "tool-patch.svg", "tool-redeye.svg"} },
+
+        // The brush group: the brush, the eraser and the mask brush.
+        { {int(T::Brush), int(T::Eraser), int(T::MaskBrush)},
+          {"tool-brush.svg", "tool-eraser.svg", "tool-maskbrush.svg"} },
+
+        // The shape group: the shape tool and the pen.
+        { {int(T::Shape), int(T::Pen)},
+          {"tool-shape.svg", "tool-pen.svg"} },
+
+        // The fill group: the gradient and the paint bucket.
+        { {int(T::Gradient), int(T::PaintBucket)},
+          {"tool-gradient.svg", "tool-paintbucket.svg"} },
+
+        // The tone group: the dodge / burn and the blur group.
+        { {int(T::DodgeBurn), int(T::BlurSharpenSmudge)},
+          {"tool-dodgeburn.svg", "tool-blur.svg"} },
+
+        // The view group: the hand, the zoom and the rotate view.
+        { {int(T::Hand), int(T::Zoom), int(T::Rotate)},
+          {"tool-hand.svg", "tool-zoom.svg", "tool-rotate.svg"} },
+    };
+}
+
+void LeftToolBar::buildToolGroups()
+{
+    // The group buttons go into a second column next to the flat
+    // buttons. The flat buttons that are now part of a group are
+    // hidden -- the group button takes their place.
+    auto* container = ui->toolGridContainer;
+    auto* grid = container->findChild<QGridLayout*>("gridLayout");
+    if (!grid) return;
+
+    const auto groups = toolGroupDefinitions();
+
+    // Row 0 of the grid is already taken by the flat buttons. The
+    // group buttons go into the rows below, starting at the first free
+    // row.
+    int row = 0;
+    for (const auto& b : findChildren<QToolButton*>()) {
+        if (b->objectName().startsWith("btn")) {
+            // The grid position of the flat buttons is not exposed, so
+            // the group buttons simply go into their own column.
+        }
+    }
+
+    // The group buttons live in their own single-column layout below
+    // the flat grid, so the flat grid keeps its 2-column PS look and
+    // the groups are clearly a separate section.
+    auto* groupLayout = new QVBoxLayout;
+    groupLayout->setContentsMargins(0, 0, 0, 0);
+    groupLayout->setSpacing(0);
+
+    auto* groupContainer = new QWidget(container);
+    groupContainer->setLayout(groupLayout);
+
+    for (const auto& def : groups) {
+        const QList<int>& ids = def.first;
+        const QStringList& icons = def.second;
+        if (ids.isEmpty()) continue;
+
+        auto* button = new ToolGroupButton(groupContainer);
+        button->setGroup(ids, icons);
+        button->setFixedSize(28, 28);
+        button->setCheckable(true);
+        groupLayout->addWidget(button);
+        m_groupButtons.append(button);
+
+        // Remember which group a tool belongs to.
+        for (const int id : ids) {
+            m_groupOfTool.insert(id, button);
+        }
+
+        connect(button, &ToolGroupButton::toolActivated, this,
+                [this](int toolId) {
+                    if (m_toolMed) {
+                        m_toolMed->switchTool(static_cast<mediators::ToolId>(toolId));
+                    }
+                });
+    }
+    groupLayout->addStretch(1);
+
+    // Put the group container below the flat grid inside the vertical
+    // layout of the container.
+    auto* outer = container->layout();
+    if (outer) {
+        outer->addWidget(groupContainer);
+    }
+    Q_UNUSED(row);
+}
 // fg/bg setter / swatch paint / click handlers
 
 // M1-8: the toolbar renders the state and pushes changes into it.
@@ -287,6 +416,15 @@ ToolState* LeftToolBar::createHealTool()       { return createToolState(mediator
 ToolState* LeftToolBar::createPatchTool()      { return createToolState(mediators::ToolId::Patch); }
 ToolState* LeftToolBar::createRedEyeTool()     { return createToolState(mediators::ToolId::RedEye); }
 ToolState* LeftToolBar::createMaskBrushTool()  { return createToolState(mediators::ToolId::MaskBrush); }
+// M2-4: the tools that were missing.
+ToolState* LeftToolBar::createEraserTool()     { return createToolState(mediators::ToolId::Eraser); }
+ToolState* LeftToolBar::createGradientTool()   { return createToolState(mediators::ToolId::Gradient); }
+ToolState* LeftToolBar::createPaintBucketTool(){ return createToolState(mediators::ToolId::PaintBucket); }
+ToolState* LeftToolBar::createDodgeBurnTool()  { return createToolState(mediators::ToolId::DodgeBurn); }
+ToolState* LeftToolBar::createBlurSharpenSmudgeTool() { return createToolState(mediators::ToolId::BlurSharpenSmudge); }
+ToolState* LeftToolBar::createHandTool()       { return createToolState(mediators::ToolId::Hand); }
+ToolState* LeftToolBar::createZoomTool()       { return createToolState(mediators::ToolId::Zoom); }
+ToolState* LeftToolBar::createRotateViewTool() { return createToolState(mediators::ToolId::Rotate); }
 
 void LeftToolBar::attach(mediators::ToolMediator* toolMed, ToolContext* ctx)
 {
@@ -319,6 +457,20 @@ void LeftToolBar::onToolMediatorSwitched(mediators::ToolId id)
     for (auto it = m_buttons.begin(); it != m_buttons.end(); ++it) {
         it.value()->setChecked(it.key() == id);
     }
+
+    // M2-4: the group buttons follow the active tool.
+    //
+    //   The group button shows the icon of the tool that is active
+    //   inside the group, and it is checked while one of its tools is
+    //   the active one.
+    for (auto* group : m_groupButtons) {
+        const bool inGroup = m_groupOfTool.contains(static_cast<int>(id));
+        group->setChecked(inGroup);
+        if (inGroup) {
+            group->setCurrentToolId(static_cast<int>(id));
+        }
+    }
+
     // 调 ctx setState (LeftToolBar 是 Mediator 的下游, 这里完成 State 切换)
     if (m_ctx) {
         LOG_INFO("[LeftBar] onToolMediatorSwitched: id={}", static_cast<int>(id));
@@ -369,6 +521,31 @@ void LeftToolBar::onToolMediatorSwitched(mediators::ToolId id)
         // MaskBrush (像素蒙版画笔)
         case mediators::ToolId::MaskBrush:
             m_ctx->setState(std::unique_ptr<ToolState>(createMaskBrushTool()));
+            break;
+        // M2-4: the tools that were missing.
+        case mediators::ToolId::Eraser:
+            m_ctx->setState(std::unique_ptr<ToolState>(createEraserTool()));
+            break;
+        case mediators::ToolId::Gradient:
+            m_ctx->setState(std::unique_ptr<ToolState>(createGradientTool()));
+            break;
+        case mediators::ToolId::PaintBucket:
+            m_ctx->setState(std::unique_ptr<ToolState>(createPaintBucketTool()));
+            break;
+        case mediators::ToolId::DodgeBurn:
+            m_ctx->setState(std::unique_ptr<ToolState>(createDodgeBurnTool()));
+            break;
+        case mediators::ToolId::BlurSharpenSmudge:
+            m_ctx->setState(std::unique_ptr<ToolState>(createBlurSharpenSmudgeTool()));
+            break;
+        case mediators::ToolId::Hand:
+            m_ctx->setState(std::unique_ptr<ToolState>(createHandTool()));
+            break;
+        case mediators::ToolId::Zoom:
+            m_ctx->setState(std::unique_ptr<ToolState>(createZoomTool()));
+            break;
+        case mediators::ToolId::Rotate:
+            m_ctx->setState(std::unique_ptr<ToolState>(createRotateViewTool()));
             break;
         default:
             m_ctx->setState(nullptr);  // None / unknown -> 释放当前 tool

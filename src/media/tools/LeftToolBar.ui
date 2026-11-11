@@ -191,6 +191,95 @@
         <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
        </widget>
       </item>
+      <!-- M2-4: the tools that were missing.
+           The audit (docs/CODE_AUDIT_2026-10-26.md 5.3) listed them by
+           priority: the eraser group, the gradient + paint bucket, the
+           dodge / burn, the blur / sharpen / smudge, and the view
+           tools (hand / zoom / rotate view).
+
+           The button order does NOT have to match the ToolId values.
+           The ToolId is what the ImageOptionBar uses as the page
+           index, the button order is only the visual order. -->
+      <item row="8" column="0">
+       <widget class="QToolButton" name="btnEraser">
+        <property name="text"><string>Er</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Eraser</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="8" column="1">
+       <widget class="QToolButton" name="btnGradient">
+        <property name="text"><string>Gr</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Gradient</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="9" column="0">
+       <widget class="QToolButton" name="btnPaintBucket">
+        <property name="text"><string>PB</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Paint Bucket</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="9" column="1">
+       <widget class="QToolButton" name="btnDodgeBurn">
+        <property name="text"><string>Db</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Dodge / Burn</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="10" column="0">
+       <widget class="QToolButton" name="btnBlurSharpenSmudge">
+        <property name="text"><string>Bs</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Blur / Sharpen / Smudge</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="10" column="1">
+       <widget class="QToolButton" name="btnHand">
+        <property name="text"><string>H</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Hand</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="11" column="0">
+       <widget class="QToolButton" name="btnZoom">
+        <property name="text"><string>Z</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Zoom</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
+      <item row="11" column="1">
+       <widget class="QToolButton" name="btnRotate">
+        <property name="text"><string>Rv</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolTip"><string>Rotate View</string></property>
+        <property name="minimumSize"><size><width>28</width><height>28</height></size></property>
+        <property name="maximumSize"><size><width>28</width><height>28</height></size></property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

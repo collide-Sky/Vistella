@@ -511,6 +511,21 @@ void tst_M2_7_FileTree::dockEmitsTheOpenRequest()
     InfoTreeDock dock;
     QSignalSpy spy(&dock, &InfoTreeDock::openFileRequested);
 
+    // The proxy tells us when a directory has been read. The dock takes
+    // the root index AGAIN in its directoryRead slot, because a proxy
+    // index does not survive the change of the source model.
+    //
+    //   Waiting for THIS signal makes the test deterministic: the
+    //   assertion below then always runs AFTER the slot, so a defect in
+    //   the slot (a stale / cached index) is always seen. Waiting for
+    //   the ROW to appear is NOT enough -- the row shows up before the
+    //   slot has run, and the result then depends on the timing of the
+    //   worker thread (the break check passed standalone and failed in
+    //   a sequence).
+    auto* proxy = dock.findChild<FileTreeProxyModel*>();
+    QVERIFY(proxy != nullptr);
+    QSignalSpy readSpy(proxy, &FileTreeProxyModel::directoryRead);
+
     dock.setRootPath(m_root);
 
     auto* tree = dock.findChild<QTreeView*>();
@@ -519,12 +534,24 @@ void tst_M2_7_FileTree::dockEmitsTheOpenRequest()
     QVERIFY(tree->rootIndex().isValid());
 
     // The model reads the directory in a worker thread: wait until the
-    // row is there.
+    // read is over.
     QElapsedTimer timer;
     timer.start();
-    while (timer.elapsed() < 5000 && tree->model()->rowCount(tree->rootIndex()) < 1) {
+    while (timer.elapsed() < 5000 && readSpy.count() < 1) {
         QTest::qWait(20);
     }
+    QVERIFY2(readSpy.count() >= 1, "the directory was never read");
+
+    // One more event loop turn, so the dock's slot (which is connected to
+    // the same signal) has run.
+    QTest::qWait(50);
+
+    // The root index must still be usable after the directory was read.
+    //
+    //   This is the assertion that a stale (cached) index cannot
+    //   satisfy: the index was taken before the source model changed,
+    //   so it points at freed memory / at the wrong row.
+    QVERIFY(tree->rootIndex().isValid());
     QCOMPARE(tree->model()->rowCount(tree->rootIndex()), 1);
 
     tree->setCurrentIndex(tree->model()->index(0, 0, tree->rootIndex()));

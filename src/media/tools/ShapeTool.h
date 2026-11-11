@@ -8,12 +8,20 @@
 //   - Ellipse:    矩形框内切圆
 //   - Line:       press -> release
 //   - Polygon:    click 多个点, 双击 / Enter 闭合
-//   - Custom:     path freehand (mouseMove 加 point)
+//   - Custom:     path freehand (mouseMove 加 point), 「完成」按钮提交
+//
+// M2-4 的改动:
+//   - Polygon 的双击闭合真的能发生了 (之前 ToolState 没有 onMouseDoubleClick
+//     这个入口, 键盘通路也是断的 —— 两条路都到不了, 所以多边形永远闭合不了).
+//   - Custom path 有了「完成」按钮 —— 之前它只能靠一个根本不存在的
+//     "complete 按钮" 提交, 于是永远提交不了.
+//   - 形状的坐标钳制到画布内 (之前直接用 scene 坐标, 画到画布外).
+//   - 键盘事件现在真的能到工具 (键盘通路在 M2-4 补上).
 //
 // 集成:
-//   - 创建 shape 后 push ShapeCommand 到 undoStack
+//   - 创建 shape 后 push LayerCommand::Add 到 undoStack
 //   - Layer::Vector kind + vectorPaths/vectorFillColors/vectorStrokeWidths
-//   - optionPage: kind combo + fill color + stroke color + stroke width
+//     注意: 矢量路径的坐标是**图像像素坐标** (契约见 LayerStack.h).
 //
 #pragma once
 
@@ -54,6 +62,8 @@ public:
     void onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos) override;
     void onMouseMove(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos) override;
     void onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos) override;
+    // M2-4: 双击闭合 polygon.
+    void onMouseDoubleClick(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos) override;
     void onKeyPress(QKeyEvent* e, ImageWindow* host) override;
     void onKeyRelease(QKeyEvent* e, ImageWindow* host) override;
 
@@ -74,6 +84,10 @@ public:
     void setStrokeColor(const QColor& c) { m_strokeColor = c; }
     void setStrokeWidth(qreal w)         { m_strokeWidth = w; }
 
+    // test accessors
+    int  polygonPointCount() const { return m_polygonPoints.size(); }
+    bool isCollecting() const { return m_state == PolygonCollecting; }
+
 private:
     // 拖动状态机
     enum State { Idle, Dragging, PolygonCollecting };
@@ -89,17 +103,21 @@ private:
     QPointF m_pressScenePos;
     QPointF m_lastScenePos;
 
-    // Polygon 临时点 (mouse press 加点, double-click close)
+    // Polygon 临时点 (mouse press 加点, double-click / Enter 闭合)
     QVector<QPointF> m_polygonPoints;
-    // Custom path 临时点 (mouse move 加点)
+    // Custom path 临时点 (mouse press 加点)
     QPainterPath m_customPath;
 
     QPointer<ImageWindow> m_host;
 
     // helpers
     QPainterPath buildPath(const QPointF& a, const QPointF& b) const;
-    QUndoCommand* makeShapeCommand(ImageWindow* host,
-                                    const QPainterPath& path);
+    // Add the vector layer and push the undo command.
+    void addShapeLayer(ImageWindow* host, const QPainterPath& path, const QString& name);
+    // Commit the polygon / custom path that is being collected.
+    void commitCollectedPath(ImageWindow* host);
+    // Cancel the collection (Esc).
+    void cancelCollecting();
 };
 
 } // namespace tools

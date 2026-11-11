@@ -262,7 +262,20 @@ void ImageOptionBar::onToolChanged(mediators::ToolId id)
     // P5.1 route Brush -> Mosaic page and Text -> Text page BEFORE the
     //   generic ToolState::optionPage swap, otherwise the existing swap
     //   would plant BrushOptionsPanel at idx 7 and overwrite our Mosaic page.
-    if (id == mediators::ToolId::Brush && m_mosaic) {
+    //
+    //   M2-4: the mosaic page is only shown when the mosaic mode is
+    //   ACTUALLY ON.
+    //
+    //   Before, the only condition was "the brush tool is selected and
+    //   the mosaic tool exists" -- and the mosaic tool always exists
+    //   (it is created with the window). So the brush ALWAYS showed the
+    //   mosaic page and the branch below that shows the real brush
+    //   options was unreachable dead code (docs/DEBT.md#A-BRUSHOPTIONS).
+    //
+    //   The user saw no brush options at all: no size, no hardness, no
+    //   opacity, no flow, no presets -- the brush was locked to 13px
+    //   black.
+    if (id == mediators::ToolId::Brush && m_mosaic && m_mosaic->isEnabled()) {
         ensureMosaicPage();
         ui->stackedWidget->setCurrentIndex(m_mosaicPageIdx);
         return;

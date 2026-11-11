@@ -1,11 +1,11 @@
 # HANDOFF — M2（进行中）
 
-> 最后更新：2026-11-03
-> 基线 commit：`f8eb0b1`（M1-4/7/8，M1 全部完成）
-> 分支：`dev`（本地领先 `origin/dev` 1 个 commit，**push 被网络阻塞**）
+> 最后更新：2026-11-07
+> 基线 commit：`d32abc3`（M2-2 面板系统）+ M2-4（工具补齐，未提交）
+> 分支：`dev`（本地领先 `origin/dev` 5 个 commit，**push 被网络阻塞**）
 
-本文件是 M2 阶段的交接说明。M2 的 8 个子项里，**M2-3 / M2-5 / M2-6 / M2-7a / M2-8 已落地**，
-M2-1 / M2-2 / M2-4 / M2-7b / M2-5c **尚未开工**。
+本文件是 M2 阶段的交接说明。M2 的 8 个子项里，**M2-2 / M2-3 / M2-4 / M2-5 / M2-6 / M2-7 / M2-8 已落地**，
+M2-1 / M2-5c **尚未开工**。
 
 ---
 
@@ -14,8 +14,8 @@ M2-1 / M2-2 / M2-4 / M2-7b / M2-5c **尚未开工**。
 1. 产品级走查：打开 → 多图层编辑 → 调整 → 保存 → 重开复现；
 2. PS 对照表的主要项从「缺失 / 有但错」变成「部分 / 无」。
 
-**当前状态：未达成** —— 调整（S2-6）已经真的生效，但保存/重开仍是扁平图（M2-1 未做），
-工具仍有缺口（M2-4 未做）。面板系统（M2-2）本轮已换成原生 `QDockWidget` + `saveState`。
+**当前状态：未达成** —— 调整（S2-6）已经真的生效，工具补齐了（M2-4），
+面板系统换成了原生 `QDockWidget`（M2-2），但**保存/重开仍是扁平图**（M2-1 未做）。
 
 ---
 
@@ -204,15 +204,88 @@ RightPanelDock (QWidget)
 **修掉了 APP-19**：老 `onResetLayout()` 读 `workspace_default.ini`，
 **全项目没有任何地方 `saveState()` 写它** → 重置布局功能实际是坏的，永远只弹一句报错。
 
+### M2-4　工具补齐（`src/media/tools/`）
+
+这一轮把审计 §5.3 列的整类缺失工具补齐了，并把 4 个"有但错"的工具修好。
+
+#### 新增的工具（8 类）
+
+| 工具 | 文件 | 行为 |
+|---|---|---|
+| 橡皮擦 | `EraserTool.*` | 4 通道图层清 alpha，3 通道图层写背景色（PS 同款） |
+| 渐变 | `GradientTool.*` | 线性 / 径向 / 角度三种，前景色 → 背景色，选区裁剪 |
+| 油漆桶 | `PaintBucketTool.*` | 4 连通扫描线填充，容差可调，选区遮罩 |
+| 加深 / 减淡 | `DodgeBurnTool.*` | exposure 近似，量可调 |
+| 模糊 / 锐化 / 涂抹 | `BlurSharpenSmudgeTool.*` | 三合一，模糊只算笔刷区域（全画布滤镜太慢） |
+| 抓手 | `ViewTools.h`（`HandTool`） | 平移画布 |
+| 缩放 | `ViewTools.h`（`ZoomTool`） | 点击缩放，Alt 点击缩小 |
+| 旋转视图 | `ViewTools.h`（`RotateViewTool`） | 旋转**视图**（不转像素） |
+
+全部写进**活动图层**的像素（不是合成缓存），走 `activeLayerImage()` + `pushLayerImageEdit()`
++ `commitLayerEdit()` 的撤销契约。
+
+#### 修好的工具（4 个）
+
+| 缺陷 | 根因 | 修法 |
+|---|---|---|
+| 形状 / 钢笔画的图形**完全看不见** | `LayerStack::rasterize()` 按 `sz/100` 缩放路径，假设路径在 0-100 归一化空间，而工具写的是**像素坐标** | 矢量路径坐标契约改成**图像像素坐标**（1:1 绘制）；矢量层返回 BGRA 而非 BGR（否则透明区变不透明黑） |
+| 键盘事件**零调用者** | `ToolContext::onKeyPress()` 没有调用者，`ImageCanvas::keyPressed` 信号没有订阅者 | `ImageCanvas::keyPressEvent/keyReleaseEvent` 转发给 `ToolContext` |
+| 裁剪的宽高比**从不生效** | `m_aspect` 只在选项面板被赋值，`computeClampedRect` / `applyCrop` 从不读它 | 拖拽中真的按宽高比约束；combo 用 `findData` 取枚举（之前把索引当枚举值） |
+| 画笔选项**不可达** | 路由条件是"选中画笔 && mosaic 工具存在"，而 `m_mosaic` **恒非空** → 永远显示 Mosaic 页，下面画笔分支成死代码 | 条件改成"选中画笔 && **马赛克模式开着**" |
+
+#### ⚠ 本轮踩到的最重要的一条：工具和画布抢左键
+
+`ImageCanvas` 常开 `QGraphicsView::ScrollHandDrag`，所以左键拖动**永远**是平移画布。
+移动工具要拖图层根本抢不过它 —— 事件已经到 view 了，画布已经在滚了。
+
+修法不是"在工具里跟平移较劲"，而是给 `ToolState` 加一个**意图声明**：
+
+```cpp
+// src/media/tools/ToolState.h
+virtual bool wantsExclusiveMouse() const { return false; }
+```
+
+默认 `false`（不抢左键的画笔 / 吸管 / 形状工具照旧能平移画布），
+需要拖东西的工具（移动工具 / 抓手 / 缩放 / 旋转视图）返回 `true`，
+`ImageWindow::eventFilter` 在**转发给工具之后**消费掉这个 press → view 收不到 → 不启动平移。
+
+#### 工具组（长按弹出）
+
+`ToolGroupButton`（`src/media/tools/ToolGroupButton.*`）：一组一个按钮，
+右下角小三角标记"还有兄弟工具"，**长按 500ms** 弹出同组工具，
+弹出的工具成为该组的新默认（PS 行为）。7 组：
+
+选框(矩形/套索/魔棒) · 修复(仿制/修补/污点/红眼) · 画笔(画笔/橡皮擦/蒙版画笔) ·
+形状(形状/钢笔) · 填充(渐变/油漆桶) · 色调(加深减淡/模糊锐化涂抹) · 视图(抓手/缩放/旋转视图)
+
+#### ⚠ ToolId 的值 = ImageOptionBar 的页索引
+
+`ToolMediator::ToolId` 的整数值**就是** `QStackedWidget` 的页索引。
+所以：
+
+- 枚举**只能在末尾追加**（改了中间的值 = 改了别的工具的页）；
+- 每个新工具都必须在 `ImageOptionBar.ui` 里加一个**占位页**，
+  否则 `insertWidget()` 会把后面的页挤走；
+- 加了 8 个工具 → 占位页从 17 个变成 25 个（`tst_ImageOptionBar` 盯着这个数）。
+
+#### 共享的坐标钳制 helper
+
+`src/media/tools/ToolGeometry.*`：`canvasSize()` / `clampToCanvas()` / `clampRectToCanvas()` /
+`clampDeltaToCanvas()`。每个工具自己发明一套边界规则，是"这个工具坏了"而不是
+"这个工具用了错的边界"这类 bug 的根源。
+
+**命名空间坑**：`class ImageWindow;` 的前向声明必须写在 `namespace tools {}` **外面**，
+否则被解析成 `tools::ImageWindow` → C2027。
+
 ---
 
 ## 3. 尚未开工的部分
 
 | 子项 | 状态 | 关键事实 / 入口 |
 |---|---|---|
-| **M2-4** 工具补齐 | 未开工 | 渐变 / 油漆桶 / 橡皮擦 / 加深减淡 / 模糊锐化涂抹 / 抓手缩放旋转；修裁剪 / Shape / Pen / 画笔选项。相关债务：`A-MOVE`、`A-LAYERDRAG`、`A-TOOLCONFIG`、`A-SWATCH`、`A-TOOLICON`。 |
 | **M2-1** 自定义 `.vst` 工程格式 + 自动保存 + 崩溃恢复 | 未开工（用户已拍板 `.vst` 优先，PSD 只读推迟） | 债务 `A-PROJECTFORMAT`（保存写 `currentImage()`，图层/蒙版/智能对象/文字全丢）、`A-AUTOSAVE`（崩溃后未保存内容全丢）。 |
 | **M2-5c** 椭圆 / 多边形选区工具 | 未开工 | 在 `src/media/tools/` 下加两个工具，接到 `ModeSelectorBar` 的模式栏。 |
+| M2-4 剩余 | 基本完成 | 工具组 + 8 类新工具 + 4 个修好的工具已落地。仍未做的：**抓手/缩放/旋转视图的旋转中心与边界处理**（当前旋转视图只改 view transform，缩放后的旋转中心没校正）；**图案图章 / 历史记录画笔**（审计 §5.3 第 5、6 项）；**选区限制绘画**在新建工具上的端到端验证。 |
 
 ---
 
@@ -250,6 +323,18 @@ RightPanelDock (QWidget)
   `restoreState()` 在 dock 集合与保存时不一致时返回 `false`。
 - `DockLayoutManager` 的**活布局**与**默认布局**是两个文件：
   `reset()` 回的是**默认**，不是活布局。「我挪了个面板」和「我要回到原来的排布」是两件事。
+- **M2-4 的工具事实**：
+  - `ToolMediator::ToolId` 的整数值**就是** `ImageOptionBar` 的 `QStackedWidget` 页索引
+    → 枚举只能末尾追加；每个新工具必须在 `ImageOptionBar.ui` 加占位页。
+  - `ToolState::wantsExclusiveMouse()`：返回 true 的工具会**消费掉**鼠标 press，
+    view 收不到 → 画布不启动 `ScrollHandDrag` 平移。默认 false。
+  - `ToolGeometry::clampToCanvas()` / `clampRectToCanvas()` / `clampDeltaToCanvas()`：
+    所有工具共用的边界规则。`clampDeltaToCanvas` 只把 delta 限到画布大小，
+    **不会**把满画布图层的 delta 钳到 0。
+  - 矢量路径的坐标契约 = **图像像素坐标**（1:1）。`Layer::Vector` 的 `rasterize()`
+    返回 **BGRA**（4 通道），跟 `Layer::Text` 一致。
+  - `ToolGroupButton` 长按 **500ms** 弹出；鼠标移动超过 **4px** 取消长按。
+  - `ToolOptionsPanel` 是 5 个新工具共用的选项页（按 `Kind` 显示/隐藏控件）。
 
 ---
 
@@ -267,20 +352,30 @@ cmd /c "set PATH=D:\QT6\6.11.1\msvc2022_64\bin;%PATH% && cd /d D:\Collide\MyCode
 
 # 契约门禁（不可与 ctest 并行：破坏自检会临时改源文件）
 & $py tools\check_contracts.py
-& $py tools\break_test_contracts.py
-& $py tools\break_check_m1_7_evict.py
-& $py tools\break_check_m2_6_preview.py
-& $py tools\break_check_m2_6_transform.py
-& $py tools\break_check_m2_7_filetree.py
-& $py tools\break_check_m2_2_docklayout.py
+& $py tools\run_all_break_checks.py   # 一次跑完 9 个破坏自检
 ```
 
-**本轮基线**（M2-2 之后）：build OK · ctest **86/86** · `check_contracts` **ERROR=0 WARN=22**
-（R1 18 / R3 1 / R4 3）· 六个破坏自检（contracts / M1-7 evict / M2-6 preview /
-M2-6 transform / M2-7 filetree / **M2-2 docklayout**）全部注入点变红且文件逐字节还原。
+**本轮基线**（M2-4 之后）：build OK · ctest **87/87** · `check_contracts` **ERROR=0 WARN=22**
+（R1 18 / R3 1 / R4 3）· **9 个破坏自检**全部注入点变红且文件逐字节还原
+（contracts / M1-7 evict / M2-6 preview / M2-6 transform / M2-7 filetree /
+M2-2 docklayout / M2-4 vectorlayer / **M2-4 tools** / **M2-4 newtools**）。
 
-> ctest 条数从 87 变成 86：删了 `tst_VDraggableTabWidget` + `tst_VTabPageBase`（-2），
-> 加了 `tst_M2_2_DockLayout`（+1），并新增 `contract_check` 这个 label 汇总项。
+> ctest 条数：M2-2 之后是 86，本轮新增 `tst_M2_4_Tools` → **87**。
+
+**⚠ 破坏自检必须检查"哪条测试变红"，不能只检查"有测试变红"。**
+
+M2-4 的 newtools 自检第一次跑的时候，7 个注入点里 6 个"通过"了 —— 但其中 2 个
+报红的是**渐变测试**，不是它们该报的模糊/加深减淡测试。原因有两个叠在一起：
+
+1. **注入没有真的改到被测代码路径**（加深减淡那条：测试只查了静态
+   `burnChannel()` 函数，没查工具真的调用它 → 注入"烧变亮"这个 bug 测试看不见）。
+2. **陈旧的 build 产物**让一次运行的二进制跟源码对不上。
+
+修法两条：
+- 每个注入点都写明**它必须让哪条测试变红**，脚本核对**测试名**而不是只看红/绿
+  （`tools/break_check_m2_4_newtools.py` 的 `expect_red(label, expected_test, out)`）。
+- 注入的是**成因**，不是"看起来像成因的东西"——加深减淡那条的修法是给测试补上
+  **真实图层上**的 burn 路径断言（原来只有静态函数的断言）。
 
 ---
 
@@ -331,17 +426,31 @@ M2-6 transform / M2-7 filetree / **M2-2 docklayout**）全部注入点变红且�
 20. **删掉文件后，引用它的门禁脚本也要一起改**。M2-2 删了 `src/ui/dock/VDragManager.h`，
     `tools/break_test_contracts.py` 的 R1 注入点正是它 —— 不改的话破坏自检会直接
     "anchor not found"，看起来像脚本坏了而不是"目标被删了"。
+21. **破坏自检必须核对"哪条测试变红"，不能只核对"有测试变红"**。
+    M2-4 的 newtools 自检第一次跑，7 个注入点里报红的却是**别的**测试
+    （渐变测试替模糊测试报了红）。两个原因叠在一起：① 注入没改到被测代码路径
+    （加深减淡那条只查了静态函数，没查工具真的调用它）；② 陈旧的 build 产物
+    让二进制跟源码对不上。修法：每个注入点写明**它必须让哪条测试变红**，
+    脚本核对**测试名**（`expect_red(label, expected_test, out)`）。
+22. **断言的探针点必须能区分"修好的实现"和"坏掉的实现"**。
+    M2-4 的加深减淡测试原来只断言静态 `burnChannel()`，所以"工具把 burn 写成 dodge"
+    这个 bug 看不见 —— 现在补上了**真实图层上**的 burn 路径断言（探针必须落在一个
+    本来就**不是黑色**的像素上，否则"变暗"和"本来就是黑"分不开）。
+23. **门禁脚本之间的 build 会互相踩**。破坏自检一个一个跑（`tools/run_all_break_checks.py`
+    一次跑完 9 个），**不要**并行 —— 两个脚本同时改同一个源文件 / 同时重建会互相踩。
 
 ---
 
 ## 7. 已登记的开放债务（`docs/DEBT.md`）
 
 M2 关闭的：`A-ADJUSTPREVIEW`（M2-6a）、`A-HUESATLUT`（M2-6b）、`A-MEDIADISPATCH`（M2-7a）、
-`A-FILETREEMODEL`（M2-7b）、`A-VTABAPI` / `A-DRAGTHRESHOLD` / `A-STACKWIDGET`（M2-2）。
+`A-FILETREEMODEL`（M2-7b）、`A-VTABAPI` / `A-DRAGTHRESHOLD` / `A-STACKWIDGET`（M2-2）、
+`A-MOVE` / `A-KEYBOARD` / `A-CROP` / `A-BRUSHOPTIONS` / `A-TOOLICON` /
+`A-TOOLGROUP` / `A-TOOLSET` / `A-VECTORCOORD` / `A-CROPASPECT`（M2-4）。
 
 M2 相关、仍然开放：
 
 - `A-PROJECTFORMAT` / `A-AUTOSAVE`（M2-1）
-- `A-MOVE` / `A-LAYERDRAG` / `A-TOOLCONFIG` / `A-SWATCH` / `A-TOOLICON`（M2-4）
+- `A-LAYERDRAG` / `A-TOOLCONFIG` / `A-SWATCH`（M2-4 剩余；`A-SWATCH` 是色板/渐变/图案面板的假数据）
 - `A-THEME`（M2-8 只修了暗色 QSS 硬编码，主题画廊的「应用」按钮仍是空实现）
 - `A-FILTERMENU`（滤镜菜单 5 个入口仍 `setEnabled(false)`）

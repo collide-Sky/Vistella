@@ -87,9 +87,9 @@
 | ID | 位置 | 缺什么 | 用户可见影响 | 建议阶段 | 验收方式 | 状态 |
 |---|---|---|---|---|---|---|
 | `A-CROP` | `tools/Crop.cpp` | — | 裁剪走 `setDocumentImage()`（文档级几何变更），`ImageEditCommand` 的 undo 还原原图、redo 重放裁剪结果 | 拖框松手 → 图像尺寸真的变，Ctrl+Z / Ctrl+Y 都能用 | P8.5 | 裁剪后尺寸真的变 + 可撤销可重做 | done |
-| `A-MOVE` | `tools/MoveTool.cpp:17` | 22 行空壳，注释「F-N will wire drag behavior」；不拖图层/文字/选区（04-18） | 移动工具只有状态栏提示，光标是 SizeAll 但拖不动 | P8.5 | 按 V 能拖当前图层/文字 | open |
-| `A-BRUSHOPTIONS` | `ImageOptionBar.cpp:230` | `onToolChanged` 先判 `if (id==Brush && m_mosaic)` 而 `m_mosaic` 恒非空 → 永远显示 Mosaic 页，下面 Brush 分支成**不可达死代码**（04-05） | 选中画笔后**看不到任何画笔选项**，画笔锁死 13px 黑笔 | P8.5 | 选中画笔出现大小/硬度/不透明度/流量/预设 | open |
-| `A-KEYBOARD` | `ToolContext.cpp:106` | `ToolContext::onKeyPress/onKeyRelease` **零调用者**；`ImageCanvas::keyPressed` 信号无订阅者 → 工具键盘逻辑全是死代码（04-07） | 多边形永远闭合不了、钢笔回车提交不了、Esc 取消不了、Shift 等比失效 | P8.5 | 键盘能完成工具关键操作 | open |
+| `A-MOVE` | `tools/MoveTool.cpp` | — | 移动工具真的拖东西：优先拖文字 item（`TextItemCommand::Move` 入撤销栈），其次拖选区，最后拖活动图层像素（备份 → 拖动中写回 → 松手 `pushLayerImageEdit` 一条撤销命令）。工具通过 `ToolState::wantsExclusiveMouse()` 声明独占鼠标，画布不再平移而是移动内容 | P8.5 | 按 V 能拖当前图层/文字 | done |
+| `A-BRUSHOPTIONS` | `ImageOptionBar.cpp` | — | 画笔选项页现在**真的能打开**：路由条件从「选中画笔 && mosaic 工具存在」改成「选中画笔 && **马赛克模式开着**」。之前 `m_mosaic` 恒非空 → 永远显示 Mosaic 页，下面画笔分支成**不可达死代码**（04-05） | 选中画笔后**看不到任何画笔选项**，画笔锁死 13px 黑笔 | P8.5 | 选中画笔出现大小/硬度/不透明度/流量/预设 | done |
+| `A-KEYBOARD` | `ImageCanvas.cpp` / `ToolContext.cpp` | — | `ImageCanvas::keyPressEvent/keyReleaseEvent` 把按键转发给 `ToolContext`，`ToolContext::onKeyPress/onKeyRelease` 再转发给当前工具。工具的键盘逻辑不再是死代码 | P8.5 | 键盘能完成工具关键操作 | done |
 | `A-SHORTKEYS` | `mainwindow.cpp:494` | 12 个单键 QAction 用 `Qt::ApplicationShortcut`，优先级高于焦点 widget（04-08） | 用文字工具打字时 V/M/L/W/C/T/B/I 会切工具而不是输入文字 | P8.5 | 编辑态下这些键正常输入 | open |
 | `A-LAYERDRAG` | `layers/LayerPanel.cpp:161` | 无 `setDragDropMode`、无 drop 事件；组子项只读（LYR-25 / LYR-31） | 图层不能拖拽排序/入组/出组 | P8.6 | 能拖拽排序 | open |
 | `A-CHANNELPATH` | `docks/ChannelPathPanel.cpp:130` | `channelSelected`/`pathSelected` 无 connect；通道列表是 6 项硬编码静态标签（09-05） | 点「通道/路径」只有日志，什么都不发生 | P8.6 | RGB 分解 + 单通道可见性 | open |
@@ -99,7 +99,7 @@
 | `A-PLUGINMENU` | `app/mainwindow.cpp:544` | 「增效工具」菜单是空壳（`aPluginsMgr->setEnabled(false)`），插件管理入口不生效 | 菜单里第 9 项点不动，插件体系没有入口 | P8.9 | 菜单能加载真实插件，或整项删除 | open |
 | `A-FILTERMENU` | `app/mainwindow.cpp:1078/1090/1093/1096/1102` | 滤镜菜单 5 个入口（Neural Filters / 自适应广角 / Camera Raw / 镜头校正 / 消失点）全部 `setEnabled(false)` | 用户点这些滤镜没有任何反馈，看着像坏了 | P8.9 | 接通或移除这些入口 | open |
 | `A-THEME` | `ui/themegallerydialog.cpp:131` + `themegallerydialog.h:39` | 「应用」按钮只弹 QMessageBox，`ThemeManager::setAccentColor/setMode/persistToSettings` 三行是注释，主题画廊不接 ThemeManager | 选了颜色点了应用，界面完全不变 | P8.9 | 点应用后主题真的变并持久化 | open |
-| `A-TOOLICON` | `media/tools/LeftToolBar.cpp:28/31` | 9 个工具用自绘 SVG，剩下 6 个（Pen/Clone/Heal/Patch/RedEye/MaskBrush）仍用 QStyle 内置图标 | 工具栏图标一半是系统默认样式，和整体风格不一致 | P8.9 | 6 个工具补齐 SVG，或明确统一为同一套图标 | open |
+| `A-TOOLICON` | `media/tools/LeftToolBar.cpp` | — | 全部工具都用自绘 SVG（16x16，蓝 #4A90E2 + 黑 #202020）：P5 的 9 个 + P5+ 的 6 个 + M2-4 新增的 8 个（橡皮擦/渐变/油漆桶/加深减淡/模糊/抓手/缩放/旋转视图） | P8.9 | 6 个工具补齐 SVG，或明确统一为同一套图标 | done |
 | `A-ICCTIFFTAG` | `media/icc/IccTiffEmbed.cpp:206` | TIFF 的 ICC tag 条目里 value offset 写死成常量，嵌入的 profile 实际读不出来 | 导出带 ICC 的 TIFF 后再打开，颜色管理失效 | P8.9 | 导出的 TIFF 能被其它软件正确读到 profile | open |
 | `A-HUESATLUT` | `media/imageworker/layers/AdjustmentTransform.cpp` | ✅ M2-6b 已解：色相/饱和度滑条**完全无效**（1D LUT 表达不了逐像素的 RGB 变换）。现在 HSL / 黑白 / 通道混合器走 per-pixel `layers::AdjustmentParams`（8 色相段 + 8 饱和段 + 明度、6 个黑白混音器、3x3 通道混合矩阵），曲线/色阶仍走 1D LUT；AdjustmentPanel 把参数真正写进调整图层，legacy 与 compositor 两条渲染路径结果一致；曲线支持分通道（RGB/R/G/B 各一条） | HSL 面板拖 Hue/Saturation 画面没反应 | P8.5 | Hue/Saturation 滑条真的改变画面 | done |
 | `A-MOSAICBACKUP` | `media/imagewindow/MosaicTool.cpp` | — | `ensureBackup()` 现在快照的是**活动图层**的像素，涂抹落在图层上，撤销走 `LayerCommand::SetLayerImage` | 马赛克有真实备份链路，撤销能还原图层像素 | P8.4 | 马赛克前有真实备份且可恢复 | done |
@@ -107,6 +107,10 @@
 | `A-PROJECTFORMAT` | `ImageIOController.cpp:68` | 保存写 `currentImage()`，**无任何工程格式** → 保存后重开只剩一张扁平图，图层/蒙版/智能对象/文字全丢（LYR-23 / §5.2） | 「非破坏修图」定位不成立 | P8.8 | 自定义 .vst 格式往返 | open |
 | `A-GROUPZORDER` | `layers/LayerStack.cpp` `mergeIntoGroup()` | ✅ M1-3 已解：编组时 Group 落到**最上面那个被选图层原来的位置**（PS 行为，插入点 = 其下未被选中的图层数）；同时渲染循环改成**覆盖全栈**（LYR-13 / LYR-14），底图不再当根、隐藏底图真的会露出下面内容，compositor 侧同步重排；legacy / compositor 两条路径画面一致 | 选中中间几层编组后，组的 z 序与 PS 一致 | P8.4 | 渲染循环覆盖全栈后，编组的 z 序落在最上面那个被选层原位置，且 legacy / compositor 两条渲染路径画面一致 | done |
 | `A-FILETREEMODEL` | `ui/FileTreeProxyModel.cpp` + `ui/infotreedock.cpp` | ✅ M2-7b 已解：自研文件树模型（`FileTreeModel` / `FileTreeItem` / `FileTreeNodeData` 已删）换成 `QFileSystemModel` + `QSortFilterProxyModel`——目录在工作线程读（不再卡 UI），`FileTreeProxyModel` 负责扩展名过滤（目录永远放行，文件按 `FileExtensionRegistry::isSupportedExtension`）和空目录的展开箭头（已读且为空的目录没有箭头，未读时箭头乐观显示）。**关键约束**：proxy 的 `QModelIndex` 跨源模型变更即失效（`QSortFilterProxyModel` 会丢弃并重建内部 mapping，旧 index 指向已释放内存 → `ASSERT: "it != source_index_mapping.constEnd()"`），所以整棵树**以路径为唯一稳定身份**，`FileTreeProxyModel::indexForPath()` 按需现取现用 | 文件树展开大目录时界面卡死；空目录点不开也永远显示箭头 | 文件 → 文件树 | P8.6 | 展开含上千文件的目录界面不卡；空目录没有展开箭头 | done |
+| `A-TOOLGROUP` | `media/tools/ToolGroupButton.cpp` | ✅ M2-4i 已解：工具栏从 15 个扁平按钮改成 PS 的**工具组**——一组一个按钮，右下角小三角标记「还有兄弟工具」，长按 500ms 弹出同组工具，弹出的工具成为该组的新默认（PS 行为）。7 组：选框(矩形/套索/魔棒)、修复(仿制/修补/污点/红眼)、画笔(画笔/橡皮擦/蒙版画笔)、形状(形状/钢笔)、填充(渐变/油漆桶)、色调(加深减淡/模糊锐化涂抹)、视图(抓手/缩放/旋转视图) | 工具栏 15 个扁平按钮，跟 PS 的分组收纳完全不一样 | P8.5 | 工具按组收纳，长按弹出兄弟工具 | done |
+| `A-TOOLSET` | `media/tools/` | ✅ M2-4h 已解：审计 §5.3 列的整类缺失工具补齐 8 个（橡皮擦 / 渐变 / 油漆桶 / 加深减淡 / 模糊锐化涂抹 / 抓手 / 缩放 / 旋转视图），全部写进**活动图层**的像素（不是合成缓存），走 `activeLayerImage()` + `pushLayerImageEdit()` + `commitLayerEdit()` 的撤销契约；选项栏有真参数（容差/渐变类型/加深减淡模式/强度/笔刷大小），SVG 图标跟全套工具同一套风格 | 渐变/油漆桶/加深减淡/橡皮擦等整类工具缺失 | P8.5 | 8 类缺失工具可用 + 撤销正常 | done |
+| `A-VECTORCOORD` | `media/imageworker/layers/LayerStack.cpp` | ✅ M2-4b 已解：矢量路径的坐标契约定为**图像像素坐标**（1:1 绘制）。之前 `rasterize()` 按 `sz/100` 缩放，假设路径在 0-100 归一化空间，而 ShapeTool / PenTool 写的是原始像素坐标 → 形状画到画布外看不见（审计 §266 印证）。同时矢量层返回 BGRA 而非 BGR（否则透明区变不透明黑，LYR-01） | 形状工具画的图形完全看不见 | P8.5 | 形状/钢笔画的图形可见 + 透明保留 | done |
+| `A-CROPASPECT` | `media/tools/Crop.cpp` | ✅ M2-4f 已解：裁剪的**宽高比在拖拽中真正生效**（之前 `m_aspect` 只在选项面板被赋值，`computeClampedRect` / `applyCrop` 从不读它）；选项面板的 combo 用 `findData` / `currentData` 取枚举（之前把索引当枚举值）；坐标经 `ToolGeometry::clampToCanvas` 钳制 | 选了 16:9 拖出来的框还是随意的 | P8.5 | 宽高比真的约束拖拽框 | done |
 
 ### A.3　源码中的「以后会做」承诺（20 处散落注释，尚未登记）
 
@@ -127,15 +131,12 @@
 | `imagewindow/TextOverlayController.cpp:244` | 占位：保留接口 | `A-TEXTOVERLAYAPPLY` |
 | `media/texteditorframe.cpp:101` | 保留接口以便将来扩展 | `A-TEXTEDITORFRAME` |
 | `media/tools/LeftSidePanel.h:64` | accessors for downstream wiring | 待定 |
-| `media/tools/LeftToolBar.cpp:27` | 后续 P5 接 SVG 图标 | `A-TOOLICON` |
-| `media/tools/LeftToolBar.cpp:31` | 6 个工具暂用 QStyle 占位图标 | `A-TOOLICON` |
 | `media/icc/IccTiffEmbed.cpp:206` | ICC tag 的 value offset 写死 | `A-ICCTIFFTAG` |
 | `ui/themegallerydialog.cpp:131` | 主题画廊不接 ThemeManager | `A-THEME` |
 | `layers/BlendMode.cpp:307` | Phase 2 暂不支持，fallback Normal | 待定（混合模式） |
 | `media/tools/MagicWand.h:46` | P2.1 option UI hooks | 待定 |
 | `layers/LayerPanel.cpp:296` | 暂不用，Phase 1 UI 不显示 saved 标记 | 待定 |
 | `layers/LayerPanel.cpp:778,904,1146` | LayerCommand wiring（P0 leftover 3） | 待定（图层命令） |
-| `media/tools/MoveTool.cpp:17` | F-N will wire drag behavior | `A-MOVE` |
 | `media/tools/Text.cpp:303` | 后续 P0-7.x 完善 undo | 待定（文字 undo） |
 
 ---

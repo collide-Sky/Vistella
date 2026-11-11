@@ -233,6 +233,10 @@ add_vistella_test(tst_RightPanelDock)
 #   vistella_app (and its whole MainWindow + OpenCV chain) in.
 add_vistella_test_with_sources(tst_M2_2_DockLayout
     ${CMAKE_SOURCE_DIR}/src/app/DockLayoutManager.cpp)
+# M2-4: the tool capability tests (move tool drags the layer / the text
+#   item / the selection; the keyboard reaches the tools; the shared
+#   coordinate helpers clamp into the canvas).
+add_vistella_test(tst_M2_4_Tools)
 # P7.11 (2026-10-15): ImageCanvas dirty rect + status bar GPU/CPU + dock PS QSS
 add_vistella_test(tst_P7_11)
 # P7.10 (2026-10-15): 属性/通道/路径 tab 重写 (invalidateCache 标脏 + fan-out)

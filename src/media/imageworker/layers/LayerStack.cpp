@@ -1560,20 +1560,37 @@ cv::Mat LayerStack::rasterize(const LayerPtr &l) const
                 ? l->vectorFillColors[i] : QColor(200, 200, 200);
             const qreal stroke = i < l->vectorStrokeWidths.size()
                 ? l->vectorStrokeWidths[i] : 0.0;
-            p.setPen(stroke > 0 ? QPen(fill, stroke) : QPen(Qt::NoPen));
+            // The stroke colour is its own field. Using the fill colour
+            // for the pen made a "transparent fill + blue stroke" shape
+            // render as an invisible outline.
+            const QColor strokeColor = i < l->vectorStrokeColors.size()
+                ? l->vectorStrokeColors[i] : fill;
+            p.setPen(stroke > 0 ? QPen(strokeColor, stroke) : QPen(Qt::NoPen));
             p.setBrush(QBrush(fill));
-            // 缩放 paths 适应画布 (假设 path 坐标在 0-100 范围)
-            p.save();
-            p.scale(sz.width / 100.0, sz.height / 100.0);
+            // Vector path coordinates are IMAGE PIXEL coordinates, the
+            // same space as the scene the tools draw in.
+            //
+            //   This used to scale by canvasSize/100 on the assumption
+            //   that paths live in a normalised 0..100 space. The tools
+            //   (ShapeTool / PenTool) write raw scene coordinates, so a
+            //   rectangle from (100,100) to (200,200) on an 800x600
+            //   canvas was rendered at (800,600)-(1600,1200): far off
+            //   the canvas, so the user saw nothing at all.
+            //
+            //   Only the tools create Layer::Vector paths, and they all
+            //   use pixel coordinates, so drawing them 1:1 is the
+            //   contract. (LayerMask has its own vectorPaths field and
+            //   its own renderer -- that one already treats the paths as
+            //   pixel coordinates.)
             p.drawPath(l->vectorPaths[i]);
-            p.restore();
         }
         p.end();
+        // QImage ARGB32 -> cv::Mat BGRA.
+        //   It must NOT be converted to BGR -- dropping the alpha turns
+        //   the transparent area into opaque black, so the shape covers
+        //   the whole canvas with a black rectangle (LYR-01).
         cv::Mat mat(img.height(), img.width(), CV_8UC4, img.bits(), img.bytesPerLine());
-        cv::Mat bgra = mat.clone();
-        cv::Mat bgr;
-        cv::cvtColor(bgra, bgr, cv::COLOR_BGRA2BGR);
-        return bgr;
+        return mat.clone();
     }
     case Layer::SmartObject: {
         QString path = l->sourceFilePath;

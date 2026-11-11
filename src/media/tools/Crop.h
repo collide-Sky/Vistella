@@ -7,9 +7,17 @@
 //   - release: apply crop (cv::Mat roi + adjust size + push ImageEditCommand)
 //
 //   - Full mouse press/move/release wiring + applyCrop
-//   - optionPage: Width / Height / Aspect Ratio (Free / 1:1 / 4:3 / 16:9)
+//   - optionPage: Aspect Ratio (Free / 1:1 / 4:3 / 16:9)
 //   - ImageEditCommand undo integration (MosaicTool pattern)
 //   - i18n title via QCoreApplication::translate
+//
+// M2-4 的改动:
+//   - 宽高比真的生效了. 之前 m_aspect 只在选项面板里被赋值, 裁剪框从来
+//     不看它 —— 用户选 1:1 / 4:3 / 16:9, 裁出来的还是任意比例.
+//     现在拖拽时按锚点反算另一轴, 保持锁定比例.
+//   - 去掉 m_host 的硬依赖: 之前 onMousePress 只看 onEnter 缓存的 m_host,
+//     不看传进来的 host, 所以没走过 onEnter 的工具实例会静默丢掉所有
+//     鼠标事件 (裁剪完全没反应).
 //
 #pragma once
 
@@ -63,6 +71,19 @@ private:
 
     void applyCrop(ImageWindow* host);
     QRect computeClampedRect(int x1, int y1, int x2, int y2) const;
+
+    // The width / height ratio the current lock asks for.
+    //
+    //   Returns 0 for Free (no lock).
+    double aspectValue() const;
+
+    // The other end of the drag rectangle, with the aspect lock applied.
+    //
+    //   `anchor` is the fixed corner (where the drag started) and
+    //   `current` is where the pointer is. The locked axis is derived
+    //   from the free one, so the rectangle keeps the requested ratio
+    //   while the user drags.
+    QPointF applyAspect(const QPointF& anchor, const QPointF& current) const;
 };
 
 } // namespace tools

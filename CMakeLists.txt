@@ -257,6 +257,15 @@ qt_add_resources(Vistella "vistella_tool_icons"
         src/media/tools/icons/tool-patch.svg
         src/media/tools/icons/tool-redeye.svg
         src/media/tools/icons/tool-maskbrush.svg
+        # M2-4 (2026-11-07): the tools that were missing.
+        src/media/tools/icons/tool-eraser.svg
+        src/media/tools/icons/tool-gradient.svg
+        src/media/tools/icons/tool-paintbucket.svg
+        src/media/tools/icons/tool-dodgeburn.svg
+        src/media/tools/icons/tool-blur.svg
+        src/media/tools/icons/tool-hand.svg
+        src/media/tools/icons/tool-zoom.svg
+        src/media/tools/icons/tool-rotate.svg
 )
 
 # 把 QML 复制到 build 目录 (跟 exe 同级), main.cpp 用 applicationDirPath() 加载,

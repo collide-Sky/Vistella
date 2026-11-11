@@ -26,6 +26,7 @@
 #include "../selection/SelectionModel.h"
 #include "../selection/MarchingAnts.h"
 #include "../transform/TransformBox.h"
+#include "../tools/ToolContext.h"
 #include "logger.h"
 
 ImageCanvas::ImageCanvas(QWidget* parent) : QGraphicsView(parent) {
@@ -162,11 +163,33 @@ void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* e) {
 
 void ImageCanvas::keyPressEvent(QKeyEvent* e) {
     QGraphicsView::keyPressEvent(e);
+    // M2-4: the keyboard chain to the tools.
+    //
+    //   The keyPressed signal existed but had no subscriber, and
+    //   ToolContext::onKeyPress() had no caller at all -- so no tool
+    //   ever saw a key. That is why the pen tool could not commit a
+    //   path with Enter and the shape tool could not close a polygon
+    //   (docs/DEBT.md#A-KEYBOARD).
+    //
+    //   The forwarding goes through the ToolContext, the same path the
+    //   mouse events take (ImageWindow::eventFilter -> m_ctx->onMouseXxx
+    //   -> the current ToolState).
+    //
+    //   The base class is called FIRST so that the QGraphicsView keeps
+    //   its own key handling (arrow keys scroll, Escape clears the
+    //   current selection). A tool that consumes the key can stop the
+    //   propagation by calling e->accept().
+    if (m_toolCtx) {
+        m_toolCtx->onKeyPress(e);
+    }
     emit keyPressed(e);
 }
 
 void ImageCanvas::keyReleaseEvent(QKeyEvent* e) {
     QGraphicsView::keyReleaseEvent(e);
+    if (m_toolCtx) {
+        m_toolCtx->onKeyRelease(e);
+    }
     emit keyReleased(e);
 }
 

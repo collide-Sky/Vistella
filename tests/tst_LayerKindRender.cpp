@@ -69,6 +69,34 @@ private:
     {
         return cv::Mat(h, w, CV_8UC3, bgr);
     }
+
+    // Is the pixel at (x, y) red?
+    //
+    //   The rendered image is BGRA (the pixel contract), so red means
+    //   a high R and a low B. Reading it through the real channel count
+    //   matters: cv::Vec3b on a 4-channel image addresses the pixel
+    //   with a 3-byte stride and reads a NEIGHBOURING pixel.
+    static bool isRedAt(const cv::Mat& img, int x, int y)
+    {
+        if (img.empty()) return false;
+        if (x < 0 || y < 0 || x >= img.cols || y >= img.rows) return false;
+        const int ch = img.channels();
+        const uchar* px = img.ptr<uchar>(y) + x * ch;
+        const uchar b = px[0];
+        const uchar g = px[1];
+        const uchar r = px[2];
+        return r > 200 && b < 50;
+    }
+
+    // Is the pixel at (x, y) white (the base layer showing through)?
+    static bool isWhiteAt(const cv::Mat& img, int x, int y)
+    {
+        if (img.empty()) return false;
+        if (x < 0 || y < 0 || x >= img.cols || y >= img.rows) return false;
+        const int ch = img.channels();
+        const uchar* px = img.ptr<uchar>(y) + x * ch;
+        return px[0] > 200 && px[1] > 200 && px[2] > 200;
+    }
 };
 
 void tst_LayerKindRender::initTestCase()
@@ -288,7 +316,11 @@ void tst_LayerKindRender::test_render_vectorLayer()
     LayerStack stack;
     stack.setBaseLayer(makeMat(64, 64, cv::Scalar(255, 255, 255)));  // 白底
     QPainterPath rect;
-    rect.addRect(QRectF(20, 20, 60, 60));
+    // Pixel coordinates: the rect covers (20,20)-(50,50) of the 64x64
+    // canvas. The paths used to be scaled by canvasSize/100 on the
+    // assumption that they lived in a normalised 0..100 space, which
+    // threw the shape far off the canvas.
+    rect.addRect(QRectF(20, 20, 30, 30));
     stack.addVectorLayer(QStringLiteral("V"),
                          QVector<QPainterPath>{rect},
                          QVector<QColor>{QColor(255, 0, 0)});
@@ -304,6 +336,51 @@ void tst_LayerKindRender::test_render_vectorLayer()
         }
     }
     QVERIFY(foundRed);
+
+    // The shape must be WHERE IT WAS DRAWN, not just somewhere on the
+    // canvas. This is the assertion that catches the "the shape is drawn
+    // off-canvas" defect: a scaled-out shape still produces red pixels,
+    // so "at least one red pixel" cannot see it.
+    //
+    // The probe points have to DISCRIMINATE between the two renderings.
+    // With the old canvasSize/100 scale the rect (20,20)-(50,50) lands
+    // at (12.8,12.8)-(32,32) on a 64px canvas -- which still covers
+    // (30,30). A probe there would pass with the bug in place. The
+    // points below are chosen so that each one is red under exactly
+    // one of the two renderings:
+    //
+    //   (45,45)  inside the correct rect, outside the scaled one
+    //   (15,15)  outside the correct rect, inside the scaled one
+    //
+    QVERIFY2(isRedAt(out, 45, 45),
+             "the far corner of the rectangle must be red -- the shape "
+             "was scaled instead of drawn where it was asked for");
+    QVERIFY2(!isRedAt(out, 15, 15),
+             "the near corner must NOT be red -- the shape was scaled "
+             "towards the origin");
+    QVERIFY2(!isRedAt(out, 2, 2),
+             "the corner outside the rectangle must NOT be red");
+    QVERIFY2(!isRedAt(out, 60, 60),
+             "the opposite corner outside the rectangle must NOT be red");
+
+    // The area OUTSIDE the shape must still show the white base.
+    //
+    //   This is the assertion for the second half of the defect: the
+    //   layer was converted to 3-channel BGR, which drops the alpha.
+    //   A 3-channel layer is treated as fully opaque, so the shape's
+    //   transparent area becomes an opaque BLACK rectangle that covers
+    //   the whole canvas (LYR-01).
+    //
+    //   "not red" cannot see that -- black is not red either. The
+    //   outside has to be asserted as WHITE (the base), not merely as
+    //   "not red".
+    QVERIFY2(isWhiteAt(out, 2, 2),
+             "the area outside the shape must still show the white base "
+             "-- the layer lost its alpha and covers the canvas in black");
+    QVERIFY2(isWhiteAt(out, 60, 60),
+             "the area outside the shape must still show the white base");
+    QVERIFY2(isWhiteAt(out, 15, 15),
+             "the area outside the shape must still show the white base");
 }
 
 void tst_LayerKindRender::test_render_adjustmentLayer()

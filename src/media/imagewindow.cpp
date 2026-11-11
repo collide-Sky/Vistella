@@ -503,6 +503,10 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   attach 后 LeftToolBar/ImageOptionBar 可以通过 toolContext() 拿到
     m_ctx = std::make_unique<tools::ToolContext>(this);
     m_ctx->attach(this, m_toolMed.get());
+    // M2-4: the canvas forwards the key events to the same ToolContext.
+    //   The mouse events reach the tools through the eventFilter; the
+    //   keyboard had no such path at all.
+    m_canvas->setToolContext(m_ctx.get());
 
     // LeftSidePanel + 4 子 widget + m_brushOpt + 左 dock 容器
     //   全部搬到 MainWindow (P7.6.x v3 commit 1). ImageWindow 只剩画布 + 业务数据 +
@@ -2995,6 +2999,20 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
             //   放在最后: handle drag / mosaic 优先级高于 tool (已经 return true 的不进入这里)
             if (m_ctx) m_ctx->onMouseMove(me, sp);
         }
+        // 双击 - M2-4: the shape / pen tools close a path with it.
+        //   There was no way to deliver a double click to a tool before:
+        //   ToolState had no hook for it.
+        //
+        //   It goes to the tool AFTER the press handler, because Qt sends
+        //   a press, a release and THEN the double click -- the press is
+        //   what adds the last anchor point, so the tool sees it first.
+        if (event->type() == QEvent::MouseButtonDblClick) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::LeftButton) {
+                const QPointF sp = scenePt(me);
+                if (m_ctx) m_ctx->onMouseDoubleClick(me, sp);
+            }
+        }
         // 鼠标按下 - 左键: 涂抹模式按下立即在点击处应用一次, 之后 MouseMove 继续 (松开会自动停)
         if (event->type() == QEvent::MouseButtonPress) {
             auto *me = static_cast<QMouseEvent *>(event);
@@ -3052,6 +3070,18 @@ bool ImageWindow::eventFilter(QObject *watched, QEvent *event)
                 // 文字模式 + 普通模式 单击 -> 忽略 (让 graphicsView 处理 pan)
                 // forward to current ToolState (放在左键分支末尾, 让 graphicsView 仍能 pan)
                 if (m_ctx) m_ctx->onMousePress(me, sp);
+                // M2-4: a tool that moves something needs the drag for
+                //   itself. The canvas runs with ScrollHandDrag always on,
+                //   so the press has to be consumed HERE -- once the event
+                //   reaches the view the canvas has already started to
+                //   scroll and the content never moves.
+                //
+                //   The move tool is the one that asks for it (it drags
+                //   a layer, a text item or the selection). Every other
+                //   tool keeps the pan.
+                if (m_ctx && m_ctx->currentToolWantsExclusiveMouse()) {
+                    return true;
+                }
             } else if (me->button() == Qt::RightButton) {
                 // 右键: 如果击中文字 item 则删除, 否则清空当前编辑
                 // 关键: 始终可用 (不依赖 m_textMode, 文字模式已废除)

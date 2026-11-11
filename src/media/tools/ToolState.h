@@ -51,8 +51,38 @@ public:
     virtual void onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)   { Q_UNUSED(e); Q_UNUSED(host); Q_UNUSED(scenePos); }
     virtual void onMouseMove(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)    { Q_UNUSED(e); Q_UNUSED(host); Q_UNUSED(scenePos); }
     virtual void onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos) { Q_UNUSED(e); Q_UNUSED(host); Q_UNUSED(scenePos); }
+    // M2-4: the double click.
+    //
+    //   The shape tool and the pen tool both close a path with a double
+    //   click (PS behaviour). There was no way to deliver it: the base
+    //   class had no hook for it, so the "double click closes the path"
+    //   comments in those tools described something that could not
+    //   happen.
+    //
+    //   The default is a no-op, so the existing tools are unaffected.
+    virtual void onMouseDoubleClick(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos) { Q_UNUSED(e); Q_UNUSED(host); Q_UNUSED(scenePos); }
     virtual void onKeyPress(QKeyEvent* e, ImageWindow* host) { Q_UNUSED(e); Q_UNUSED(host); }
     virtual void onKeyRelease(QKeyEvent* e, ImageWindow* host) { Q_UNUSED(e); Q_UNUSED(host); }
+
+    // ===== mouse exclusivity =====
+    //
+    //   The canvas runs with QGraphicsView::ScrollHandDrag permanently
+    //   enabled, so a left-button drag pans the view UNLESS the event
+    //   is consumed before it reaches the view.
+    //
+    //   A tool that moves something (the move tool drags a layer, a
+    //   text item or the selection) needs the drag for itself. It
+    //   cannot work around the pan afterwards -- by then the view has
+    //   already scrolled.
+    //
+    //   So the tool declares the intent up front: when this returns
+    //   true the event filter consumes the mouse press and the view
+    //   never starts a scroll-hand drag.
+    //
+    //   The default is false: a tool that does not move anything must
+    //   not steal the pan (the brush, the eyedropper, the shape tool
+    //   all let the user pan the canvas with the left button).
+    virtual bool wantsExclusiveMouse() const { return false; }
 
     // ===== 标识 / UI =====
     // 工具 ID (跟 ToolMediator::ToolId 一一对应)
