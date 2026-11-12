@@ -337,3 +337,5 @@ add_vistella_test(tst_M2_6_AdjustTransform)
 #   so it must write the per-pixel payload (HSL / B&W / ChannelMixer)
 #   into the adjustment layer, and undo must restore it.
 add_vistella_test(tst_M2_6_AdjustWiring)
+add_vistella_test(tst_M2_1_Project)
+add_vistella_test(tst_M2_4_Tail_Tools)

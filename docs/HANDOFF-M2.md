@@ -1,11 +1,11 @@
 # HANDOFF — M2（进行中）
 
-> 最后更新：2026-11-11
-> 基线 commit：`0f54674`（M2-4 工具补齐）
-> 分支：`dev`（本地领先 `origin/dev` 5 个 commit，**push 按用户指示暂缓**）
+> 最后更新：2026-11-12
+> 基线 commit：`0f54674`（M2-4 工具补齐）+ M2-4 尾巴 / M2-5c / M2-1 / R4 收敛 / `.vst` blob 命名（未提交）
+> 分支：`dev`（本地领先 `origin/dev` 2 个 commit，**push 按用户指示暂缓**）
 
-本文件是 M2 阶段的交接说明。M2 的 8 个子项里，**M2-2 / M2-3 / M2-4 / M2-5 / M2-6 / M2-7 / M2-8 已落地**，
-M2-1 / M2-5c **尚未开工**。
+本文件是 M2 阶段的交接说明。M2 的 8 个子项**全部落地**：
+M2-1 / M2-2 / M2-3 / M2-4 / M2-5 / M2-6 / M2-7 / M2-8。
 
 ---
 
@@ -15,11 +15,28 @@ M2-1 / M2-5c **尚未开工**。
 2. PS 对照表的主要项从「缺失 / 有但错」变成「部分 / 无」。
 
 **当前状态：未达成** —— 调整（S2-6）已经真的生效，工具补齐了（M2-4），
-面板系统换成了原生 `QDockWidget`（M2-2），但**保存/重开仍是扁平图**（M2-1 未做）。
+面板系统换成了原生 `QDockWidget`（M2-2），**保存/重开走 `.vst` 工程格式了**（M2-1）。
+剩下的差距在产品级走查本身（打开 → 多图层编辑 → 调整 → 保存 → 重开复现）还没做完。
 
 ---
 
 ## 2. 已完成的部分
+
+### M2-1　`.vst` 工程格式 + 自动保存 + 崩溃恢复
+
+见第 5 节。
+
+### 结构性收尾　刷新入口收敛 + `.vst` blob 命名
+
+见第 11 节。
+
+### M2-5c　椭圆 / 多边形选框
+
+见第 6 节。
+
+### M2-4　工具补齐（`src/media/tools/`）
+
+见第 7 节（尾巴）与第 2 节末尾（M2-4 主体的工具组 / 8 类新工具）。
 
 ### M2-3　菜单与 action 体系（`src/app/mainwindow.cpp/.h`）
 
@@ -283,9 +300,11 @@ virtual bool wantsExclusiveMouse() const { return false; }
 
 | 子项 | 状态 | 关键事实 / 入口 |
 |---|---|---|
-| **M2-1** 自定义 `.vst` 工程格式 + 自动保存 + 崩溃恢复 | 未开工（用户已拍板 `.vst` 优先，PSD 只读推迟） | 债务 `A-PROJECTFORMAT`（保存写 `currentImage()`，图层/蒙版/智能对象/文字全丢）、`A-AUTOSAVE`（崩溃后未保存内容全丢）。 |
-| **M2-5c** 椭圆 / 多边形选区工具 | 未开工 | 在 `src/media/tools/` 下加两个工具，接到 `ModeSelectorBar` 的模式栏。 |
-| M2-4 剩余 | 基本完成 | 工具组 + 8 类新工具 + 4 个修好的工具已落地。仍未做的：**抓手/缩放/旋转视图的旋转中心与边界处理**（当前旋转视图只改 view transform，缩放后的旋转中心没校正）；**图案图章 / 历史记录画笔**（审计 §5.3 第 5、6 项）；**选区限制绘画**在新建工具上的端到端验证。 |
+| ~~**M2-1** 自定义 `.vst` 工程格式 + 自动保存 + 崩溃恢复~~ | ✅ **已完成**（见第 5 节） | `media/project/VstProject.{h,cpp}` + `media/project/AutoSave.{h,cpp}`；`.vst` 按扩展名分流，其它扩展名仍存扁平合成图。 |
+| ~~**M2-5c** 椭圆 / 多边形选区工具~~ | ✅ **已完成**（见第 6 节） | `media/selection/SelectionStrategy.cpp` + `media/tools/EllipseSelect.{h,cpp}` + `PolygonSelect.{h,cpp}`。 |
+| M2-4 尾巴 | ✅ **已完成**（见第 7 节） | 旋转中心 / 缩放到矩形 / 图案图章 / 历史记录画笔 / 选区裁剪单一真源，全部落地。 |
+
+**M2 阶段 8 个子项全部落地。**
 
 ---
 
@@ -338,7 +357,116 @@ virtual bool wantsExclusiveMouse() const { return false; }
 
 ---
 
-## 5. 门禁（`docs/CONTRACTS.md` 优先级最高）
+## 5. M2-1：`.vst` 工程格式 + 自动保存 + 崩溃恢复
+
+### 5.1 容器格式
+
+`.vst` = 32 字节头 + **JSON 清单** + **二进制负载**：
+
+```
+0  .. 7   magic "VSTPROJ\0"
+8  ..11   manifestOffset
+12 ..15   manifestLength
+16 ..19   payloadOffset
+20 ..23   payloadLength
+24 ..27   magic2 ("VSTP")
+28 ..31   formatVersion
+```
+
+- **清单**（JSON）放**结构**：画布尺寸 + 每层的 kind / name / opacity / blend /
+  visible / locked / linked / 文字 / 矢量路径 / 调整参数。
+- **负载**放**大块数据**：图层像素、像素蒙版、LUT。
+
+为什么不用 ZIP：`QZipReader` / `QZipWriter` 在 Qt 6.11 里是**私有 API**
+（`QtCore/6.11.1/QtCore/private/qzipreader_p.h`），链不上。与其为一个容器
+引一个 zip 依赖，格式自带。
+
+`QPainterPath` 的序列化走 `QDataStream` 的 `operator<<`——
+**这是 Qt 6 里唯一公开的路径序列化接口**：`writeSvg()` / `readSvg()` /
+`elementList()` 全是私有（`QtGui/qpainterpath_p.h`），`QPainterPathIterator`
+在 6.11 已被移除。这三条路都试过。
+
+### 5.2 保存 / 读回
+
+- `ImageIOController::isProjectPath()` 按**扩展名**分流：`.vst` 存整个工程，
+  其它扩展名仍存扁平合成图（用户要 PNG 就给 PNG）。
+- `ImageWindow::loadProjectFile()` 读回时**替换**整个图层栈（不是合并）。
+- 图片路径和工程路径共用同一套接线 `setupAfterLayerStackReady()`
+  （智能对象监听器 + 图层面板 + 面板信号接线 + 选区接线 + 属性面板）。
+  以前这套东西内联在 `loadFile()` 里，工程路径没法复用，而复制 900 行接线
+  是另一种坏——现在是**两个入口，一套 setup**。
+
+### 5.3 自动保存 + 崩溃恢复
+
+`media/project/AutoSave.{h,cpp}`：
+
+- 文档有未保存改动时，每 5 分钟写一份**恢复副本**。
+- 恢复副本**不覆盖用户自己的文件**——那份文件存的是用户上次主动保存的东西，
+  偷偷覆盖等于销毁用户特意保留的状态。
+- 副本用 `.vst` 格式（整个图层栈都在）。恢复副本丢图层 = 半个恢复。
+- 原子写（`QSaveFile`）：写一半崩溃不会留下截断副本。
+- 文档正常保存后副本被删（`ImageWindow::markSaved()` → `removeRecovery()`）。
+- `findRecoverable()` 只挑**比文件本身新**的副本。比文件旧的是陈旧噪音，
+  不是崩溃现场。
+
+---
+
+## 6. M2-5c：椭圆 / 多边形选框
+
+- `EllipseSelectionStrategy`：拖出矩形，椭圆**内接**于矩形——矩形的四个角
+  在椭圆**之外**。这是椭圆框和圆角矩形的区别。
+- `PolygonSelectionStrategy`：单击加顶点、双击闭合；**2 个顶点不算多边形**
+  （那是条线）。
+- 选区羽化从 Lasso 里抽成共享的 `applyFeather()`（积分图盒式模糊），
+  三个 marquee 共用一份，不再是三份可能走偏的拷贝。
+
+---
+
+## 7. M2-4 尾巴
+
+### 7.1 视图变换只有一个写入方
+
+以前**两个**：缩放在画布里（`applyTransform()` = `resetTransform()` + `scale`），
+旋转在工具里（直接 `setTransform()`）。两个都不认识对方：
+
+- `setTransform()` 替换整个矩阵 → 旋转把缩放冲掉；
+- `applyTransform()` 开头是 `resetTransform()` → 之后任何一次缩放把旋转冲掉。
+
+现在**画布拥有**旋转（`m_rotationDeg`），矩阵由 `applyTransform()` 从缩放和
+旋转一起重建：
+
+```
+translate(centre) * rotate(angle) * translate(-centre) * scale(zoom)
+```
+
+绕**图像中心**转，不是绕原点甩。另外补了缩放到矩形
+（`ImageCanvas::zoomToRect()`）和旋转角度累加（第二次拖动叠加，不是归零）。
+
+### 7.2 图案图章 / 历史记录画笔
+
+- **图案图章**（`PatternStampTool`）：Alt+单击抓一块源图案，拖动时按间距平铺。
+  源图案是**快照**（从活动图层像素拷出来的），不是活引用——否则图案会自己
+  涂自己。
+- **历史记录画笔**（`HistoryBrushTool`）：把一份合成快照画回活动图层。
+  注意撤销栈只存**改动区域的 patch**（M1-7 的内存优化：24MP 图层一个笔画
+  从 288MB 降到 bbox 大小），拿不出「第 N 步的完整文档」，所以历史画笔的源
+  是用户显式抓的快照。
+
+### 7.3 选区裁剪只有一处
+
+`ImageWindow::pushLayerImageEdit()` → `clipEditToSelection()` 已经统一裁剪
+（羽化边缘按 alpha 混合）。但渐变和油漆桶**又自己裁了一遍**，而且是**硬切**
+（`maskRow[x] == 0` 就跳过）：
+
+- 两个裁剪器两套规则；
+- 羽化边缘上硬切的那个赢了——像素停在旧颜色，中央裁剪再 old→old 混合，
+  羽化效果整个丢失。
+
+现在工具里**不再**裁剪，裁剪只由中央那一处做。
+
+---
+
+## 8. 门禁（`docs/CONTRACTS.md` 优先级最高）
 
 ```powershell
 $py='C:\Users\tongl\AppData\Local\Programs\Python\Python313\python.exe'
@@ -347,20 +475,27 @@ Set-Location 'D:\Collide\MyCode\QT6Projects\MultiDoc'
 # configure + build
 cmd /c 'D:\Collide\MyCode\QT6Projects\MultiDoc\tools\build.bat'
 
-# 全量 ctest（当前 86 条）
+# 全量 ctest（当前 89 条）
 cmd /c "set PATH=D:\QT6\6.11.1\msvc2022_64\bin;%PATH% && cd /d D:\Collide\MyCode\QT6Projects\MultiDoc\build\Desktop_Qt_6_11_1_MSVC2022_64bit_Debug && ctest -j 4 2>&1"
 
 # 契约门禁（不可与 ctest 并行：破坏自检会临时改源文件）
 & $py tools\check_contracts.py
-& $py tools\run_all_break_checks.py   # 一次跑完 9 个破坏自检
+& $py tools\run_all_break_checks.py   # 一次跑完 11 个破坏自检
 ```
 
-**本轮基线**（M2-4 之后）：build OK · ctest **87/87** · `check_contracts` **ERROR=0 WARN=22**
-（R1 18 / R3 1 / R4 3）· **9 个破坏自检**全部注入点变红且文件逐字节还原
+**本轮基线**（M2-1 / M2-4 尾巴 / M2-5c / R4 收敛 / blob 命名之后）：
+build OK · ctest **89/89** ·
+`check_contracts` **ERROR=0 WARN=21**（R1 18 / R4 3）·
+**11 个破坏自检**全部注入点变红且文件逐字节还原
 （contracts / M1-7 evict / M2-6 preview / M2-6 transform / M2-7 filetree /
-M2-2 docklayout / M2-4 vectorlayer / **M2-4 tools** / **M2-4 newtools**）。
+M2-2 docklayout / M2-4 vectorlayer / M2-4 tools / M2-4 newtools /
+**M2-4 tail** / **M2-1 project**）。
 
-> ctest 条数：M2-2 之后是 86，本轮新增 `tst_M2_4_Tools` → **87**。
+> WARN 从 22 降到 21：`A-REFRESHDUP` 这条重复刷新债务本轮结清（见第 11 节），
+> 少了一条存量 WARN。
+
+> ctest 条数：M2-2 之后 86 → M2-4 加 `tst_M2_4_Tools` → 87 →
+> M2-1 加 `tst_M2_1_Project` → 88 → M2-4 尾巴加 `tst_M2_4_Tail_Tools` → **89**。
 
 **⚠ 破坏自检必须检查"哪条测试变红"，不能只检查"有测试变红"。**
 
@@ -377,9 +512,22 @@ M2-4 的 newtools 自检第一次跑的时候，7 个注入点里 6 个"通过"�
 - 注入的是**成因**，不是"看起来像成因的东西"——加深减淡那条的修法是给测试补上
   **真实图层上**的 burn 路径断言（原来只有静态函数的断言）。
 
+**⚠ 判红不能写成 `expected_test in out`。**
+
+Qt Test 在 **PASS 行和 FAIL 行都会打印测试名**，所以 `in out` 对全绿输出同样成立
+—— 这是**门禁自己的假绿**。M2-4 尾巴自检第一次跑就是这个毛病：7 个注入点里 3 个
+报 `OK: the expected test went red`，但同一次输出是 `Totals: 19 passed, 0 failed`。
+正确写法是**只从 `FAIL!` 行里取名字**：
+
+```python
+failed_lines = [ln for ln in out.splitlines() if "FAIL!" in ln]
+```
+
+判断一条门禁会不会假绿的方法：**什么都没坏的时候它会不会报 OK**。
+
 ---
 
-## 6. 工作区约定（别再踩）
+## 9. 工作区约定（别再踩）
 
 1. **源码注释一律英文**；用户面向的 UI 字符串（`tr()` 包裹）可以用中文。
 2. **不要用 PowerShell 改源码** —— 用 Python 补丁脚本，锚点用 ASCII / 行号定位。
@@ -437,20 +585,94 @@ M2-4 的 newtools 自检第一次跑的时候，7 个注入点里 6 个"通过"�
     这个 bug 看不见 —— 现在补上了**真实图层上**的 burn 路径断言（探针必须落在一个
     本来就**不是黑色**的像素上，否则"变暗"和"本来就是黑"分不开）。
 23. **门禁脚本之间的 build 会互相踩**。破坏自检一个一个跑（`tools/run_all_break_checks.py`
-    一次跑完 9 个），**不要**并行 —— 两个脚本同时改同一个源文件 / 同时重建会互相踩。
+    一次跑完 11 个），**不要**并行 —— 两个脚本同时改同一个源文件 / 同时重建会互相踩。
+24. **判红不能写成 `expected_test in out`**。Qt Test 在 **PASS 行和 FAIL 行都打印测试名**，
+    所以 `in out` 对全绿输出同样成立 —— 这是**门禁自己的假绿**。M2-4 尾巴自检第一次跑
+    就有 3 个注入点报 `OK: the expected test went red`，而同一份输出是
+    `Totals: 19 passed, 0 failed`。正确写法是**只从 `FAIL!` 行里取名字**：
+    `failed_lines = [ln for ln in out.splitlines() if "FAIL!" in ln]`。
+    判断一条门禁会不会假绿的方法：**什么都没坏的时候它会不会报 OK**。
+25. **Qt 6.11 的几个序列化接口是私有的，写文件格式前先确认**：
+    - `QZipReader` / `QZipWriter` → 私有（`QtCore/private/qzipreader_p.h`）
+    - `QPainterPath::writeSvg()` / `readSvg()` / `elementList()` → 私有（`QtGui/qpainterpath_p.h`）
+    - `QPainterPathIterator` → 6.11 已移除
+    - **`QDataStream &operator<<(QDataStream&, const QPainterPath&)` → 公开**（`.vst` 用的就是它）
+    - `QPainterPath::writeSvg` 的替代：`QDataStream`（无损，保住控制点和 double 精度）
+26. **`.vst` 的清单里存的是"文档画布尺寸"，不是"底图尺寸"**。`LayerStack::canvasSize()`
+    优先返回**第 0 层**的图像尺寸（LYR-05：独立用 LayerStack 时以第一层为准），
+    而裁剪/缩放之后文档尺寸是显式设的、跟底图不一样。工程格式要的是后者 →
+    用 `LayerStack::documentCanvasSize()`。
+
+27. **增量门禁的"新增"判据是"计数比基点高"，不是"这行被改过"。**
+    破坏自检往里注入时，注入份数必须**按基点算**：收敛过的文件当前计数可能
+    远低于基点，固定 +1 根本够不到阈值，门禁只报 WARN 不报 ERROR，自检就假绿。
+    `break_test_contracts.py` 的 R4 注入现在按 `基点 - 当前 + 2` 算份数
+    （+2 而不是 +1：锚点块里原本有 1 行调用，涨的是 `copies - 1`）。
+
+28. **收敛一个重复调用时，先确认剩下的"单独调用"是不是故意的。**
+    把成对的调用合并进单一入口后，剩下那些**只出现一半**的调用各有各的理由
+    （信号处理器只标脏、预览路径只重绘），不能顺手一起改掉。
 
 ---
 
-## 7. 已登记的开放债务（`docs/DEBT.md`）
+## 10. 已登记的开放债务（`docs/DEBT.md`）
 
 M2 关闭的：`A-ADJUSTPREVIEW`（M2-6a）、`A-HUESATLUT`（M2-6b）、`A-MEDIADISPATCH`（M2-7a）、
 `A-FILETREEMODEL`（M2-7b）、`A-VTABAPI` / `A-DRAGTHRESHOLD` / `A-STACKWIDGET`（M2-2）、
 `A-MOVE` / `A-KEYBOARD` / `A-CROP` / `A-BRUSHOPTIONS` / `A-TOOLICON` /
-`A-TOOLGROUP` / `A-TOOLSET` / `A-VECTORCOORD` / `A-CROPASPECT`（M2-4）。
+`A-TOOLGROUP` / `A-TOOLSET` / `A-VECTORCOORD` / `A-CROPASPECT`（M2-4）、
+`A-VIEWTRANSFORM` / `A-TOOLTAIL` / `A-SELECTCLIP`（M2-4 尾巴）、
+`A-MARQUEE`（M2-5c）、
+`A-PROJECTFORMAT` / `A-AUTOSAVE` / `A-VSTBLOB`（M2-1）、
+`A-REFRESHDUP`（刷新入口收敛，见第 11 节）。
 
 M2 相关、仍然开放：
 
-- `A-PROJECTFORMAT` / `A-AUTOSAVE`（M2-1）
-- `A-LAYERDRAG` / `A-TOOLCONFIG` / `A-SWATCH`（M2-4 剩余；`A-SWATCH` 是色板/渐变/图案面板的假数据）
+- `A-LAYERDRAG` / `A-TOOLCONFIG` / `A-SWATCH`（`A-SWATCH` 是色板/渐变/图案面板的假数据）
 - `A-THEME`（M2-8 只修了暗色 QSS 硬编码，主题画廊的「应用」按钮仍是空实现）
 - `A-FILTERMENU`（滤镜菜单 5 个入口仍 `setEnabled(false)`）
+
+---
+
+## 11. 结构性收尾：刷新入口收敛 + `.vst` blob 命名
+
+### 11.1 刷新入口收敛（结清 `A-REFRESHDUP`）
+
+R4 规则（契约 3.5）说：同一个文件里同一个刷新入口不该散落多处。上一轮抽
+`setupAfterLayerStackReady()` 时往 `imagewindow.cpp` 里搬了 1 个
+`invalidateCurrentCache()` + 1 个 `renderToView()`，计数从 46/43 涨到 47/44，
+增量门禁直接报 ERROR。
+
+修法不是"把这次多出来的那个调用删掉"——那是糊补丁。真正的修法是**把重复本身
+消掉**：
+
+- 新增私有 `ImageWindow::refreshCanvas()`：标脏 + 重绘，**全类只有这一份实现**。
+- 37 处手写 `invalidateCurrentCache(); renderToView();` 全部改成调它。
+- 公开的 `refreshCanvasNow()` 也转发到同一个实现。
+- 剩下**故意只标脏不重绘**的 11 处（图层变更信号处理器、只改元数据的操作）
+  和**故意只重绘不标脏**的 8 处（滤镜预览路径、异步渲染回调）保持原语义。
+
+结果：`renderToView` 44 → 8，`invalidateCurrentCache` 47 → 11，都远低于基点，
+R4 归零。**顺带把"漏掉一半就是静默陈旧帧"这个结构性问题消掉了**——以前
+53 处手写组合，漏一处就是 bug；现在物理上写不出"只标脏不重绘"的错误组合。
+
+> 剩下那 11 处单独的 `invalidateCurrentCache()` **不是**漏改：图层变更信号
+> 每来一次就重绘一次太浪费，它们要的就是"标脏，等下一次渲染统一算"。
+> 同理，滤镜预览路径的 `renderToView()` 不能配标脏——预览图不是文档。
+
+### 11.2 `.vst` blob 命名：改用文件内 layer index
+
+**原来的 bug**：blob 名字用 `layer.stableId`。而 `stableId` 来自**进程全局
+计数器**，读回时又原样恢复 —— 于是两个 session 可以让两个**不同**的图层拿到
+同一个 id（session A 存了 id 7；session B 新建图层，计数器又发 7；B 再存）。
+blob 表按名字索引，两个图层的像素 blob 撞名，**一层的像素被另一层静默覆盖**。
+
+**修法**：blob 名字改用**该图层在本文件里的下标**——它在这个文件内天然唯一。
+`stableId` 仍然写在清单里（那是图层身份），只是不再拿来当 blob 名字。
+
+回归测试：`tst_M2_1_Project::layersThatShareAStableIdKeepTheirOwnPixels()`
+—— 直接把两个图层的 `stableId` 改成同一个值，断言两层各自拿回**自己的**
+像素（用 ramp 图，不是纯色，否则撞名也看不出来）。
+
+破坏自检：M2-1 自检新增第 9 个注入点（blob 名字改回用 `stableId`），
+预期变红的测试就是上面那条。

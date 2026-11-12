@@ -101,6 +101,8 @@ public:
     // ===== test accessors =====
     bool isDragging() const { return m_dragging; }
     double lastZoom()  const { return m_lastZoom; }
+    // The rectangle the drag gesture built (empty until the mouse moves).
+    QRectF dragRect() const { return m_dragRect; }
 
     // The zoom factor a click applies: in when the alt key is NOT
     // pressed, out when it is.
@@ -111,6 +113,8 @@ private:
     bool    m_dragging = false;
     QPointF m_pressPos;
     double  m_lastZoom = 1.0;
+    // The "zoom to rectangle" gesture rectangle. Applied on release.
+    QRectF  m_dragRect;
 };
 
 // ---------------------------------------------------------------------------
@@ -144,6 +148,9 @@ private:
     bool   m_rotating = false;
     QPointF m_pressPos;
     double m_rotationDeg = 0.0;
+    // The angle the view had when the drag started. The drag ADDS to
+    // it, so repeated drags accumulate instead of snapping back to zero.
+    double m_startRotationDeg = 0.0;
 };
 
 } // namespace tools

@@ -47,6 +47,13 @@ private:
     QString promptForOpenPath() const;
     bool    writeImage(const QString& path);
 
+    // True when the path names a Vistella PROJECT (.vst) rather than a
+    // flat picture.
+    //
+    //   A .vst save writes the WHOLE layer stack; every other extension
+    //   writes the composite image.
+    static bool isProjectPath(const QString& path);
+
     // 写盘用的合成图 = 文档像素 + 文字 item.
     // 一次性渲染, 不改场景和撤销栈; 合成失败时退回原始像素.
     bool    buildSaveComposite(cv::Mat& out) const;

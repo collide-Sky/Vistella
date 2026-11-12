@@ -88,6 +88,26 @@ def refresh_counts(text: str) -> dict[str, int]:
     return counts
 
 
+def base_count_for(path: pathlib.Path, call: str) -> int:
+    """该文件在基点版本 (HEAD) 里的刷新调用次数。
+
+    R4 是**增量**门禁: 只有当文件里的调用次数**超过基点**时才报 ERROR。
+    注入一次 (+1) 未必能超过基点 —— 收敛过的文件可能比基点少很多。
+    所以注入的份数必须按基点算, 而不是固定 +1。
+
+    读不出来 (文件是新增的 / git 不可用) 时返回 0: 那时 +1 就够了。
+    """
+    rel = path.relative_to(REPO).as_posix()
+    try:
+        r = subprocess.run(["git", "-C", str(REPO), "show", "HEAD:" + rel],
+                           capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    if r.returncode != 0:
+        return 0
+    return refresh_counts(r.stdout.decode("utf-8", errors="replace")).get(call, 0)
+
+
 def pick_r4_target() -> tuple[pathlib.Path, str, int]:
     """挑刷新调用重复最多的文件 + 调用名。
 
@@ -108,12 +128,13 @@ def pick_r4_target() -> tuple[pathlib.Path, str, int]:
     return best if best is not None else (REPO / "src", "", 0)
 
 
-def find_r4_anchor(path: pathlib.Path, call: str) -> tuple[str, str, int]:
+def find_r4_anchor(path: pathlib.Path, call: str,
+                   copies: int = 1) -> tuple[str, str, int]:
     """找一行可安全复制的刷新调用语句, 以及它所在的唯一上下文块。
 
     返回 (anchor_block, injected_block, 该调用当前次数)。
-    injected_block 把那行**原样复制一份**, 所以注入后仍是合法 C++,
-    而且计数必然 +1。
+    injected_block 把那行**原样复制 copies 份**, 所以注入后仍是合法 C++,
+    而且计数必然 +copies。
     """
     text = read_raw(path)
     nl = "\r\n" if "\r\n" in text else "\n"
@@ -131,7 +152,7 @@ def find_r4_anchor(path: pathlib.Path, call: str) -> tuple[str, str, int]:
             block = nl.join(lines[i:i + span])
             if text.count(block) != 1:
                 continue
-            injected = nl.join([line, line] + lines[i + 1:i + span])
+            injected = nl.join([line] * copies + lines[i + 1:i + span])
             return block, injected, before
     return "", "", before
 
@@ -143,8 +164,14 @@ def check_r4(failures: list[str]) -> None:
             "R4: 全项目找不到刷新调用重复 >= %d 次的文件 (最多的是 %s 的 %d 次) -- "
             "R4 已无法被破坏自检覆盖" % (R4_MIN_OCCURRENCES, path, n))
         return
-    anchor, inject, before = find_r4_anchor(path, call)
     rel = path.relative_to(REPO)
+    # R4 是增量门禁: 只有超过**基点**的计数才算新增违规。所以注入的份数
+    # 必须把计数推到基点之上, 固定 +1 在收敛过的文件上不够。
+    base_n = base_count_for(path, call)
+    # 锚点块原本有 1 行调用, 注入后变成 copies 行调用, 所以计数涨的是
+    # (copies - 1) 而不是 copies: n + (copies - 1) = base_n + 1。
+    copies = max(2, base_n - n + 2)
+    anchor, inject, before = find_r4_anchor(path, call, copies)
     if not anchor:
         failures.append("R4: 在 %s 里找不到可安全复制的 '%s' 调用行" % (rel, call))
         return
@@ -156,17 +183,21 @@ def check_r4(failures: list[str]) -> None:
             return
         write_raw(path, text.replace(anchor, inject, 1))
         after = refresh_counts(read_raw(path)).get(call, 0)
-        if after != before + 1:
-            failures.append("R4: 注入后 %s 的计数没变 (%d -> %d) -- 锚点失效"
-                            % (call, before, after))
+        if after != before + copies - 1:
+            failures.append("R4: 注入后 %s 的计数没变 (%d -> %d, 期望 %d) -- 锚点失效"
+                            % (call, before, after, before + copies - 1))
+            return
+        if after <= base_n:
+            failures.append("R4: 注入后 %s 的计数 %d 没有超过基点 %d -- 门禁不会报 ERROR"
+                            % (call, after, base_n))
             return
         code, out = run_gate()
         if code == 0 or "[ERROR]" not in out or "R4" not in out:
             failures.append("%s: expected R4 ERROR, got exit=%s; tail:\n%s"
                             % (rel, code, out[-600:]))
         else:
-            print("OK  R4: %s -> %s (%d -> %d) gate went red (exit=%d)"
-                  % (rel, call, before, after, code))
+            print("OK  R4: %s -> %s (%d -> %d, base %d) gate went red (exit=%d)"
+                  % (rel, call, before, after, base_n, code))
     finally:
         path.write_bytes(backup)
 

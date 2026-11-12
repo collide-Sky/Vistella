@@ -26,6 +26,8 @@ CHECKS = [
     "break_check_m2_4_vectorlayer.py",
     "break_check_m2_4_tools.py",
     "break_check_m2_4_newtools.py",
+    "break_check_m2_4_tail.py",
+    "break_check_m2_1_project.py",
 ]
 
 

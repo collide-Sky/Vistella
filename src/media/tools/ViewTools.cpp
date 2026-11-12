@@ -108,30 +108,58 @@ void ZoomTool::onMousePress(QMouseEvent* e, ImageWindow* host, const QPointF& sc
 
     m_pressPos = scenePos;
     m_dragging = true;
+    m_dragRect = QRectF();
 
     // The alt key switches between zooming in and zooming out.
     const bool alt = (e->modifiers() & Qt::AltModifier) != 0;
+
+    // The zoom applies on the press, and it zooms AT THE CLICK POINT.
+    //
+    //   The canvas uses AnchorUnderMouse, so setZoom() keeps the point
+    //   under the cursor fixed -- that is the behaviour the user expects
+    //   from a zoom tool.
     const double factor = zoomFactorFor(alt);
-    const double z = canvas->zoom() * factor;
-    m_lastZoom = std::clamp(z, 0.05, 20.0);
-    canvas->setZoom(m_lastZoom);
+    const double z = std::clamp(canvas->zoom() * factor, 0.05, 20.0);
+    m_lastZoom = z;
+    canvas->setZoom(z);
 }
 
 void ZoomTool::onMouseMove(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)
 {
     Q_UNUSED(e);
-    Q_UNUSED(host);
-    Q_UNUSED(scenePos);
-    // The zoom applies on the press. The drag is reserved for the
-    // "zoom to rectangle" behaviour, which is not implemented yet.
+    if (!m_dragging || !host) return;
+
+    auto* canvas = host->imageCanvas();
+    if (!canvas) return;
+
+    // The drag builds the "zoom to rectangle" gesture. The rectangle is
+    // only APPLIED on release -- zooming continuously while dragging
+    // would move the scene out from under the pointer and the rectangle
+    // would chase the cursor.
+    m_dragRect = QRectF(m_pressPos, scenePos).normalized();
 }
 
 void ZoomTool::onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)
 {
     Q_UNUSED(e);
-    Q_UNUSED(host);
-    Q_UNUSED(scenePos);
+    if (!host) { m_dragging = false; return; }
+
+    auto* canvas = host->imageCanvas();
+    if (!canvas) { m_dragging = false; return; }
+
+    // A drag of more than a couple of pixels means "zoom to this
+    // rectangle". Anything smaller was a plain click (the zoom already
+    // happened on the press).
+    const bool wasDrag = m_dragRect.width() > 2.0 || m_dragRect.height() > 2.0;
+    if (wasDrag) {
+        if (canvas->zoomToRect(m_dragRect)) {
+            m_lastZoom = canvas->zoom();
+        }
+    }
+
     m_dragging = false;
+    m_dragRect = QRectF();
+    Q_UNUSED(scenePos);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +188,14 @@ void RotateViewTool::onMousePress(QMouseEvent* e, ImageWindow* host, const QPoin
 
     m_rotating = true;
     m_pressPos = scenePos;
-    m_rotationDeg = 0.0;
+
+    // The angle is RELATIVE to the angle the view already had, so a
+    // second drag adds to the first instead of snapping back to zero.
+    m_startRotationDeg = 0.0;
+    if (auto* canvas = host->imageCanvas()) {
+        m_startRotationDeg = canvas->rotationDeg();
+    }
+    m_rotationDeg = m_startRotationDeg;
 }
 
 void RotateViewTool::onMouseMove(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)
@@ -174,12 +209,15 @@ void RotateViewTool::onMouseMove(QMouseEvent* e, ImageWindow* host, const QPoint
     // The horizontal distance from the press point drives the angle.
     // One full turn is 800 scene pixels.
     const double dx = scenePos.x() - m_pressPos.x();
-    m_rotationDeg = dx * 360.0 / 800.0;
+    const double deltaDeg = dx * 360.0 / 800.0;
+    m_rotationDeg = m_startRotationDeg + deltaDeg;
 
     // The VIEW is rotated, the pixels are not.
-    QTransform t;
-    t.rotate(m_rotationDeg);
-    canvas->setTransform(t);
+    //
+    //   The canvas owns the rotation and rebuilds the transform from it
+    //   together with the zoom, so rotating no longer throws the zoom
+    //   away and a later zoom change no longer throws the rotation away.
+    canvas->setRotationDeg(m_rotationDeg);
 }
 
 void RotateViewTool::onMouseRelease(QMouseEvent* e, ImageWindow* host, const QPointF& scenePos)

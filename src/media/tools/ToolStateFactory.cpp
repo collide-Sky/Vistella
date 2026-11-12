@@ -23,6 +23,10 @@
 #include "DodgeBurnTool.h"
 #include "BlurSharpenSmudgeTool.h"
 #include "ViewTools.h"
+#include "PatternStampTool.h"
+#include "HistoryBrushTool.h"
+#include "EllipseSelect.h"
+#include "PolygonSelect.h"
 
 namespace tools {
 
@@ -53,6 +57,10 @@ ToolState* createToolState(mediators::ToolId id)
     case mediators::ToolId::Hand:       return new HandTool();
     case mediators::ToolId::Zoom:       return new ZoomTool();
     case mediators::ToolId::Rotate:     return new RotateViewTool();
+    case mediators::ToolId::PatternStamp: return new PatternStampTool();
+    case mediators::ToolId::HistoryBrush: return new HistoryBrushTool();
+    case mediators::ToolId::EllipseSelect: return new EllipseSelect();
+    case mediators::ToolId::PolygonSelect: return new PolygonSelect();
     case mediators::ToolId::None:
     case mediators::ToolId::Transform:
     default:                            return nullptr;

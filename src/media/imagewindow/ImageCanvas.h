@@ -45,6 +45,41 @@ public:
     double zoom() const { return m_zoom; }
     void   setZoom(double z);
 
+    // View rotation, in degrees.
+    //
+    //   The rotation is VIEW state, not pixel state -- rotating the view
+    //   leaves the document's pixels alone. It lives here (next to the
+    //   zoom) because the view transform has to be rebuilt from both
+    //   pieces every time either one changes.
+    //
+    //   It used to be applied by calling setTransform() directly from the
+    //   rotate tool, which had two problems:
+    //     1. setTransform() REPLACES the whole matrix, so the zoom scale
+    //        was dropped -- rotating the view silently reset the zoom.
+    //     2. applyTransform() (the canonical "re-apply the zoom" path)
+    //        starts with resetTransform(), so ANY later zoom change
+    //        wiped the rotation again.
+    //   Two writers for one transform, neither aware of the other.
+    //
+    //   Now there is one writer: the canvas keeps m_zoom and m_rotation
+    //   and rebuilds the matrix in applyTransform() from both.
+    double rotationDeg() const { return m_rotationDeg; }
+    void   setRotationDeg(double deg);
+
+    // Zoom to a scene rectangle (the zoom tool's drag gesture).
+    //
+    //   Fits the rectangle into the viewport and updates m_zoom to match,
+    //   so the zoom stays the single source of truth for the scale.
+    //   Returns false when the rectangle is empty or degenerate.
+    bool   zoomToRect(const QRectF& sceneRect);
+
+    // The pivot of the view rotation: the centre of the image item, or
+    // the centre of the scene rect for a document with no pixmap yet.
+    //
+    //   Public so a test can check that the rotation really turns in
+    //   place instead of orbiting the top-left corner.
+    QPointF viewCenter() const;
+
     // Hit-test a scene point against the registered handles. Used by
     // eventFilter for MosaicTool / TextOverlayController.
     enum class HitResult { None, MosaicBrush, TextHandle };
@@ -160,8 +195,9 @@ private:
     //   which is why the assignment is guarded on scene().
     bool m_viewStoredMouseEvent = false;
 
-    // Re-apply m_zoom to the QGraphicsView transform (resetTransform + scale).
-    // Called by setZoom / onZoomIn/Out/ResetZoom / wheelEvent after m_zoom changes.
+    // Re-apply m_zoom (and m_rotationDeg) to the QGraphicsView transform.
+    // Called by setZoom / onZoomIn/Out/ResetZoom / wheelEvent / setRotationDeg
+    // after either piece of view state changes.
     void applyTransform();
 
     ImageWindow*               m_host = nullptr;
@@ -171,6 +207,10 @@ private:
     QGraphicsPixmapItem*       m_item    = nullptr;
     QGraphicsEllipseItem*      m_brushCursor = nullptr;
     double                     m_zoom    = 1.0;
+    // M2-4: the view rotation in degrees. Kept next to m_zoom so the
+    //   transform has exactly one writer (applyTransform). See the
+    //   rotationDeg() comment for why it cannot live in the tool.
+    double                     m_rotationDeg = 0.0;
 
     // P0-4.3: selection rendering
     selection::SelectionModel* m_sel  = nullptr;     // weak ref

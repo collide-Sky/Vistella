@@ -89,6 +89,10 @@ namespace selection { class SelectionModel; }
 #include "filters/FilterStrategy.h"
 // TransformBox forward decl (8 handle 自由变换)
 namespace transform { class TransformBox; }
+// M2-1: the auto-save + crash recovery.
+//   Full include: the member is a std::unique_ptr, so the destructor
+//   needs the complete type.
+#include "project/AutoSave.h"
 
 // =============================================================
 // TextItemCommand — 文字 item 的增/删/改/移动 撤销命令
@@ -194,6 +198,24 @@ public:
     ~ImageWindow() override;
 
     bool loadFile(const QString &path, QString *err = nullptr);
+
+    // M2-1: load a .vst PROJECT.
+    //
+    //   A .vst carries the whole layer stack, so it cannot go through
+    //   the "decode a bitmap and make it the base layer" path that
+    //   loadFile() uses for pictures. This rebuilds the stack from the
+    //   file and then re-runs the same setup the picture path does
+    //   (undo stack, smart-object watcher, selection wiring, canvas).
+    bool loadProjectFile(const QString &path, QString *err = nullptr);
+
+    // M2-1: the setup that runs after the layer stack has its content.
+    //
+    //   Shared by the picture path (loadFile) and the project path
+    //   (loadProjectFile): the smart-object watcher, the layer panel,
+    //   the panel's signal wiring, the selection wiring, the property
+    //   info. `preview` is the composite that the property panel
+    //   reports the size of.
+    void setupAfterLayerStackReady(const QString &path, const cv::Mat &preview);
 
     // filePath 加防御性检查
     //   之前: return m_filePath; 在 m_filePath 字段内存被踩时崩 (tst_ImageWorker
@@ -330,7 +352,7 @@ public:
     //  作废渲染缓存 + 重绘画布.
     //  LayerCommand 在 undo/redo 末尾统一调这个: 撤销/重做改的是图层状态,
     //  画布必须立刻跟着重画, 否则用户看到的是上一帧.
-    void refreshCanvasNow() { invalidateCurrentCache(); renderToViewPublic(); }
+    void refreshCanvasNow() { refreshCanvas(); }
 
     //  给 LayerPanel 调 (MainWindow 通过这些访问 layerStack + undoStack)
     layers::LayerStack* layerStack() const { return m_layerStack.get(); }
@@ -580,6 +602,11 @@ private:
     std::unique_ptr<MosaicTool>             m_mosaicTool;                // P0-1.2
     std::unique_ptr<TextOverlayController>  m_textCtrl;                  // P0-1.2
     std::unique_ptr<ImageIOController>      m_io;                        // P0-1.2
+    // M2-1: the auto-save + crash recovery.
+    //   Writes a RECOVERY COPY (a .vst in the app's data folder) when
+    //   the document has unsaved changes. It never touches the
+    //   document's own file -- that holds what the user last saved.
+    std::unique_ptr<project::AutoSave>      m_autoSave;
     // PS 风格色彩调整 UI. Parent = m_rightDock's tabWidget
     //   (set via RightPanelDock::setAdjustmentPanel). Qt owns lifetime.
     AdjustmentPanel                        *m_adjustmentPanel = nullptr;  // P0-3.2
@@ -643,6 +670,11 @@ private:
     std::unique_ptr<layers::LayerStack> m_layerStack;
     bool    m_currentDirty = true;
     void    invalidateCurrentCache() { m_currentDirty = true; }
+    //  The ONE repaint entry point: invalidate the composite cache and
+    //  repaint the canvas. Every call site that used to spell out the
+    //  invalidate+render pair now calls this, so a missing half of the
+    //  pair (the silent stale frame) is impossible by construction.
+    void    refreshCanvas();
     void    rebuildCurrentCache();
     //  图层栈是文档像素的容器 —— 文档有像素就必须有图层栈.
     //  loadFile / setDocumentImage 共用; 裸 new ImageWindow (单测) 也靠它补上.

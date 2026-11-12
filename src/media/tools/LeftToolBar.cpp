@@ -61,6 +61,10 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     ui->btnHand->setIcon(svgIcon("tool-hand.svg"));
     ui->btnZoom->setIcon(svgIcon("tool-zoom.svg"));
     ui->btnRotate->setIcon(svgIcon("tool-rotate.svg"));
+    ui->btnPatternStamp->setIcon(svgIcon("tool-patternstamp.svg"));
+    ui->btnHistoryBrush->setIcon(svgIcon("tool-historybrush.svg"));
+    ui->btnEllipseSelect->setIcon(svgIcon("tool-ellipseselect.svg"));
+    ui->btnPolygonSelect->setIcon(svgIcon("tool-polygonselect.svg"));
     for (auto* b : findChildren<QToolButton*>()) {
         b->setIconSize(QSize(16, 16));
         b->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -94,6 +98,10 @@ LeftToolBar::LeftToolBar(QWidget* parent) : QWidget(parent)
     m_buttons[mediators::ToolId::Hand]       = ui->btnHand;
     m_buttons[mediators::ToolId::Zoom]       = ui->btnZoom;
     m_buttons[mediators::ToolId::Rotate]     = ui->btnRotate;
+    m_buttons[mediators::ToolId::PatternStamp]= ui->btnPatternStamp;
+    m_buttons[mediators::ToolId::HistoryBrush]= ui->btnHistoryBrush;
+    m_buttons[mediators::ToolId::EllipseSelect]= ui->btnEllipseSelect;
+    m_buttons[mediators::ToolId::PolygonSelect]= ui->btnPolygonSelect;
 
     // PS-style fg/bg swatch (50x50 fg + 10x50 bg)
     //   Initial paint + click handlers; double-click = swap. The swatches
@@ -153,17 +161,23 @@ QVector<QPair<QList<int>, QStringList>> LeftToolBar::toolGroupDefinitions()
     // The Photoshop groups. The order of the tools inside a group is
     // the order the popup shows them in; the first one is the default.
     return {
-        // The marquee group: the three selection tools.
-        { {int(T::RectSelect), int(T::Lasso), int(T::MagicWand)},
-          {"tool-rectselect.svg", "tool-lasso.svg", "tool-magicwand.svg"} },
+        // The marquee group: the five selection tools.
+        //   M2-5c added the elliptical and the polygonal marquee.
+        { {int(T::RectSelect), int(T::EllipseSelect), int(T::PolygonSelect),
+           int(T::Lasso), int(T::MagicWand)},
+          {"tool-rectselect.svg", "tool-ellipseselect.svg", "tool-polygonselect.svg",
+           "tool-lasso.svg", "tool-magicwand.svg"} },
 
         // The retouch group: the four healing tools.
         { {int(T::Clone), int(T::Heal), int(T::Patch), int(T::RedEye)},
           {"tool-clone.svg", "tool-heal.svg", "tool-patch.svg", "tool-redeye.svg"} },
 
-        // The brush group: the brush, the eraser and the mask brush.
-        { {int(T::Brush), int(T::Eraser), int(T::MaskBrush)},
-          {"tool-brush.svg", "tool-eraser.svg", "tool-maskbrush.svg"} },
+        // The brush group: the brush, the eraser, the mask brush, the
+        //   pattern stamp and the history brush.
+        { {int(T::Brush), int(T::Eraser), int(T::MaskBrush),
+           int(T::PatternStamp), int(T::HistoryBrush)},
+          {"tool-brush.svg", "tool-eraser.svg", "tool-maskbrush.svg",
+           "tool-patternstamp.svg", "tool-historybrush.svg"} },
 
         // The shape group: the shape tool and the pen.
         { {int(T::Shape), int(T::Pen)},
@@ -425,6 +439,10 @@ ToolState* LeftToolBar::createBlurSharpenSmudgeTool() { return createToolState(m
 ToolState* LeftToolBar::createHandTool()       { return createToolState(mediators::ToolId::Hand); }
 ToolState* LeftToolBar::createZoomTool()       { return createToolState(mediators::ToolId::Zoom); }
 ToolState* LeftToolBar::createRotateViewTool() { return createToolState(mediators::ToolId::Rotate); }
+ToolState* LeftToolBar::createPatternStampTool(){ return createToolState(mediators::ToolId::PatternStamp); }
+ToolState* LeftToolBar::createHistoryBrushTool(){ return createToolState(mediators::ToolId::HistoryBrush); }
+ToolState* LeftToolBar::createEllipseSelectTool(){ return createToolState(mediators::ToolId::EllipseSelect); }
+ToolState* LeftToolBar::createPolygonSelectTool(){ return createToolState(mediators::ToolId::PolygonSelect); }
 
 void LeftToolBar::attach(mediators::ToolMediator* toolMed, ToolContext* ctx)
 {
@@ -546,6 +564,18 @@ void LeftToolBar::onToolMediatorSwitched(mediators::ToolId id)
             break;
         case mediators::ToolId::Rotate:
             m_ctx->setState(std::unique_ptr<ToolState>(createRotateViewTool()));
+            break;
+        case mediators::ToolId::PatternStamp:
+            m_ctx->setState(std::unique_ptr<ToolState>(createPatternStampTool()));
+            break;
+        case mediators::ToolId::HistoryBrush:
+            m_ctx->setState(std::unique_ptr<ToolState>(createHistoryBrushTool()));
+            break;
+        case mediators::ToolId::EllipseSelect:
+            m_ctx->setState(std::unique_ptr<ToolState>(createEllipseSelectTool()));
+            break;
+        case mediators::ToolId::PolygonSelect:
+            m_ctx->setState(std::unique_ptr<ToolState>(createPolygonSelectTool()));
             break;
         default:
             m_ctx->setState(nullptr);  // None / unknown -> 释放当前 tool

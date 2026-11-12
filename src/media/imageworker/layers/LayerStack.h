@@ -354,6 +354,22 @@ public:
     cv::Size canvasSize() const;
     void    setCanvasSize(const cv::Size &size);   // 显式设 (新建空文件用)
 
+    // The DOCUMENT's canvas size, exactly as it was set.
+    //
+    //   canvasSize() PREFERS the base layer's image size over the
+    //   stored value (LYR-05: a layer stack used on its own has no
+    //   explicit canvas size, so the first layer is the best guess).
+    //   That is the right answer for "how big is the render output",
+    //   but the WRONG answer for "what was the document's size when it
+    //   was saved" -- the two differ after a crop or a resize, when
+    //   the base layer is replaced but the document size is set
+    //   explicitly.
+    //
+    //   The .vst format needs the second one: a project saved after a
+    //   crop has to come back with the cropped size, not with the base
+    //   layer's.
+    cv::Size documentCanvasSize() const { return m_canvasSize; }
+
     // ---- 清空 / 重置 ----
     void clear();
     void setBaseLayer(const cv::Mat &baseImage);

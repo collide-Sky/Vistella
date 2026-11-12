@@ -72,6 +72,13 @@ enum class ToolId {
     Hand        = 22,   // 抓手 (H) -- pans the canvas
     Zoom        = 23,   // 缩放 (Z) -- zooms the canvas
     Rotate      = 24,   // 旋转视图 (R with the hand group)
+    // ===== M2-4 tail: the last two tools the audit still listed =====
+    PatternStamp = 25,  // 图案图章 (S) -- stamps a repeating pattern
+    HistoryBrush = 26,  // 历史记录画笔 -- paints with the pixels of a
+                        //   chosen history state
+    // ===== M2-5c: the two marquees that were missing =====
+    EllipseSelect = 27, // 椭圆选框 (M with the marquee group)
+    PolygonSelect = 28, // 多边形选框 -- click the vertices, double click closes
 };
 
 class ToolMediator : public QObject

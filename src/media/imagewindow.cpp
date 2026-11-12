@@ -40,6 +40,8 @@
 #include "imageworker/layers/LayerPanel.h"
 #include "imageworker/layers/LayerCommand.h"
 #include "imageworker/layers/LayerMaskCommand.h"
+// M2-1: the .vst project format (loadProjectFile).
+#include "project/VstProject.h"
 // Unified transform dialog replaces chained QInputDialog
 #include "docks/TransformDialog.h"
 #include "../media/mediators/WorkspaceMediator.h"
@@ -366,6 +368,21 @@ ImageWindow::ImageWindow(QWidget *parent)
     //   markSaved / setFilePath / emitEditTimeShouldUpdate / emitCloseRequested
     m_io = std::make_unique<ImageIOController>(this);
     m_io->setHost(this);
+
+    // M2-1: the auto-save + crash recovery.
+    //
+    //   The auto-save writes a RECOVERY COPY (not the document's own
+    //   file) every few minutes, but only when the document has
+    //   unsaved changes. The recovery copy is in the .vst format, so it
+    //   holds the whole layer stack.
+    m_autoSave = std::make_unique<project::AutoSave>(this);
+    m_autoSave->setDirtyChecker([this]() { return isDirty(); });
+    m_autoSave->setRecoveryWriter([this](const QString&) {
+        if (!m_layerStack) return false;
+        QString err;
+        return m_autoSave->writeRecovery(m_filePath, m_layerStack.get(), &err);
+    });
+    m_autoSave->start();
 
     // PS 风格右侧 panel (1 个 widget 装 4 dock + 1 调整 tab)
     //   撤销原 3 个分离 dock (RightPanelStack + adjDock + infoDock) + addDockWidget 抢画布位置
@@ -754,8 +771,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
             if (l) m_undoStack->push(new layers::LayerCommand(
                 m_layerStack.get(), layers::LayerCommand::Add, *l));
         }
-        invalidateCurrentCache();
-        renderToView();
+        refreshCanvas();
         statusBar()->showMessage(tr("已新建图层"), 2000);
         return true;
     }
@@ -770,8 +786,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
             if (l) m_undoStack->push(new layers::LayerCommand(
                 m_layerStack.get(), layers::LayerCommand::Add, *l));
         }
-        invalidateCurrentCache();
-        renderToView();
+        refreshCanvas();
         statusBar()->showMessage(tr("已复制图层"), 2000);
         return true;
     }
@@ -786,8 +801,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
         } else {
             m_layerStack->removeLayer(sel);
         }
-        invalidateCurrentCache();
-        renderToView();
+        refreshCanvas();
         statusBar()->showMessage(tr("已删除图层"), 2000);
         return true;
     }
@@ -802,8 +816,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
         } else {
             m_layerStack->moveUp(sel);
         }
-        invalidateCurrentCache();
-        renderToView();
+        refreshCanvas();
         statusBar()->showMessage(tr("上移图层"), 2000);
         return true;
     }
@@ -817,8 +830,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
         } else {
             m_layerStack->moveDown(sel);
         }
-        invalidateCurrentCache();
-        renderToView();
+        refreshCanvas();
         statusBar()->showMessage(tr("下移图层"), 2000);
         return true;
     }
@@ -832,8 +844,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
         } else {
             m_layerStack->mergeDown(sel);
         }
-        invalidateCurrentCache();
-        renderToView();
+        refreshCanvas();
         statusBar()->showMessage(tr("已向下合并"), 2000);
         return true;
     }
@@ -849,8 +860,7 @@ bool ImageWindow::applyLayerOp(LayerOp op)
         cv::Mat m = m_layerStack->flattenVisible();
         if (m.empty()) return false;
         m_layerStack->setBaseLayer(m);
-        invalidateCurrentCache();
-        renderToView();
+        refreshCanvas();
         // We pushed the image backup before mutation; mirror after with the
         //   flattened m_current so undo restores the old image.
         if (m_undoStack) {
@@ -1074,36 +1084,19 @@ void ImageWindow::writeLayerPixels(int index, const cv::Mat &pixels)
     commitLayerEdit(index);
 }
 
-bool ImageWindow::loadFile(const QString &path, QString *err)
+// The setup that runs after the layer stack has its content.
+//
+//   It is the same for a PICTURE (one bitmap as the base layer) and for
+//   a PROJECT (a whole .vst stack): the smart-object watcher, the
+//   layer panel, the panel's signal wiring, the selection wiring.
+//
+//   It used to live inline in loadFile(), which meant the .vst path
+//   could not reuse it -- and a copy of 900 lines of wiring would have
+//   been the alternative. Two entry points, one setup.
+void ImageWindow::setupAfterLayerStackReady(const QString &path, const cv::Mat &preview)
 {
-    // IMREAD_UNCHANGED 保留原 channels (灰度图保存后还能 reload)
-    cv::Mat img = cv::imread(path.toLocal8Bit().toStdString(), cv::IMREAD_UNCHANGED);
-    if (img.empty()) {
-        if (err) *err = QStringLiteral("cv::imread failed: %1").arg(path);
-        return false;
-    }
-    // 统一转 8U (16bit PNG 之类 ImageProcessor 全部算法都是 8U)
-    if (img.depth() != CV_8U) {
-        cv::Mat tmp;
-        img.convertTo(tmp, CV_8U);
-        img = tmp;
-    }
-    m_original = img.clone();
     m_filePath = path;
-    // m_zoom 搬到 m_canvas
-    m_canvas->setZoom(1.0);
 
-    // 默认参数 (clean 状态)
-    // 旧 m_adjustment 已删除, ParamSet 在 阶段重新设计
-
-    // 清空撤销栈
-    m_undoStack->clear();
-    m_savedIndex = 0;
-
-    //  初始化 layerStack, 把加载的图片作为 base layer
-    //   LayerStack 是 QObject, parent = this (生命周期跟随 ImageWindow)
-    ensureLayerStack();
-    m_layerStack->setBaseLayer(img);
     // 智能对象文件监听器
     //   监听每个 SmartObject layer 的源文件 mtime, 触发源变化时弹 statusBar 提示
     //   layerAdded/Removed/Changed 后 rewatchAll 同步 watch 列表 (MainWindow 4 slot
@@ -1133,8 +1126,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             return;
         }
         if (m_layerStack->refreshSmartObject(idx)) {
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("已刷新: %1").arg(name), 3000);
         } else {
             statusBar()->showMessage(
@@ -1300,8 +1292,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(), newIdx, picked, 1.0);
                 m_undoStack->push(cmd);
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("已应用智能滤镜: %1").arg(picked), 3000);
         });
         // SmartObject scale + rotate non-destructive transform
@@ -1413,8 +1404,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                 if (l) m_undoStack->push(new layers::LayerCommand(
                     m_layerStack.get(), layers::LayerCommand::Add, *l));
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("已新建 %1 图层").arg(suffix), 3000);
         });
@@ -1432,8 +1422,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             } else {
                 m_layerStack->removeLayer(index);
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("已删除图层"), 3000);
         });
 
@@ -1454,8 +1443,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                 if (l) m_undoStack->push(new layers::LayerCommand(
                     m_layerStack.get(), layers::LayerCommand::Add, *l));
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("已复制图层"), 3000);
         });
 
@@ -1472,8 +1460,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             } else {
                 m_layerStack->moveUp(index);
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("上移图层"), 2000);
         });
 
@@ -1487,8 +1474,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             } else {
                 m_layerStack->moveDown(index);
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("下移图层"), 2000);
         });
 
@@ -1508,8 +1494,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             } else {
                 m_layerStack->mergeDown(index);
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("已向下合并"), 3000);
         });
 
@@ -1535,8 +1520,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             //   rewriting LayerStack
             //   internal state. Deferred to P1.5+.
             m_layerStack->setBaseLayer(m);
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("已合并所有可见图层到 base (仅 base 保留)"), 3000);
         });
@@ -1628,8 +1612,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(),
                     layers::LayerCommand::Visible, index, oldVisible));
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 visible ? tr("已显示图层") : tr("已隐藏图层"), 2000);
         });
@@ -1683,8 +1666,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(),
                     layers::LayerCommand::Opacity, index, oldOpacity));
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("不透明度 → %1%").arg(qRound(opacity * 100.0f)), 2000);
         });
@@ -1708,8 +1690,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(),
                     layers::LayerCommand::Blend, index, oldBlend));
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("混合模式已更改"), 2000);
         });
 
@@ -1727,8 +1708,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(), index, oldText);
                 m_undoStack->push(cmd);
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("已更新文字内容"), 2000);
         });
 
@@ -1749,8 +1729,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(), index, oldFamily, oldSize, oldColor);
                 m_undoStack->push(cmd);
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("文字字体已更新"), 2000);
         });
 
@@ -1773,8 +1752,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(), index, oldPath, oldEmbed);
                 m_undoStack->push(cmd);
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("已更新 SmartObject 源: %1").arg(QFileInfo(path).fileName()),
                 3000);
@@ -1793,8 +1771,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(), index, oldType);
                 m_undoStack->push(cmd);
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("调整类型 → %1").arg(type), 2000);
         });
@@ -1815,8 +1792,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
             uchar *p = l->adjustmentLut.ptr<uchar>();
             for (int i = 0; i < 256; ++i) p[i] = static_cast<uchar>(i);
             m_layerStack->setAdjustmentLut(index, l->adjustmentLut);
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("调整层 LUT 已复位 (identity)"), 3000);
         });
@@ -1879,8 +1855,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                         QStringLiteral("Add Mask")));
                 }
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("已添加蒙版"), 3000);
         });
 
@@ -1901,8 +1876,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                     m_layerStack.get(), index, beforeMask, layers::LayerMask(),
                     QStringLiteral("Clear Mask")));
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(tr("已删除蒙版"), 3000);
         });
 
@@ -1922,8 +1896,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                         QStringLiteral("Toggle Mask")));
                 }
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 enabled ? tr("蒙版已启用") : tr("蒙版已禁用"), 2000);
         });
@@ -1945,8 +1918,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                         QStringLiteral("Invert Mask")));
                 }
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 invert ? tr("蒙版已反相") : tr("蒙版取消反相"), 2000);
         });
@@ -1968,8 +1940,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                         QStringLiteral("Mask Density")));
                 }
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("蒙版密度 → %1").arg(density, 0, 'f', 2), 2000);
         });
@@ -1990,8 +1961,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                         QStringLiteral("Mask Feather")));
                 }
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("蒙版羽化 → %1 px").arg(featherPx, 0, 'f', 1), 2000);
         });
@@ -2009,8 +1979,7 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                 statusBar()->showMessage(tr("矢量蒙版添加失败"), 3000);
                 return;
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("已添加矢量蒙版 (用 PenTool 画路径)"), 3000);
         });
@@ -2043,35 +2012,123 @@ bool ImageWindow::loadFile(const QString &path, QString *err)
                         QStringLiteral("Add Mask")));
                 }
             }
-            invalidateCurrentCache();
-            renderToView();
+            refreshCanvas();
             statusBar()->showMessage(
                 tr("已从选区添加像素蒙版"), 3000);
         });
     }
 
-    emit filePathChanged(m_filePath);
     // PropertiesDock.setImageInfo 接入
     //   之前 loadFile 完全没调 setImageInfo, PropertiesDock 始终显示 "(无)".
-    //   现在从 m_filePath (QFileInfo 取后缀得 format, 默认 dpi=72) + img.size 注入.
+    //   现在从 m_filePath (QFileInfo 取后缀得 format, 默认 dpi=72) + preview.size 注入.
     // forward via RightPanelDock::setPropertyImageInfo
     //   which routes to VPropertyPage->inner() (PropertiesDock).
     if (m_rightDock) {
         docks::PropertiesDock::ImageInfo info;
         info.filePath = m_filePath;
-        info.width    = img.cols;
-        info.height   = img.rows;
+        info.width    = preview.cols;
+        info.height   = preview.rows;
         const QString suffix = QFileInfo(m_filePath).suffix().toUpper();
         info.format   = suffix.isEmpty() ? QStringLiteral("Unknown") : suffix;
         info.dpi      = 72;  // 默认 dpi, 后续 P0-8 ICC embed 流程可读 EXIF
         m_rightDock->setPropertyImageInfo(info);
     }
+
+    emit filePathChanged(m_filePath);
+}
+
+bool ImageWindow::loadFile(const QString &path, QString *err)
+{
+    // M2-1: a .vst file is a PROJECT, not a picture. It carries the
+    //   whole layer stack, so it takes its own path: the layer stack is
+    //   rebuilt from the file instead of from a decoded bitmap.
+    if (QFileInfo(path).suffix().compare(QStringLiteral("vst"), Qt::CaseInsensitive) == 0) {
+        return loadProjectFile(path, err);
+    }
+
+    // IMREAD_UNCHANGED 保留原 channels (灰度图保存后还能 reload)
+    cv::Mat img = cv::imread(path.toLocal8Bit().toStdString(), cv::IMREAD_UNCHANGED);
+    if (img.empty()) {
+        if (err) *err = QStringLiteral("cv::imread failed: %1").arg(path);
+        return false;
+    }
+    // 统一转 8U (16bit PNG 之类 ImageProcessor 全部算法都是 8U)
+    if (img.depth() != CV_8U) {
+        cv::Mat tmp;
+        img.convertTo(tmp, CV_8U);
+        img = tmp;
+    }
+    m_original = img.clone();
+    m_filePath = path;
+    // m_zoom 搬到 m_canvas
+    m_canvas->setZoom(1.0);
+
+    // 默认参数 (clean 状态)
+    // 旧 m_adjustment 已删除, ParamSet 在 阶段重新设计
+
+    // 清空撤销栈
+    m_undoStack->clear();
+    m_savedIndex = 0;
+
+    //  初始化 layerStack, 把加载的图片作为 base layer
+    //   LayerStack 是 QObject, parent = this (生命周期跟随 ImageWindow)
+    ensureLayerStack();
+    m_layerStack->setBaseLayer(img);
+    // The shared setup (the watcher, the layer panel, the wiring).
+    setupAfterLayerStackReady(path, img);
+
     // 补回 renderToView 触发
     //   Stage B 删 m_adjustment->syncApplyCurrentParams(true) 时连带漏了渲染触发
     //     旧: syncApplyCurrentParams -> setCurrentImage -> renderToView
     //     新: 删了中间人, 直接调 renderToView
     //   不调的后果: loadFile 返回 true 但 canvas pixmap 还是空 (用户看到空白)
     renderToView();
+    return true;
+}
+
+// M2-1: load a .vst PROJECT.
+//
+//   The file carries the whole layer stack, so the stack is rebuilt
+//   from it. The composite is then rendered for the canvas and for the
+//   "original" baseline (the document's size / colour mode).
+//
+//   The stack is REPLACED, not merged: loading a project into a
+//   document that already has layers must not leave a mix of the old
+//   layers and the new ones.
+bool ImageWindow::loadProjectFile(const QString &path, QString *err)
+{
+    ensureLayerStack();
+
+    const project::VstResult r = project::loadVst(path, m_layerStack.get());
+    if (!r.ok) {
+        if (err) *err = r.error;
+        return false;
+    }
+
+    if (m_layerStack->count() == 0) {
+        if (err) *err = QStringLiteral("the project file has no layers: %1").arg(path);
+        return false;
+    }
+
+    // m_zoom 搬到 m_canvas
+    m_canvas->setZoom(1.0);
+
+    // 清空撤销栈
+    m_undoStack->clear();
+    m_savedIndex = 0;
+
+    // The composite is the document's "original" baseline: the size and
+    // the colour mode come from it, and the tools that work on the
+    // whole document (crop, resize) start from there.
+    const cv::Mat composite = m_layerStack->render();
+    if (!composite.empty()) {
+        m_original = composite.clone();
+    }
+
+    // The shared setup (the watcher, the layer panel, the wiring).
+    setupAfterLayerStackReady(path, composite);
+
+    refreshCanvas();
     return true;
 }
 
@@ -2174,7 +2231,24 @@ namespace {
     }
 }
 
-// TODO(P8.4): renderToView and invalidateCurrentCache are called 95 times in this file, so one missed pair is a silent stale frame -- see docs/DEBT.md#A-REFRESHDUP
+// refreshCanvas -- the single "the document changed on screen" entry point.
+
+//   Every call site that used to spell out invalidateCurrentCache() +
+//   renderToView() now calls this instead. One implementation means a
+//   call site cannot forget the invalidate half (which would leave a
+//   stale frame) nor the render half (which would leave the canvas
+//   showing the old composite).
+//
+//   A lone invalidateCurrentCache() is still legal: it only marks the
+//   cache dirty, and the next render picks the change up. That is what
+//   the layer-change signal handlers want (they fire per layer event,
+//   so repainting on each one would be wasteful).
+void ImageWindow::refreshCanvas()
+{
+    invalidateCurrentCache();
+    renderToView();
+}
+
 void ImageWindow::renderToView()
 {
     //  m_current 来自 layerStack.render 缓存
@@ -2409,6 +2483,11 @@ void ImageWindow::applyFilterWithStrategy(filter::FilterStrategy* strategy, cons
 void ImageWindow::markSaved()
 {
     m_savedIndex = m_undoStack->index();
+    // M2-1: the recovery copy has done its job -- the document is
+    //   saved, so a recovery copy of it would only be stale noise (and
+    //   the recovery prompt would offer the user back what they
+    //   already have).
+    if (m_autoSave) m_autoSave->removeRecovery(m_filePath);
     emit dirtyChanged(false);
 }
 
@@ -2517,8 +2596,7 @@ bool ImageWindow::toggleLayerMask()
     if (!m || m->kind == layers::LayerMask::None) return false;
     const bool newEnabled = !m->enabled;
     if (!m_layerStack->setMaskEnabled(idx, newEnabled)) return false;
-    invalidateCurrentCache();
-    renderToView();
+    refreshCanvas();
     statusBar()->showMessage(
         newEnabled ? tr("蒙版已启用") : tr("蒙版已禁用"), 2000);
     return true;
@@ -2530,8 +2608,7 @@ bool ImageWindow::removeLayerMask()
     const int idx = currentLayerIndex();
     if (idx < 0) return false;
     if (!m_layerStack->clearMaskFull(idx)) return false;
-    invalidateCurrentCache();
-    renderToView();
+    refreshCanvas();
     statusBar()->showMessage(tr("已删除蒙版"), 2000);
     return true;
 }
@@ -2545,8 +2622,7 @@ bool ImageWindow::invertLayerMask()
     if (!m || m->kind == layers::LayerMask::None) return false;
     const bool newInvert = !m->invert;
     if (!m_layerStack->setMaskInvert(idx, newInvert)) return false;
-    invalidateCurrentCache();
-    renderToView();
+    refreshCanvas();
     statusBar()->showMessage(
         newInvert ? tr("蒙版已反相") : tr("蒙版取消反相"), 2000);
     return true;
@@ -2592,8 +2668,7 @@ bool ImageWindow::applyLayerMask()
         }
         layerPtr->image = img;       // 烧进图层
         m_layerStack->clearMaskFull(idx);   // 删 mask
-        invalidateCurrentCache();
-        renderToView();
+        refreshCanvas();
         statusBar()->showMessage(tr("蒙版已应用到图层"), 3000);
         return true;
     }

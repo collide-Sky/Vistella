@@ -83,11 +83,13 @@ void tst_ImageOptionBar::ctor_have9Pages()
     //   M2-4: +8 pages for the tools that were missing (Eraser / Gradient /
     //     PaintBucket / DodgeBurn / BlurSharpenSmudge / Hand / Zoom / Rotate)
     //     = 25.
+    //   M2 尾巴: +4 pages (PatternStamp 25 / HistoryBrush 26 /
+    //     EllipseSelect 27 / PolygonSelect 28) = 29.
     //
     //   The ToolId VALUE is the page index, so the page count has to
     //   grow with every new tool -- otherwise insertWidget() would push
     //   the pages behind it out of the way.
-    QCOMPARE(stack->count(), 25);
+    QCOMPARE(stack->count(), 29);
 }
 
 void tst_ImageOptionBar::ctor_defaultPageIsNone()
@@ -143,30 +145,35 @@ void tst_ImageOptionBar::setCurrentIndex_outOfRangeIgnored()
 
 void tst_ImageOptionBar::ctor_have17Pages()
 {
-    // 25 pages (None + 24 tools; MaskBrush + Transform 走动态 addPage 路径).
+    // 29 pages (None + 28 tools; MaskBrush + Transform 走动态 addPage 路径).
     //   MaskBrush (idx=16) + Transform (idx=9) 走动态 addPage 路径.
-    //   M2-4: +8 个新增工具的占位页.
+    //   M2-4: +8 个新增工具的占位页 = 25.
+    //   M2 尾巴: +4 个新增工具的占位页 (PatternStamp 25 / HistoryBrush 26 /
+    //     EllipseSelect 27 / PolygonSelect 28) = 29.
     ImageOptionBar bar;
     QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
     QVERIFY(stack != nullptr);
-    QCOMPARE(stack->count(), 25);
+    QCOMPARE(stack->count(), 29);
 }
 
 void tst_ImageOptionBar::attach_listenAll17ToolIds()
 {
-    // attach 后, 完整的 25 个 ToolId 都能切 page.
+    // attach 后, 完整的 29 个 ToolId 都能切 page.
     ImageOptionBar bar;
     ToolContext ctx;
     QStackedWidget* stack = bar.findChild<QStackedWidget*>("stackedWidget");
     QVERIFY(stack != nullptr);
     bar.attach(&ctx);
 
-    // 0..24 全切一遍, 不 crash + currentIndex 跟着切
+    // 0..28 全切一遍, 不 crash + currentIndex 跟着切
     //
     //   M2-4: 上限从 16 提到 24 -- 新增的 8 个工具 (Eraser / Gradient /
     //   PaintBucket / DodgeBurn / BlurSharpenSmudge / Hand / Zoom /
     //   Rotate) 也必须有自己的一页, 否则 insertWidget 会把后面的页挤走.
-    for (int i = 0; i <= 24; ++i) {
+    //
+    //   M2 尾巴: 上限再提到 28 -- PatternStamp / HistoryBrush /
+    //   EllipseSelect / PolygonSelect 同样各占一页.
+    for (int i = 0; i <= 28; ++i) {
         emit ctx.toolChanged(static_cast<ToolId>(i));
         QCOMPARE(stack->currentIndex(), i);
     }

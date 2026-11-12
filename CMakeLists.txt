@@ -266,6 +266,10 @@ qt_add_resources(Vistella "vistella_tool_icons"
         src/media/tools/icons/tool-hand.svg
         src/media/tools/icons/tool-zoom.svg
         src/media/tools/icons/tool-rotate.svg
+        src/media/tools/icons/tool-patternstamp.svg
+        src/media/tools/icons/tool-historybrush.svg
+        src/media/tools/icons/tool-ellipseselect.svg
+        src/media/tools/icons/tool-polygonselect.svg
 )
 
 # 把 QML 复制到 build 目录 (跟 exe 同级), main.cpp 用 applicationDirPath() 加载,

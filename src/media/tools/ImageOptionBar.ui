@@ -65,7 +65,9 @@
 
           page17 Eraser / page18 Gradient / page19 PaintBucket /
           page20 DodgeBurn / page21 BlurSharpenSmudge /
-          page22 Hand / page23 Zoom / page24 Rotate -->
+          page22 Hand / page23 Zoom / page24 Rotate /
+          page25 PatternStamp / page26 HistoryBrush /
+          page27 EllipseSelect / page28 PolygonSelect -->
      <widget class="QWidget" name="page17"/>
      <widget class="QWidget" name="page18"/>
      <widget class="QWidget" name="page19"/>
@@ -74,6 +76,10 @@
      <widget class="QWidget" name="page22"/>
      <widget class="QWidget" name="page23"/>
      <widget class="QWidget" name="page24"/>
+     <widget class="QWidget" name="page25"/>
+     <widget class="QWidget" name="page26"/>
+     <widget class="QWidget" name="page27"/>
+     <widget class="QWidget" name="page28"/>
     </widget>
    </item>
   </layout>

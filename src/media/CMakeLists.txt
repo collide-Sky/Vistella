@@ -162,6 +162,16 @@ add_library(vistella_media STATIC
     # M2-4: the tool group button (the long-press popup).
     tools/ToolGroupButton.h
     tools/ToolGroupButton.cpp
+    # M2-4 tail: the pattern stamp and the history brush.
+    tools/PatternStampTool.h
+    tools/PatternStampTool.cpp
+    tools/HistoryBrushTool.h
+    tools/HistoryBrushTool.cpp
+    # M2-5c: the elliptical and the polygonal marquee.
+    tools/EllipseSelect.h
+    tools/EllipseSelect.cpp
+    tools/PolygonSelect.h
+    tools/PolygonSelect.cpp
 
     # F-D (2026-09-09): LeftToolBar PS 风格 2 列图标 (2 工具)
     tools/LeftToolBar.h
@@ -304,6 +314,12 @@ add_library(vistella_media STATIC
     # 像素契约 (LYR-01 / LYR-35 / CP-07): 通道归一化 + Porter-Duff over 合成原语
     imageworker/layers/PixelFormat.h
     imageworker/layers/PixelFormat.cpp
+    # M2-1: the .vst project format (the layer stack survives a save).
+    project/VstProject.h
+    project/VstProject.cpp
+    # M2-1: the auto-save + the crash recovery.
+    project/AutoSave.h
+    project/AutoSave.cpp
     # M2-6b: per-pixel adjustment payloads (HSL / B&W / ChannelMixer).
     #   A 1D LUT can only express a per-channel function, so these three
     #   adjustments need their own per-pixel transform.

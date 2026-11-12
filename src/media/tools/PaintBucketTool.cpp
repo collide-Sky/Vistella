@@ -129,45 +129,80 @@ void PaintBucketTool::onMousePress(QMouseEvent* e, ImageWindow* host, const QPoi
     QColor fg(Qt::black);
     if (auto* cs = host->colorState()) fg = cs->foregroundColor();
 
-    // The selection masks the fill.
-    const QImage mask = host->selectionModel()
-                            ? host->selectionModel()->mask()
-                            : QImage();
-    const bool hasMask = !mask.isNull()
-                         && host->selectionModel()
-                         && !host->selectionModel()->isEmpty();
-
+    // The selection clips the fill, and that clipping happens ONCE --
+    //   centrally, in ImageWindow::pushLayerImageEdit() -> clipEditToSelection().
+    //
+    //   It used to be done here as well, with a hard cut
+    //   (maskRow[x] == 0 -> skip the pixel). Two clippers with two
+    //   different rules: on a feathered edge the hard cut kept the old
+    //   colour, and the central clip then blended old -> old = old, so
+    //   the feather was lost. Now there is exactly one clipper, and it
+    //   is the one that knows about feathering.
     m_layerIndex = host->activeLayerIndex();
     m_backup = target->clone();
 
     const int channels = target->channels();
-    int filled = 0;
+    int painted = 0;
     for (int y = 0; y < target->rows; ++y) {
         uchar* row = target->ptr<uchar>(y);
-        const uchar* maskRow = hasMask ? mask.constScanLine(y) : nullptr;
         for (int x = 0; x < target->cols; ++x) {
             if (region.at<uchar>(y, x) == 0) continue;
-            if (hasMask && maskRow[x] == 0) continue;
 
             uchar* p = row + x * channels;
             p[0] = static_cast<uchar>(fg.blue());
             p[1] = static_cast<uchar>(fg.green());
             p[2] = static_cast<uchar>(fg.red());
             if (channels == 4) p[3] = 255;
-            ++filled;
+            ++painted;
         }
     }
-    m_lastFilledCount = filled;
 
-    if (filled > 0) {
+    if (painted > 0) {
+        // pushLayerImageEdit applies the selection clip AND writes the
+        //   clipped pixels back into the layer, so after this call the
+        //   layer holds exactly what the user sees.
         host->pushLayerImageEdit(m_layerIndex, m_backup, *target,
                                  QStringLiteral("Paint Bucket"));
         m_backup.release();
         host->commitLayerEdit(m_layerIndex);
+
+        // The count reports the pixels that SURVIVED the selection clip.
+        //   Counting the pre-clip pixels would tell the user "N pixels
+        //   filled" for a fill that the selection cut down to almost
+        //   nothing -- and the test asserts on this number.
+        m_lastFilledCount = countFilledPixels(*target, fg, painted);
     } else {
+        m_lastFilledCount = 0;
         m_backup.release();
     }
     host->refreshCanvasNow();
+}
+
+// Count the pixels that really carry the fill colour after the clip.
+//
+//   The pre-clip count says how many pixels the TOOL painted; the
+//   post-clip count says how many the USER got. With a selection that
+//   cuts the region, those are very different numbers.
+int PaintBucketTool::countFilledPixels(const cv::Mat& layer, const QColor& fg, int limit)
+{
+    if (layer.empty()) return 0;
+    const int channels = layer.channels();
+    const int b = fg.blue();
+    const int g = fg.green();
+    const int r = fg.red();
+
+    int n = 0;
+    for (int y = 0; y < layer.rows; ++y) {
+        const uchar* row = layer.ptr<uchar>(y);
+        for (int x = 0; x < layer.cols; ++x) {
+            const uchar* p = row + x * channels;
+            if (p[0] == b && p[1] == g && p[2] == r) {
+                ++n;
+                if (n >= limit) return n;
+            }
+        }
+    }
+    return n;
 }
 
 QWidget* PaintBucketTool::optionPage(QWidget* parent)

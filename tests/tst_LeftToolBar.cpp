@@ -67,8 +67,10 @@ void tst_LeftToolBar::test_default_8_buttons()
     //
     //   M2-4i: +7 组按钮 (ToolGroupButton 派生自 QToolButton, 所以
     //   findChildren<QToolButton*>() 也会找到它们) = 33.
+    //   M2 尾巴: +4 按钮 (PatternStamp / HistoryBrush / EllipseSelect /
+    //   PolygonSelect) = 37.
     auto btns = bar.findChildren<QToolButton*>();
-    QCOMPARE(btns.size(), 33);
+    QCOMPARE(btns.size(), 37);
 
     // The group buttons are a separate kind -- the count of each has
     // to match the group definition.
@@ -83,11 +85,14 @@ void tst_LeftToolBar::test_button_letter_codes()
     //   Q4.2.4 (2026-10-08): 加上 7 个新增 (Shape/Pen/Clone/Heal/Patch/RedEye/MaskBrush)
     //   M2-4 (2026-11-07): 加上 8 个新增 (Eraser/Gradient/PaintBucket/DodgeBurn/
     //     BlurSharpenSmudge/Hand/Zoom/Rotate)
+    //   M2 尾巴: 加上 4 个新增 (PatternStamp/HistoryBrush/EllipseSelect/
+    //     PolygonSelect)
     //   button text 仍用单字母 placeholder (后续 Q4.4 换 SVG icon)
     QStringList expected = {
         "M", "R", "L", "W", "C", "T", "B", "I",     // F-L 8 个
         "Sh", "Pn", "Cl", "Hl", "Pt", "RE", "MB",  // P0-9.4 + Q4.2.1 共 7 个
-        "Er", "Gr", "PB", "Db", "Bs", "H", "Z", "Rv" // M2-4 共 8 个
+        "Er", "Gr", "PB", "Db", "Bs", "H", "Z", "Rv", // M2-4 共 8 个
+        "Ps", "Hb", "El", "Pl"                     // M2 尾巴共 4 个
     };
     QStringList actual;
     for (auto* b : bar.findChildren<QToolButton*>()) actual << b->text();

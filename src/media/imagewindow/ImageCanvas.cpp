@@ -23,6 +23,9 @@
 #include <QPainter>
 #include <QPainterPath>
 
+#include <algorithm>
+#include <cmath>
+
 #include "../selection/SelectionModel.h"
 #include "../selection/MarchingAnts.h"
 #include "../transform/TransformBox.h"
@@ -61,11 +64,88 @@ ImageCanvas::ImageCanvas(QWidget* parent) : QGraphicsView(parent) {
 ImageCanvas::~ImageCanvas() = default;
 
 void ImageCanvas::applyTransform() {
-    // Re-apply current m_zoom: reset to identity then scale uniformly.
-    // This is the canonical "set zoom factor" routine; any code path that
-    // mutates m_zoom must call this afterwards.
+    // Rebuild the whole view transform from the two pieces of view state
+    // we own: the zoom factor and the rotation angle.
+    //
+    //   The matrix is composed as:
+    //
+    //       translate(center) * rotate(angle) * scale(zoom) * translate(-center)
+    //
+    //   so the rotation pivots around the CENTRE of the scene, not the
+    //   scene origin. Rotating around the origin would swing the image
+    //   out of the viewport as soon as the angle moved away from zero --
+    //   the image would orbit the top-left corner instead of turning in
+    //   place.
+    //
+    //   The centre is the middle of the image item's bounding rect when
+    //   there is one, and the middle of the scene rect otherwise (a new,
+    //   empty document still has a canvas size to rotate around).
     resetTransform();
+
+    const QPointF center = viewCenter();
+    if (!qFuzzyIsNull(m_rotationDeg)) {
+        translate(center.x(), center.y());
+        rotate(m_rotationDeg);
+        translate(-center.x(), -center.y());
+    }
     scale(m_zoom, m_zoom);
+}
+
+QPointF ImageCanvas::viewCenter() const {
+    // The pivot of the view rotation.
+    //
+    //   Prefer the image item's own centre: that is what the user thinks
+    //   of as "the picture". Fall back to the scene rect for a document
+    //   with no pixmap yet (a freshly created empty canvas), and to the
+    //   origin only when even that is empty.
+    if (m_item && !m_item->pixmap().isNull()) {
+        const QRectF r = m_item->boundingRect();
+        if (!r.isEmpty()) return r.center();
+    }
+    if (m_scene) {
+        const QRectF r = m_scene->sceneRect();
+        if (!r.isEmpty()) return r.center();
+    }
+    return QPointF(0.0, 0.0);
+}
+
+void ImageCanvas::setRotationDeg(double deg) {
+    if (qFuzzyCompare(deg + 1.0, m_rotationDeg + 1.0)) return;
+    m_rotationDeg = deg;
+    applyTransform();
+}
+
+bool ImageCanvas::zoomToRect(const QRectF& sceneRect) {
+    if (sceneRect.isEmpty() || sceneRect.width() <= 0.0 || sceneRect.height() <= 0.0)
+        return false;
+    if (!viewport()) return false;
+
+    const QSize vp = viewport()->size();
+    if (vp.isEmpty()) return false;
+
+    // The fit factor for the rectangle. The view transform also carries
+    // a rotation, so the rectangle's own axes are not the screen's axes
+    // once the view is turned -- fitting the axis-aligned bounding box
+    // is the right approximation (and is what a user expects when they
+    // drag a zoom rectangle on a rotated canvas).
+    const double sx = static_cast<double>(vp.width())  / sceneRect.width();
+    const double sy = static_cast<double>(vp.height()) / sceneRect.height();
+    double z = std::min(sx, sy);
+
+    // Clamp to the same range the other zoom paths use.
+    z = std::clamp(z, 0.05, 20.0);
+    if (!qFuzzyCompare(z + 1.0, m_zoom + 1.0)) {
+        m_zoom = z;
+    }
+    applyTransform();
+
+    // Centre the fitted rectangle in the viewport. centerOn() works in
+    // scene coordinates and accounts for the transform we just applied.
+    const QPointF c = sceneRect.center();
+    centerOn(c);
+
+    emit zoomChanged(m_zoom);
+    return true;
 }
 
 void ImageCanvas::setZoom(double z) {

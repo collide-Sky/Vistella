@@ -15,6 +15,66 @@
 
 namespace selection {
 
+namespace {
+
+// Feather a 1-channel mask by blurring its alpha channel.
+//
+//   A (2R+1) box blur, computed with an integral image so the cost is
+//   constant per pixel regardless of the radius. The partial alpha is
+//   KEPT (not re-thresholded) so that the edge really is soft -- the
+//   selection clip in ImageWindow::clipEditToSelection() blends on
+//   exactly that partial alpha.
+//
+//   This used to live inline in LassoSelectionStrategy::end(). The
+//   ellipse and the polygon marquee need the same thing, and three
+//   copies of a 30-line integral-image blur is three chances to get
+//   them out of step.
+void applyFeather(QImage& mask, int radius)
+{
+    if (radius <= 0 || mask.isNull()) return;
+
+    const int R = radius;
+    const int W = mask.width();
+    const int H = mask.height();
+    if (W <= 0 || H <= 0) return;
+
+    // Build the integral image:
+    //   sum[y][x] = sum of the mask bytes in [0..y) x [0..x)
+    std::vector<int> sum((W + 1) * (H + 1), 0);
+    for (int y = 0; y < H; ++y) {
+        const uchar* row = mask.constScanLine(y);
+        int rowSum = 0;
+        for (int x = 0; x < W; ++x) {
+            rowSum += row[x];
+            sum[(y + 1) * (W + 1) + (x + 1)] = sum[y * (W + 1) + (x + 1)] + rowSum;
+        }
+    }
+
+    QImage blurred(W, H, QImage::Format_Alpha8);
+    blurred.fill(0);
+    uchar* dst = blurred.bits();
+    const int dstStride = blurred.bytesPerLine();
+    for (int y = 0; y < H; ++y) {
+        const int ya = std::max(0, y - R);
+        const int yb = std::min(H - 1, y + R);
+        for (int x = 0; x < W; ++x) {
+            const int xa = std::max(0, x - R);
+            const int xb = std::min(W - 1, x + R);
+            // The sum over [ya..yb] x [xa..xb]
+            const int a = sum[ya * (W + 1) + xa];
+            const int b = sum[ya * (W + 1) + (xb + 1)];
+            const int c = sum[(yb + 1) * (W + 1) + xa];
+            const int d = sum[(yb + 1) * (W + 1) + (xb + 1)];
+            const int area = (xb - xa + 1) * (yb - ya + 1);
+            const int avg = (d - b - c + a) / area;
+            dst[y * dstStride + x] = static_cast<uchar>(avg);
+        }
+    }
+    mask = std::move(blurred);
+}
+
+} // namespace
+
 // ===== Rect =====
 void RectSelectionStrategy::begin(const QPointF& p)
 {
@@ -97,49 +157,10 @@ QImage LassoSelectionStrategy::end(const QImage& image)
         painter.end();
     }
 
-    // feathering — box blur on alpha channel then threshold
-    //   feather=0 means crisp mask (current PS default); feather>0 softens edge
-    //   by blurring the alpha channel within [r] pixels then re-thresholding at 127.
-    if (m_featherRadius > 0 && !mask.isNull()) {
-        const int R = m_featherRadius;
-        const int W = mask.width();
-        const int H = mask.height();
-        // Build integral image for fast box blur (constant time per pixel)
-        //   sum[y][x] = sum of mask bytes in [0..y) x [0..x)
-        std::vector<int> sum((W + 1) * (H + 1), 0);
-        for (int y = 0; y < H; ++y) {
-            const uchar* row = mask.constScanLine(y);
-            int rowSum = 0;
-            for (int x = 0; x < W; ++x) {
-                rowSum += row[x];
-                sum[(y + 1) * (W + 1) + (x + 1)] = sum[y * (W + 1) + (x + 1)] + rowSum;
-            }
-        }
-        // Apply (2R+1) box blur (horizontal+vertical separable but integral makes it O(1))
-        QImage blurred(W, H, QImage::Format_Alpha8);
-        blurred.fill(0);
-        uchar* dst = blurred.bits();
-        const int dstStride = blurred.bytesPerLine();
-        for (int y = 0; y < H; ++y) {
-            const int ya = std::max(0, y - R);
-            const int yb = std::min(H - 1, y + R);
-            for (int x = 0; x < W; ++x) {
-                const int xa = std::max(0, x - R);
-                const int xb = std::min(W - 1, x + R);
-                // sum over [ya..yb] x [xa..xb]
-                const int a = sum[ya * (W + 1) + xa];
-                const int b = sum[ya * (W + 1) + (xb + 1)];
-                const int c = sum[(yb + 1) * (W + 1) + xa];
-                const int d = sum[(yb + 1) * (W + 1) + (xb + 1)];
-                const int area = (xb - xa + 1) * (yb - ya + 1);
-                const int avg = (d - b - c + a) / area;
-                dst[y * dstStride + x] = static_cast<uchar>(avg);
-            }
-        }
-        // Threshold: any pixel > 127 stays (preserves shape); softened edge stays partial alpha
-        //   PS feathering keeps partial-alpha; we keep the partial-alpha too
-        mask = std::move(blurred);
-    }
+    // feathering — box blur on the alpha channel.
+    //   feather=0 means a crisp mask (the PS default); feather>0 softens
+    //   the edge by blurring the alpha channel within [r] pixels.
+    applyFeather(mask, m_featherRadius);
 
     LOG_DEBUG("[Lasso] mask: path points={} feather={} aa={}",
               int(m_path.size()), m_featherRadius, m_antiAlias);
@@ -318,6 +339,136 @@ QImage ColorRangeSelectionStrategy::end(const QImage& image)
               mask.width(), mask.height(), m_fuzziness, m_invert,
               int(m_samplePoints.size()));
     return mask;
+}
+
+// ===== Ellipse =====
+void EllipseSelectionStrategy::begin(const QPointF& p)
+{
+    m_active = true;
+    m_p0 = p;
+    m_p1 = p;
+}
+
+void EllipseSelectionStrategy::update(const QPointF& p)
+{
+    if (m_active) m_p1 = p;
+}
+
+QImage EllipseSelectionStrategy::end(const QImage& image)
+{
+    if (!m_active) return QImage();
+    m_active = false;
+    if (image.isNull()) return QImage();
+
+    QImage mask(image.size(), QImage::Format_Alpha8);
+    mask.fill(0);
+
+    // The ellipse is inscribed in the dragged rectangle: the four
+    // CORNERS of the rectangle are outside the ellipse. That is what
+    // makes it an elliptical marquee (Photoshop) and not a rounded
+    // rectangle.
+    const QRectF r = QRectF(m_p0, m_p1).normalized();
+    if (r.width() <= 0.0 || r.height() <= 0.0) return mask;
+
+    QPainterPath path;
+    path.addEllipse(r);
+    {
+        QPainter painter(&mask);
+        painter.setRenderHint(QPainter::Antialiasing, m_antiAlias);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 255, 255, 255));
+        painter.drawPath(path);
+        painter.end();
+    }
+
+    applyFeather(mask, m_featherRadius);
+
+    LOG_DEBUG("[Ellipse] mask: rect={}x{} feather={} aa={}",
+              int(r.width()), int(r.height()), m_featherRadius, m_antiAlias);
+    return mask;
+}
+
+void EllipseSelectionStrategy::cancel()
+{
+    m_active = false;
+    m_p0 = m_p1 = QPointF();
+}
+
+// ===== Polygon =====
+void PolygonSelectionStrategy::begin(const QPointF& p)
+{
+    // begin() starts a fresh polygon. The first vertex is the point of
+    // the first click.
+    m_active = true;
+    m_closed = false;
+    m_path.clear();
+    m_path << p;
+}
+
+void PolygonSelectionStrategy::update(const QPointF& p)
+{
+    // The polygon has DISCRETE vertices -- the mouse moving does not
+    // add vertices. The rubber band is drawn by the tool's preview.
+    Q_UNUSED(p);
+}
+
+void PolygonSelectionStrategy::addVertex(const QPointF& p)
+{
+    if (!m_active) {
+        m_active = true;
+        m_closed = false;
+        m_path.clear();
+    }
+    // A vertex within a pixel of the previous one adds nothing.
+    if (!m_path.isEmpty()) {
+        const QPointF last = m_path.last();
+        const qreal dx = last.x() - p.x();
+        const qreal dy = last.y() - p.y();
+        if (dx * dx + dy * dy < 1.0) return;
+    }
+    m_path << p;
+}
+
+bool PolygonSelectionStrategy::close()
+{
+    if (m_path.size() < 3) return false;
+    m_closed = true;
+    m_active = false;
+    return true;
+}
+
+QImage PolygonSelectionStrategy::end(const QImage& image)
+{
+    if (!m_closed) return QImage();
+    if (image.isNull() || m_path.size() < 3) return QImage();
+
+    QImage mask(image.size(), QImage::Format_Alpha8);
+    mask.fill(0);
+
+    QPainterPath path;
+    path.addPolygon(m_path);
+    path.closeSubpath();
+    {
+        QPainter painter(&mask);
+        painter.setRenderHint(QPainter::Antialiasing, m_antiAlias);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 255, 255, 255));
+        painter.drawPath(path);
+        painter.end();
+    }
+
+    applyFeather(mask, m_featherRadius);
+
+    LOG_DEBUG("[Polygon] mask: vertices={} feather={} aa={}",
+              int(m_path.size()), m_featherRadius, m_antiAlias);
+    return mask;
+}
+
+void PolygonSelectionStrategy::cancel()
+{
+    m_active = false;
+    m_closed = false;
+    m_path.clear();
 }
 
 } // namespace selection

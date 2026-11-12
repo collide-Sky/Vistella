@@ -126,6 +126,10 @@ private:
     static ToolState* createHandTool();
     static ToolState* createZoomTool();
     static ToolState* createRotateViewTool();
+    static ToolState* createPatternStampTool();
+    static ToolState* createHistoryBrushTool();
+    static ToolState* createEllipseSelectTool();
+    static ToolState* createPolygonSelectTool();
 
     // P7.1: paint fg/bg swatch widget.
     void paintColorSwatch(QWidget* w, const QColor& c);

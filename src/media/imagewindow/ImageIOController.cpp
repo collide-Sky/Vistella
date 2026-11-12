@@ -18,6 +18,7 @@
 //
 #include "ImageIOController.h"
 #include "../imagewindow.h"
+#include "../project/VstProject.h"
 #include "camera_raw/CameraRawLoader.h"
 #include "camera_raw/CameraRawDialog.h"
 #include "TextOverlayController.h"
@@ -66,12 +67,31 @@ void ImageIOController::onOpen()
 
 // 保存: 已有路径直接覆盖, 没路径走 onSaveAs
 //   写盘内容 = 文档像素 + 文字 item 的一次性合成图, 场景和撤销栈不受影响.
+//
+//   M2-1: a .vst path saves the WHOLE PROJECT -- the layer stack with
+//   its masks, text, vector paths and adjustment parameters -- not a
+//   flat picture. Every other extension keeps the flat-image
+//   behaviour, because those are the formats the user asked for
+//   ("save as a PNG").
 void ImageIOController::onSave()
 {
     if (!m_host) return;
     // 强拷贝 m_host->filePath(): 避免 inline accessor 返 QString 引用被覆盖
     const QString fp = QString(m_host->filePath());
     if (fp.isEmpty()) { onSaveAs(); return; }
+
+    if (isProjectPath(fp)) {
+        const project::VstResult r = project::saveVst(fp, m_host->layerStack());
+        if (!r.ok) {
+            QMessageBox::warning(m_host, tr("保存失败"), r.error);
+            return;
+        }
+        m_host->markSaved();
+        RecentManager::instance().touchEdit(fp);
+        m_host->emitEditTimeShouldUpdate();
+        return;
+    }
+
     cv::Mat composite;
     if (!buildSaveComposite(composite)) {
         QMessageBox::warning(m_host, tr("保存失败"), tr("当前图像没有可写出的像素."));
@@ -85,6 +105,13 @@ void ImageIOController::onSave()
     m_host->markSaved();
     RecentManager::instance().touchEdit(fp);
     m_host->emitEditTimeShouldUpdate();
+}
+
+// True when the path names a Vistella PROJECT (not a flat picture).
+bool ImageIOController::isProjectPath(const QString& path)
+{
+    return QFileInfo(path).suffix().compare(
+               QStringLiteral("vst"), Qt::CaseInsensitive) == 0;
 }
 
 // 写盘用的合成图: 文档像素 + 文字 item.
@@ -125,6 +152,10 @@ bool ImageIOController::buildSaveComposite(cv::Mat& out) const
 
 // 另存为: QFileDialog 选新路径 -> 写图 -> 触发 m_host 改路径 (emit filePathChanged) + markSaved
 //   注意 m_host->setFilePath 内部已经 emit filePathChanged (跟原 onSaveAs 内联一致)
+//
+//   M2-1: the dialog offers the .vst PROJECT format as well as the
+//   flat picture formats. Picking .vst writes the whole layer stack;
+//   picking a picture format writes the composite.
 void ImageIOController::onSaveAs()
 {
     if (!m_host) return;
@@ -135,8 +166,22 @@ void ImageIOController::onSaveAs()
         : fp;
     const QString path = QFileDialog::getSaveFileName(
         m_host, tr("另存为"), suggest,
-        tr("图像 (*.png *.jpg *.bmp);; 全部文件 (*)"));
+        tr("Vistella 项目 (*.vst);; 图像 (*.png *.jpg *.bmp);; 全部文件 (*)"));
     if (path.isEmpty()) return;
+
+    if (isProjectPath(path)) {
+        const project::VstResult r = project::saveVst(path, m_host->layerStack());
+        if (!r.ok) {
+            QMessageBox::warning(m_host, tr("保存失败"), r.error);
+            return;
+        }
+        m_host->setFilePath(path);
+        m_host->markSaved();
+        RecentManager::instance().touchEdit(path);
+        m_host->emitEditTimeShouldUpdate();
+        return;
+    }
+
     cv::Mat composite;
     if (!buildSaveComposite(composite)) {
         QMessageBox::warning(m_host, tr("保存失败"), tr("当前图像没有可写出的像素."));

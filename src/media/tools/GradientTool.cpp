@@ -87,25 +87,23 @@ void GradientTool::applyGradient(ImageWindow* host)
         bg = cs->backgroundColor();
     }
 
-    // The selection clips the fill. Without a selection the whole
-    // layer is filled.
-    const QImage mask = host->selectionModel()
-                            ? host->selectionModel()->mask()
-                            : QImage();
-
-    const bool hasMask = !mask.isNull()
-                         && host->selectionModel()
-                         && !host->selectionModel()->isEmpty();
-
+    // The selection clips the fill, and that clipping happens ONCE --
+    //   centrally, in ImageWindow::pushLayerImageEdit() -> clipEditToSelection().
+    //
+    //   It used to be done here as well, with a hard cut
+    //   (maskRow[x] == 0 -> skip the pixel). That was wrong on a feathered
+    //   edge: the manual cut left the pixel at its OLD colour, and the
+    //   central clip then blended old -> old = old. The feathered edge of
+    //   the gradient therefore faded to the pre-gradient colour instead of
+    //   fading into the gradient.
+    //
+    //   Two clippers, two different rules -- the hard one won, and the
+    //   feather was lost. Now there is exactly one clipper, and it is
+    //   the one that knows about feathering.
     const int channels = target->channels();
     for (int y = 0; y < target->rows; ++y) {
         uchar* row = target->ptr<uchar>(y);
-        // The mask is 1:1 with the image (SelectionModel::setSize).
-        const uchar* maskRow = hasMask ? mask.constScanLine(y) : nullptr;
         for (int x = 0; x < target->cols; ++x) {
-            // Outside the selection the pixels keep their value.
-            if (hasMask && maskRow[x] == 0) continue;
-
             const double t = gradientFactor(QPointF(x, y), m_start, m_end, m_type);
 
             const double b = fg.blue()   + (bg.blue()   - fg.blue())   * t;
